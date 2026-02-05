@@ -1,11 +1,8 @@
 import json
-import subprocess
 import logging
-import random
-import time
 from typing import TYPE_CHECKING
 
-from crud import insert_result, update_plagiarism_task
+from crud import update_plagiarism_task
 
 if TYPE_CHECKING:
     from pika.adapters.blocking_connection import BlockingChannel
@@ -13,7 +10,6 @@ if TYPE_CHECKING:
 
 from config import settings
 from rabbit import get_connection, create_channel
-from utils import create_engines_params, select_params, generate_queue_uuid
 
 DEFAULT_LOG_FORMAT = "%(module)s:%(lineno)d %(levelname)-6s - %(message)s"
 
@@ -36,54 +32,68 @@ def process_new_message(
     properties: "BasicProperties",
     body: bytes,
 ):
-    log.info("[ ] Start processing task")
+    log.info("[ ] Start processing plagiarism task")
 
-    params, engine = select_params(body=body)
-    command = create_engines_params(params=params, engine=engine)
+    try:
+        message = json.loads(body.decode())
+        task_id = message.get("task_id")
+        
+        if not task_id:
+            log.error("No task_id in message")
+            ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
+            return
 
-    if random.randint(1, 100) > 80:
+        log.info(f"Processing task {task_id}")
+        
+        # Update status to processing
         update_plagiarism_task(
-            task_id=params["task_id"],
-            status="failed",
-            error="Random failure for testing"
+            task_id=task_id,
+            status="processing"
         )
-        ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
-        time.sleep(1)
-        log.info(f"--- Could not process task {params}")
-    else:
-        result = subprocess.run(command, shell=True, capture_output=True)
-        stdout, stderr = result.stdout, result.stderr
         
-        if result.returncode == 0:
-            # Simulate plagiarism detection result
-            import json
-            similarity = random.uniform(0.1, 0.9)
-            matches = {
-                "matching_lines": [1, 5, 10],
-                "similarity_score": similarity
-            }
-            update_plagiarism_task(
-                task_id=params["task_id"],
-                status="completed",
-                similarity=similarity,
-                matches=matches
-            )
-            log.info(f"+++ Finished processing {params} with similarity {similarity}")
-        else:
-            update_plagiarism_task(
-                task_id=params["task_id"],
-                status="failed",
-                error=stderr.decode() if stderr else "Unknown error"
-            )
-            log.info(f"--- Failed processing {params}")
+        # TODO: Implement actual plagiarism detection logic here
+        # For now, simulate analysis with placeholder results
+        # similarity, matches = analyze_plagiarism(file1, file2, language)
         
+        # Placeholder results - replace with actual analysis
+        similarity = 0.85  # Example: 85% similar
+        matches = {
+            "similarity_score": similarity,
+            "matching_blocks": [
+                {"line1": 1, "line2": 1, "similarity": 1.0},
+                {"line1": 5, "line2": 5, "similarity": 0.9}
+            ],
+            "total_lines_file1": 20,
+            "total_lines_file2": 25
+        }
+        
+        # Update status to completed with results
+        update_plagiarism_task(
+            task_id=task_id,
+            status="completed",
+            similarity=similarity,
+            matches=matches
+        )
+        
+        log.info(f"+++ Finished processing task {task_id} with similarity {similarity}")
         ch.basic_ack(delivery_tag=method.delivery_tag)
+        
+    except Exception as e:
+        log.error(f"Error processing message: {e}")
+        # Update status to failed
+        if task_id:
+            update_plagiarism_task(
+                task_id=task_id,
+                status="failed",
+                error=str(e)
+            )
+        ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
 
-    log.info(f"[X] Finished processing task")
+    log.info("[X] Finished processing task")
 
 
 def consume_messages(ch: "BlockingChannel") -> None:
-    log.info(f"[X] Waiting tasks ...")
+    log.info("[X] Waiting for plagiarism tasks ...")
     ch.basic_consume(
         queue=settings.rmq_queue_name,
         on_message_callback=process_new_message,

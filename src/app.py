@@ -1,9 +1,5 @@
 from fastapi import FastAPI
 
-from queues.router import router as router_queues
-
-from results.router import router as router_results
-
 from plagiarism.router import router as router_plagiarism
 
 from exceptions.error_handler import add_exception_handler
@@ -11,11 +7,9 @@ from startup.create_exchange import create_queues_and_exchanges
 
 
 
-app = FastAPI(title="RestAPIForHigh-loadQueries")
+app = FastAPI(title="Plagiarism Detection API")
 
 
-app.include_router(router_queues)
-app.include_router(router_results)
 app.include_router(router_plagiarism)
 
 add_exception_handler(app)
@@ -28,4 +22,4 @@ async def on_startup():
 
 @app.get("/")
 async def root():
-    return
+    return {"message": "Plagiarism Detection API"}

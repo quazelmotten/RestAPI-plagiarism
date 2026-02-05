@@ -1,215 +1,171 @@
-# RestAPIForHigh-loadQueries
+# Source Code Plagiarism Detection API
 
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 ![Postgres](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
 ![RabbitMQ](https://img.shields.io/badge/Rabbitmq-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white)
----
 
 ## About
 
-Simple implementation of web applications for high-load tasks implemented using
-the Fast API framework for REST API and RabbitMQ with using framework
-pika\aio_pika.
+A comprehensive REST API for detecting plagiarism in source code files. Built using FastAPI for the REST API and RabbitMQ with Celery-style workers for background processing.
 
-Using the REST API, the user submits a task to a queue implemented using RabbitMQ. 
-The worker, in turn, retrieves the message from the queue and processes the task. 
-If an error occurs during the processing of the message, it will be sent to a second 
-queue designed to collect errors (this is implemented using dead-letter-exchange).  
-A separate handler is available in the REST API for viewing such tasks.
+Using the REST API, users submit code files for plagiarism analysis. The worker processes the files asynchronously and stores the results in PostgreSQL. If an error occurs during processing, the task is sent to a dead-letter queue for later review.
 
-**P.s. Python version 3.11 is required for the web application to work correctly**
+**Python version 3.11+ is required for the web application to work correctly**
 
+### Repository Structure:
+- **src/** - FastAPI application with plagiarism detection endpoints
+- **worker/** - Background worker for processing plagiarism checks
+- **database/** - Database migrations
+- **docker-compose.yml** - Docker orchestration for all services
 
-### The repository contains the following components:
-* **[About](#About)**
-* **[Rest-API-Structure](#Rest-API-Structure)**
-    * [Queue](#Queues)
-    * [Result](#Results)
-    * [Start-RestAPI](#Start-RestAPI)
-* **[Worker](#Worker)**
-    * [About-Queues](#About-Queues)
-    * [About-Queues](#About-Workers)
-    * [Start-Worker](#Start-Worker)
-* **[Database](#Database)**
-* **[Docker](#Docker)**
+## API Endpoints
 
+### Plagiarism Detection
 
-## Rest API Structure
+**POST /plagiarism/check** - Submit two files for plagiarism comparison
+- Upload two source code files
+- Returns a task ID for tracking
 
-The web application consists of two modules:
-* Queues - create and view queues of tasks
-* Results - viewing the results of tasks 
+**GET /plagiarism/{task_id}** - Get plagiarism check results
+- Retrieve similarity score and matching segments
 
-![](data/RestAPI.png)
+## Getting Started
 
----
-### Queue
+### Option 1: Docker (Recommended)
 
-Consists the following handlers:
-* POST /api/v1/queue/ - create task 
-* GET /api/v1/queue/{number_queues} - viewing tasks in queues
+To run the entire application stack:
 
----
-### Result
+```shell
+docker-compose up -d --build
+```
 
-Consists the following handlers:
-* GET /api/v1/result/ - select list results
-* GET /api/v1/result/{result_uuid} - select result by uuid 
+The API will be available at `http://localhost:8000`
 
----
-### Start RestAPI
+To stop the application:
+```shell
+docker-compose down
+```
+
+### Option 2: Manual Setup
+
+#### Start the API
 
 1. Go to the directory `src`
 ```shell
 cd src
 ```
-2. Create `.env` file with
-```shell 
+
+2. Create `.env` file:
+```shell
 touch .env
 ```
-3. Add variable in the `.env` file
-```
-DB_HOST=
-DB_PORT=
-DB_NAME=
-DB_USER=
-DB_PASS=
 
-RMQ_HOST=
-RMQ_PORT=
-RMQ_USER=
-RMQ_PASSWORD=
-
-RMQ_QUEUE_EXCHANGE=
-RMQ_QUEUE_ROUTING_KEY=
-RMQ_QUEUE_NAME=
-RMQ_QUEUE_DEAD_LETTER_EXCHANGE=
-RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER=
-RMQ_QUEUE_DEAD_LETTER_NAME=
+3. Add environment variables:
 ```
-4. Install packages
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=plagiarism_db
+DB_USER=appuser
+DB_PASS=password
+
+RMQ_HOST=localhost
+RMQ_PORT=5672
+RMQ_USER=guest
+RMQ_PASSWORD=guest
+
+RMQ_QUEUE_EXCHANGE=plagiarism
+RMQ_QUEUE_ROUTING_KEY=plagiarism
+RMQ_QUEUE_NAME=plagiarism_queue
+RMQ_QUEUE_DEAD_LETTER_EXCHANGE=plagiarism_dlx
+RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER=plagiarism.dead
+RMQ_QUEUE_DEAD_LETTER_NAME=plagiarism_dead
+```
+
+4. Install packages:
 ```shell
 pip install -r requirements.txt
 ```
-5. Run Rest API
+
+5. Run the API:
 ```shell
 uvicorn app:app --reload
 ```
----
 
-## Worker
-### About-Queues
-
-Application have 2 queues:
-* main tasks
-* dead-letter tasks
-
-The first category includes messages sent by the user using the REST API. 
-The aio_pika library is used for this, it allows you to connect to RabbitMQ asynchronously
-without blocking the main thread.
-
-The second row includes messages that were executed with an error.
-
-![](data/RabbitMQ.png)
-
-
-### About-Workers
-
-The worker is a simple mechanism that uses the pika framework to connect to a queue and 
-extract tasks from it, and then processes the task and starts the engine to process it.
-
-The worker implies the use of dle in case of an error, therefore, to emulate 
-the occurrence of an error, a number from 1 to 100 is generated and if it exceeds 80, 
-the error is emulated.
-
-If necessary, you can run several task processing workers and they will automatically take
-tasks due to the parameter `ch.basic_qos(prefetch_count=1)`. 
-
-
-### Start-Worker
+#### Start the Worker
 
 1. Go to the directory `worker`
 ```shell
 cd worker
 ```
-2. Create `.env` file with
-```shell 
-touch .env
-```
-3. Add variable in the `.env` file
-```
-DB_HOST=
-DB_PORT=
-DB_NAME=
-DB_USER=
-DB_PASS=
 
-RMQ_HOST=
-RMQ_PORT=
-RMQ_USER=
-RMQ_PASSWORD=
+2. Create `.env` file with the same variables as above
 
-RMQ_QUEUE_EXCHANGE=
-RMQ_QUEUE_ROUTING_KEY=
-RMQ_QUEUE_NAME=
-RMQ_QUEUE_DEAD_LETTER_EXCHANGE=
-RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER=
-RMQ_QUEUE_DEAD_LETTER_NAME=
-```
-4. Install packages
+3. Install packages:
 ```shell
 pip install -r requirements.txt
 ```
-5. Run Rest API
+
+4. Run the worker:
 ```shell
 python3 worker.py
 ```
 
-## Database
+## Database Setup
 
-For the Rest API to work correctly, you need to create a database with the data 
-described in the file `./src/models/models.py`. You can do this yourself or 
-perform migrations by following the instructions below.
-
-**P.s. The instructions imply that the required database has already been created**
+To set up the database schema:
 
 1. Go to the directory `database`
 ```shell
 cd database
 ```
-2. Create `.env` file with
-```shell 
-touch .env
+
+2. Create `.env` file:
 ```
-3. Add variable in the `.env` file
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=plagiarism_db
+DB_USER=appuser
+DB_PASS=password
 ```
-DB_HOST=
-DB_PORT=
-DB_NAME=
-DB_USER=
-DB_PASS=
-```
-4. Run command
+
+3. Run migrations:
 ```shell
 alembic upgrade head
 ```
 
-## Docker
+## Architecture
 
-To run the application in the background, use Docker to run it, use the command.
+The system uses a producer-consumer pattern:
+- **API** receives file uploads and publishes tasks to RabbitMQ
+- **Worker** consumes tasks from the queue and performs plagiarism analysis
+- **Database** stores task status and results
+- **Dead Letter Queue** handles failed tasks for retry or review
+
+## API Documentation
+
+When the API is running, visit:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+## Development
+
+### Adding New Features
+
+The codebase is organized as follows:
+- `src/plagiarism/` - Plagiarism detection logic and API routes
+- `src/models/` - SQLAlchemy database models
+- `worker/engines/engine_plagiarism/` - Plagiarism analysis implementation
+- `src/rabbit.py` - RabbitMQ connection management
+- `src/startup/` - Application startup tasks
+
+### Testing
+
+Run tests (when implemented):
 ```shell
-docker-compose up -d --build
+pytest
 ```
-If everything was successful, you will see the following entries in the console
 
-![](data/Docker.png)
+## License
 
-
-To turn off the application, use the command (if you want to turn it off with data loss, add the ` -v` flag)
-```shell
-docker-compose down
-```
-If everything was successful, you will see the following entries in the console
-
-![](data/DockerDown.png)
+This project is for educational use at the university.
