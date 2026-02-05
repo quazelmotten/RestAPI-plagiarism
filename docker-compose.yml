@@ -7,6 +7,12 @@ services:
     build:
       context: .
       dockerfile: db.Dockerfile
+    environment:
+      DB_USER: appuser
+      DB_PASS: password
+      DB_NAME: appdb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     networks:
       default:
         aliases:
@@ -16,14 +22,32 @@ services:
     container_name: api
     ports:
       - "8000:8000"
-    hostname: api
     build:
       context: .
       dockerfile: api.Dockerfile
-    networks:
-      default:
-        aliases:
-        - api.hlq
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: appdb
+      DB_USER: appuser
+      DB_PASS: password
+      RMQ_HOST: rabbitmq
+      RMQ_PORT: 5672
+      RMQ_USER: guest
+      RMQ_PASSWORD: guest
+      RMQ_QUEUE_EXCHANGE: tasks
+      RMQ_QUEUE_ROUTING_KEY: tasks
+      RMQ_QUEUE_NAME: tasks
+      RMQ_QUEUE_DEAD_LETTER_EXCHANGE: tasks_dlx
+      RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER: tasks.dead
+      RMQ_QUEUE_DEAD_LETTER_NAME: tasks_dead
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+
+
 
   worker:
     container_name: worker
@@ -31,6 +55,22 @@ services:
     build:
       context: .
       dockerfile: worker.Dockerfile
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: appdb
+      DB_USER: appuser
+      DB_PASS: password
+      RMQ_HOST: rabbitmq
+      RMQ_PORT: 5672
+      RMQ_USER: guest
+      RMQ_PASSWORD: guest
+      RMQ_QUEUE_EXCHANGE: tasks
+      RMQ_QUEUE_ROUTING_KEY: tasks
+      RMQ_QUEUE_NAME: tasks
+      RMQ_QUEUE_DEAD_LETTER_EXCHANGE: tasks_dlx
+      RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER: tasks.dead
+      RMQ_QUEUE_DEAD_LETTER_NAME: tasks_dead
     networks:
       default:
         aliases:
@@ -52,6 +92,12 @@ services:
       RABBITMQ_DEFAULT_PASS: "guest"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 5s
+      retries: 10
+
 
 volumes:
   rabbitmq-data:
+  postgres-data:

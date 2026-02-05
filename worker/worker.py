@@ -5,7 +5,7 @@ import random
 import time
 from typing import TYPE_CHECKING
 
-from crud import insert_result
+from crud import insert_result, update_plagiarism_task
 
 if TYPE_CHECKING:
     from pika.adapters.blocking_connection import BlockingChannel
@@ -42,21 +42,41 @@ def process_new_message(
     command = create_engines_params(params=params, engine=engine)
 
     if random.randint(1, 100) > 80:
+        update_plagiarism_task(
+            task_id=params["task_id"],
+            status="failed",
+            error="Random failure for testing"
+        )
         ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
         time.sleep(1)
         log.info(f"--- Could not process task {params}")
     else:
         result = subprocess.run(command, shell=True, capture_output=True)
         stdout, stderr = result.stdout, result.stderr
-        result_uuid = generate_queue_uuid()
-        insert_result(
-            result_uuid=result_uuid,
-            engine=engine,
-            stdout=stdout,
-            stderr=stderr,
-            params=json.dumps(params)
-        )
-        log.info(f"+++ Finished processing {params}")
+        
+        if result.returncode == 0:
+            # Simulate plagiarism detection result
+            import json
+            similarity = random.uniform(0.1, 0.9)
+            matches = {
+                "matching_lines": [1, 5, 10],
+                "similarity_score": similarity
+            }
+            update_plagiarism_task(
+                task_id=params["task_id"],
+                status="completed",
+                similarity=similarity,
+                matches=matches
+            )
+            log.info(f"+++ Finished processing {params} with similarity {similarity}")
+        else:
+            update_plagiarism_task(
+                task_id=params["task_id"],
+                status="failed",
+                error=stderr.decode() if stderr else "Unknown error"
+            )
+            log.info(f"--- Failed processing {params}")
+        
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
     log.info(f"[X] Finished processing task")

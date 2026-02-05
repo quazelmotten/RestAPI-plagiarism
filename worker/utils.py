@@ -16,15 +16,24 @@ def select_params(body: bytes) -> tuple[dict, str]:
 
 
 def create_engines_params(params: dict, engine: str) -> list[str]:
+    # Handle case when no engine specified
+    if engine is None:
+        engine = Engines.ENGINE_V1.value  # default to v1
+    
     if engine == Engines.ENGINE_V1.value:
-        params = EngineV1Params.model_validate(params)
+        params_obj = EngineV1Params.model_validate(params)
     elif engine == Engines.ENGINE_V2.value:
-        params = EngineV2Params.model_validate(params)
+        params_obj = EngineV2Params.model_validate(params)
+    else:
+        # Default to v1 for unknown engines
+        params_obj = EngineV1Params.model_validate(params)
 
-    params = params.model_dump(exclude_none=True)
-    params = [params[key] for key in params.keys()]
+    # Convert to dict and filter out None values
+    params_dict = params_obj.model_dump(exclude_none=True)
+    params_list = [params_dict[key] for key in params_dict.keys()]
+    
     command = ["python", f"engines/engine_{engine}/start.py"]
-    for param in params:
+    for param in params_list:
         command.extend(param.split(" "))
     return command
 

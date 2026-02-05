@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_async_session
 from queues.schemes import NewQueue, StatusSuccess, Tasks
 from queues.utils import select_engine_params, send_message, get_message
-from rabbit import get_async_chanel
+from rabbit import get_async_channel
 
 router = APIRouter(prefix="/api/v1/queue", tags=["queue"])
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/v1/queue", tags=["queue"])
 @router.post("/", response_model=StatusSuccess)
 async def add_tasks(
     queue_value: NewQueue,
-    chanel: AsyncSession = Depends(get_async_chanel),
+    chanel: AsyncSession = Depends(get_async_channel),
 ):
     param_str = await select_engine_params(queue_value=queue_value)
     await send_message(channel=chanel, task=param_str)
@@ -25,7 +25,7 @@ async def select_tasks(
     number_queues: int,
     is_dlt: bool = False,
     is_delete: bool = False,
-    chanel: AsyncSession = Depends(get_async_chanel),
+    chanel: AsyncSession = Depends(get_async_channel),
 ):
     tasks = await get_message(
         channel=chanel, prefetch_count=number_queues, is_dlt=is_dlt, is_delete=is_delete

@@ -8,10 +8,10 @@ def add_exception_handler(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def validation_exception_handler(request, err):
         return JSONResponse(
-            status_code=401,
+            status_code=500,
             content={
                 "status": "error",
-                "error_details": "bad request",
+                "error_details": f"{type(err).__name__}: {str(err)}",
             },
         )
 
