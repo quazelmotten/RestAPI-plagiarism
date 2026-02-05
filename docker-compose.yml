@@ -1,103 +1,174 @@
-version: "2.2"
+# Production-ready Docker Compose configuration
+# All sensitive values are loaded from .env file
+# Copy .env.example to .env and configure before running
 
 services:
   postgres:
-    container_name: db
+    container_name: plagiarism-db
     hostname: db
     build:
       context: .
       dockerfile: db.Dockerfile
     environment:
-      DB_USER: appuser
-      DB_PASS: password
-      DB_NAME: appdb
+      POSTGRES_DB: ${DB_NAME:-plagiarism_db}
+      POSTGRES_USER: ${DB_USER:-plagiarism_user}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
-      default:
-        aliases:
-        - db.hlq
+      - plagiarism-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-plagiarism_user} -d ${DB_NAME:-plagiarism_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
-  backend:
-    container_name: api
-    ports:
-      - "8000:8000"
+  api:
+    container_name: plagiarism-api
     build:
       context: .
       dockerfile: api.Dockerfile
+    ports:
+      - "${API_PORT:-8000}:8000"
     environment:
+      # Database
       DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: appdb
-      DB_USER: appuser
-      DB_PASS: password
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-plagiarism_db}
+      DB_USER: ${DB_USER:-plagiarism_user}
+      DB_PASS: ${DB_PASS}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
+      
+      # RabbitMQ
       RMQ_HOST: rabbitmq
-      RMQ_PORT: 5672
-      RMQ_USER: guest
-      RMQ_PASSWORD: guest
-      RMQ_QUEUE_EXCHANGE: tasks
-      RMQ_QUEUE_ROUTING_KEY: tasks
-      RMQ_QUEUE_NAME: tasks
-      RMQ_QUEUE_DEAD_LETTER_EXCHANGE: tasks_dlx
-      RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER: tasks.dead
-      RMQ_QUEUE_DEAD_LETTER_NAME: tasks_dead
+      RMQ_PORT: ${RMQ_PORT:-5672}
+      RMQ_USER: ${RMQ_USER:-plagiarism_mq_user}
+      RMQ_PASS: ${RMQ_PASS}
+      RMQ_QUEUE_EXCHANGE: ${RMQ_QUEUE_EXCHANGE:-plagiarism}
+      RMQ_QUEUE_ROUTING_KEY: ${RMQ_QUEUE_ROUTING_KEY:-plagiarism}
+      RMQ_QUEUE_NAME: ${RMQ_QUEUE_NAME:-plagiarism_queue}
+      RMQ_QUEUE_DEAD_LETTER_EXCHANGE: ${RMQ_QUEUE_DEAD_LETTER_EXCHANGE:-plagiarism_dlx}
+      RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER: ${RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER:-plagiarism.dead}
+      RMQ_QUEUE_DEAD_LETTER_NAME: ${RMQ_QUEUE_DEAD_LETTER_NAME:-plagiarism_dead}
+      
+      # API
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      API_HOST: ${API_HOST:-0.0.0.0}
+      API_PORT: ${API_PORT:-8000}
+      SECRET_KEY: ${SECRET_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      
+      # Plagiarism Settings
+      DEFAULT_PLAGIARISM_THRESHOLD: ${DEFAULT_PLAGIARISM_THRESHOLD:-0.75}
+      SUPPORTED_LANGUAGES: ${SUPPORTED_LANGUAGES:-python,java,cpp,c,javascript}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-1048576}
+      MAX_FILES_PER_BATCH: ${MAX_FILES_PER_BATCH:-100}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      
+      # Monitoring
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      METRICS_ENDPOINT: ${METRICS_ENDPOINT:-}
     depends_on:
+      postgres:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      postgres:
-        condition: service_started
-
-
+    networks:
+      - plagiarism-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
   worker:
-    container_name: worker
-    hostname: worker
+    container_name: plagiarism-worker
     build:
       context: .
       dockerfile: worker.Dockerfile
     environment:
+      # Database
       DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: appdb
-      DB_USER: appuser
-      DB_PASS: password
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-plagiarism_db}
+      DB_USER: ${DB_USER:-plagiarism_user}
+      DB_PASS: ${DB_PASS}
+      
+      # RabbitMQ
       RMQ_HOST: rabbitmq
-      RMQ_PORT: 5672
-      RMQ_USER: guest
-      RMQ_PASSWORD: guest
-      RMQ_QUEUE_EXCHANGE: tasks
-      RMQ_QUEUE_ROUTING_KEY: tasks
-      RMQ_QUEUE_NAME: tasks
-      RMQ_QUEUE_DEAD_LETTER_EXCHANGE: tasks_dlx
-      RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER: tasks.dead
-      RMQ_QUEUE_DEAD_LETTER_NAME: tasks_dead
+      RMQ_PORT: ${RMQ_PORT:-5672}
+      RMQ_USER: ${RMQ_USER:-plagiarism_mq_user}
+      RMQ_PASS: ${RMQ_PASS}
+      RMQ_QUEUE_EXCHANGE: ${RMQ_QUEUE_EXCHANGE:-plagiarism}
+      RMQ_QUEUE_ROUTING_KEY: ${RMQ_QUEUE_ROUTING_KEY:-plagiarism}
+      RMQ_QUEUE_NAME: ${RMQ_QUEUE_NAME:-plagiarism_queue}
+      RMQ_QUEUE_DEAD_LETTER_EXCHANGE: ${RMQ_QUEUE_DEAD_LETTER_EXCHANGE:-plagiarism_dlx}
+      RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER: ${RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER:-plagiarism.dead}
+      RMQ_QUEUE_DEAD_LETTER_NAME: ${RMQ_QUEUE_DEAD_LETTER_NAME:-plagiarism_dead}
+      
+      # Worker
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      WORKER_PREFETCH_COUNT: ${WORKER_PREFETCH_COUNT:-1}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
-      default:
-        aliases:
-          - worker.hlq
+      - plagiarism-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      replicas: ${WORKER_CONCURRENCY:-4}
 
   rabbitmq:
-    image: rabbitmq:3-management-alpine
+    container_name: plagiarism-rabbitmq
     hostname: rabbitmq
-    container_name: rabbitmq
-    networks:
-      default:
-        aliases:
-          - rabbitmq.hlq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+    image: rabbitmq:3.12-management-alpine
     environment:
-      RABBITMQ_DEFAULT_USER: "guest"
-      RABBITMQ_DEFAULT_PASS: "guest"
+      RABBITMQ_DEFAULT_USER: ${RMQ_USER:-plagiarism_mq_user}
+      RABBITMQ_DEFAULT_PASS: ${RMQ_PASS}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - plagiarism-network
     healthcheck:
-      test: ["CMD", "rabbitmqctl", "status"]
-      interval: 5s
-      retries: 10
-
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
-  rabbitmq-data:
   postgres-data:
+    driver: local
+  rabbitmq-data:
+    driver: local
+
+networks:
+  plagiarism-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

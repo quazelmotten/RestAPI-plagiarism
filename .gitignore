@@ -1,12 +1,70 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Environment variables
 .env
+.env.local
+.env.production
+.env.staging
+!.env.example
+
+# Virtual environments
 .venv
 env/
 venv/
 venv_worker/
+ENV/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Application specific
 worker/models.py
 worker/enums.py
 database/models.py
 database/database.py
-.idea
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads and data (if not meant to be committed)
+uploads/
+data/
+*.tar.gz
+
+# Secrets
+*.pem
+*.key
+secrets/
+
+# Docker
+.docker/
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Build
+dist/
+build/
+*.egg-info/
