@@ -14,6 +14,11 @@ services:
       POSTGRES_USER: ${DB_USER:-plagiarism_user}
       POSTGRES_PASSWORD: ${DB_PASS}
       PGDATA: /var/lib/postgresql/data/pgdata
+      DB_NAME: ${DB_NAME:-plagiarism_db}
+      DB_USER: ${DB_USER:-plagiarism_user}
+      DB_PASS: ${DB_PASS}
+    ports:
+      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -95,7 +100,6 @@ services:
         hard: 65536
 
   worker:
-    container_name: plagiarism-worker
     build:
       context: .
       dockerfile: worker.Dockerfile
@@ -123,6 +127,9 @@ services:
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
       WORKER_PREFETCH_COUNT: ${WORKER_PREFETCH_COUNT:-1}
       
+      # Security
+      SECRET_KEY: ${SECRET_KEY}
+      
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: ${LOG_FORMAT:-json}
@@ -146,6 +153,8 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: ${RMQ_USER:-plagiarism_mq_user}
       RABBITMQ_DEFAULT_PASS: ${RMQ_PASS}
+    ports:
+      - "15672:15672"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     networks:

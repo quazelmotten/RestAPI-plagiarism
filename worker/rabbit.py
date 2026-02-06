@@ -14,7 +14,7 @@ connection_params = pika.ConnectionParameters(
     port=settings.rmq_port,
     credentials=pika.PlainCredentials(
         username=settings.rmq_user,
-        password=settings.rmq_password
+        password=settings.rmq_pass
     ),
 )
 

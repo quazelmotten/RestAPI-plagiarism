@@ -2,12 +2,12 @@ import aio_pika
 
 from aio_pika import ExchangeType
 
-from rabbit import RABBIT_URL
+from rabbit import get_rabbit_url
 from config import settings
 
 
 async def create_queues_and_exchanges():
-    connection = await aio_pika.connect_robust(RABBIT_URL)
+    connection = await aio_pika.connect_robust(get_rabbit_url())
     async with connection:
         channel = await connection.channel()
 
