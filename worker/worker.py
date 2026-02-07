@@ -1,8 +1,13 @@
 import json
 import logging
+import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from crud import update_plagiarism_task
+
+from plagiarism.analyzer import analyze_plagiarism
+
 
 if TYPE_CHECKING:
     from pika.adapters.blocking_connection import BlockingChannel
@@ -45,27 +50,42 @@ def process_new_message(
 
         log.info(f"Processing task {task_id}")
         
+        # Extract file paths and language from message
+        file1 = message.get("file1")
+        file2 = message.get("file2")
+        language = message.get("language", "python")
+        
+        if not file1 or not file2:
+            log.error("Missing file paths in message")
+            update_plagiarism_task(
+                task_id=task_id,
+                status="failed",
+                error="Missing file paths"
+            )
+            ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
+            return
+        
         # Update status to processing
         update_plagiarism_task(
             task_id=task_id,
             status="processing"
         )
         
-        # TODO: Implement actual plagiarism detection logic here
-        # For now, simulate analysis with placeholder results
-        # similarity, matches = analyze_plagiarism(file1, file2, language)
+        # Run actual plagiarism analysis
+        similarity, raw_matches = analyze_plagiarism(file1, file2, language)
         
-        # Placeholder results - replace with actual analysis
-        similarity = 0.85  # Example: 85% similar
+        # Convert matches to JSON-serializable format
         matches = {
             "similarity_score": similarity,
-            "matching_blocks": [
-                {"line1": 1, "line2": 1, "similarity": 1.0},
-                {"line1": 5, "line2": 5, "similarity": 0.9}
-            ],
-            "total_lines_file1": 20,
-            "total_lines_file2": 25
+            "matching_blocks": []
         }
+        for match in raw_matches:
+            matches["matching_blocks"].append({
+                "file1_start_line": match["file1"]["start_line"],
+                "file1_end_line": match["file1"]["end_line"],
+                "file2_start_line": match["file2"]["start_line"],
+                "file2_end_line": match["file2"]["end_line"]
+            })
         
         # Update status to completed with results
         update_plagiarism_task(

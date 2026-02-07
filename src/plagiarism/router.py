@@ -10,7 +10,8 @@ from rabbit import publish_message
 
 router = APIRouter(prefix="/plagiarism", tags=["Plagiarism"])
 
-UPLOAD_DIR = Path("uploads")
+# Use absolute path for uploads to ensure both API and worker can access files
+UPLOAD_DIR = Path("/app/uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 @router.post("/check")

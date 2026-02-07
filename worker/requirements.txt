@@ -7,3 +7,6 @@ pydantic==2.5.0
 pydantic-settings==2.1.0
 asyncio-mqtt==0.16.1
 python-multipart==0.0.6
+tree-sitter
+tree-sitter-python
+tree-sitter-cpp

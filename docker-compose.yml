@@ -89,6 +89,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    volumes:
+      - uploads-data:/app/uploads
     networks:
       - plagiarism-network
     restart: unless-stopped
@@ -138,6 +140,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    volumes:
+      - uploads-data:/app/uploads
     networks:
       - plagiarism-network
     restart: unless-stopped
@@ -173,6 +177,8 @@ volumes:
   postgres-data:
     driver: local
   rabbitmq-data:
+    driver: local
+  uploads-data:
     driver: local
 
 networks:

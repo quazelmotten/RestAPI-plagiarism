@@ -1,11 +1,20 @@
-FROM python:3.11-bullseye as base
+FROM python:3.11-bullseye
 
-WORKDIR /app
+WORKDIR /app/worker
 
+# Install dependencies
 COPY ./worker/requirements.txt ./
-RUN apt update && pip install --upgrade pip && pip3 install -r requirements.txt
+RUN apt update && \
+    pip install --upgrade pip && \
+    pip install -r requirements.txt
 
+# Copy worker code
 COPY ./worker ./
-COPY src/models/models.py ./
+
+# Copy src code to /app/src (NOT inside worker)
+COPY ./src /app/src
+
+# Make src discoverable
+ENV PYTHONPATH=/app/src
 
 CMD ["python3", "worker.py"]
