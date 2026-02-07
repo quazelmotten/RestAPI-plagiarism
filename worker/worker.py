@@ -105,7 +105,24 @@ def consume_messages(ch: "BlockingChannel") -> None:
 if __name__ == "__main__":
     configure_logging(level=logging.INFO)
     log = logging.getLogger(__name__)
-    with get_connection() as connection:
-        with connection.channel() as channel:
-            create_channel(channel=channel)
-            consume_messages(ch=channel)
+    
+    max_retries = 30
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            log.info(f"Connecting to RabbitMQ (attempt {attempt + 1}/{max_retries})...")
+            with get_connection() as connection:
+                with connection.channel() as channel:
+                    create_channel(channel=channel)
+                    log.info("Successfully connected to RabbitMQ")
+                    consume_messages(ch=channel)
+        except Exception as e:
+            log.warning(f"Failed to connect to RabbitMQ: {e}")
+            if attempt < max_retries - 1:
+                log.info(f"Retrying in {retry_delay} seconds...")
+                import time
+                time.sleep(retry_delay)
+            else:
+                log.error("Max retries reached. Exiting.")
+                raise
