@@ -91,6 +91,7 @@ services:
         condition: service_healthy
     volumes:
       - uploads-data:/app/uploads
+      - s3-storage:/app/s3_storage
     networks:
       - plagiarism-network
     restart: unless-stopped
@@ -142,6 +143,7 @@ services:
         condition: service_healthy
     volumes:
       - uploads-data:/app/uploads
+      - s3-storage:/app/s3_storage
     networks:
       - plagiarism-network
     restart: unless-stopped
@@ -179,6 +181,8 @@ volumes:
   rabbitmq-data:
     driver: local
   uploads-data:
+    driver: local
+  s3-storage:
     driver: local
 
 networks:

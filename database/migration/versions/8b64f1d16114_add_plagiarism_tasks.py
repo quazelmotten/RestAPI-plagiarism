@@ -18,7 +18,7 @@ depends_on = None
 def upgrade():
     op.create_table(
         "plagiarism_tasks",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("status", sa.String(), nullable=False),
         sa.Column("similarity", sa.Float()),
         sa.Column("matches", postgresql.JSONB()),

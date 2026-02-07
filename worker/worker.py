@@ -1,10 +1,11 @@
 import json
 import logging
 import sys
+from itertools import combinations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from crud import update_plagiarism_task
+from crud import update_plagiarism_task, save_similarity_result
 
 from plagiarism.analyzer import analyze_plagiarism
 
@@ -51,16 +52,15 @@ def process_new_message(
         log.info(f"Processing task {task_id}")
         
         # Extract file paths and language from message
-        file1 = message.get("file1")
-        file2 = message.get("file2")
+        files = message.get("files", [])
         language = message.get("language", "python")
         
-        if not file1 or not file2:
-            log.error("Missing file paths in message")
+        if len(files) < 2:
+            log.error("Need at least 2 files for plagiarism check")
             update_plagiarism_task(
                 task_id=task_id,
                 status="failed",
-                error="Missing file paths"
+                error="Need at least 2 files for plagiarism check"
             )
             ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
             return
@@ -71,31 +71,75 @@ def process_new_message(
             status="processing"
         )
         
-        # Run actual plagiarism analysis
-        similarity, raw_matches = analyze_plagiarism(file1, file2, language)
+        # Process all pairs of files
+        total_pairs = 0
+        processed_pairs = 0
         
-        # Convert matches to JSON-serializable format
-        matches = {
-            "similarity_score": similarity,
-            "matching_blocks": []
-        }
-        for match in raw_matches:
-            matches["matching_blocks"].append({
-                "file1_start_line": match["file1"]["start_line"],
-                "file1_end_line": match["file1"]["end_line"],
-                "file2_start_line": match["file2"]["start_line"],
-                "file2_end_line": match["file2"]["end_line"]
-            })
+        # Generate all combinations of file pairs
+        for file_a, file_b in combinations(files, 2):
+            total_pairs += 1
+            
+            file_a_id = file_a.get("id")
+            file_b_id = file_b.get("id")
+            file_a_path = file_a.get("path")
+            file_b_path = file_b.get("path")
+            
+            if not file_a_id or not file_b_id or not file_a_path or not file_b_path:
+                log.warning(f"Skipping pair due to missing file info: {file_a}, {file_b}")
+                continue
+            
+            try:
+                log.info(f"Comparing {file_a.get('filename')} vs {file_b.get('filename')}")
+                
+                # Run plagiarism analysis
+                ast_similarity, raw_matches = analyze_plagiarism(file_a_path, file_b_path, language)
+                
+                # Calculate token similarity (we need to extract this from analyze_plagiarism or calculate separately)
+                # For now, we'll use the same value
+                token_similarity = ast_similarity
+                
+                # Convert matches to JSON-serializable format
+                matches_data = []
+                for match in raw_matches:
+                    matches_data.append({
+                        "file_a_start_line": match["file1"]["start_line"],
+                        "file_a_end_line": match["file1"]["end_line"],
+                        "file_b_start_line": match["file2"]["start_line"],
+                        "file_b_end_line": match["file2"]["end_line"]
+                    })
+                
+                # Save result to database
+                result_id = save_similarity_result(
+                    task_id=task_id,
+                    file_a_id=file_a_id,
+                    file_b_id=file_b_id,
+                    token_similarity=token_similarity,
+                    ast_similarity=ast_similarity,
+                    matches=matches_data
+                )
+                
+                processed_pairs += 1
+                log.info(f"Saved similarity result {result_id}: ast_similarity={ast_similarity}")
+                
+            except Exception as e:
+                log.error(f"Error comparing files {file_a_id} vs {file_b_id}: {e}")
+                # Save failed result
+                save_similarity_result(
+                    task_id=task_id,
+                    file_a_id=file_a_id,
+                    file_b_id=file_b_id,
+                    error=str(e)
+                )
         
-        # Update status to completed with results
+        # Update status to completed
         update_plagiarism_task(
             task_id=task_id,
             status="completed",
-            similarity=similarity,
-            matches=matches
+            similarity=None,  # No longer storing here, results are in similarity_results table
+            matches={"total_pairs": total_pairs, "processed_pairs": processed_pairs}
         )
         
-        log.info(f"+++ Finished processing task {task_id} with similarity {similarity}")
+        log.info(f"+++ Finished processing task {task_id}: {processed_pairs}/{total_pairs} pairs analyzed")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         
     except Exception as e:
