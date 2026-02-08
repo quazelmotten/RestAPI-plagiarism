@@ -7,7 +7,7 @@ from database import get_async_session
 from models.models import PlagiarismTask, File as FileModel, SimilarityResult
 from rabbit import publish_message
 from s3_storage import s3_storage
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 
 router = APIRouter(prefix="/plagiarism", tags=["Plagiarism"])
 
@@ -115,6 +115,79 @@ async def get_all_tasks(
         }
         for task in tasks
     ]
+
+
+@router.get("/files/all")
+async def get_all_files(
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Get all files with their max similarity from all comparisons."""
+    print("GET /files/all called")
+    try:
+        # Get all files with task info
+        files_result = await db.execute(
+            select(
+                FileModel.id,
+                FileModel.filename,
+                FileModel.language,
+                FileModel.created_at,
+                PlagiarismTask.id.label("task_id"),
+                PlagiarismTask.status,
+            )
+            .join(PlagiarismTask, FileModel.task_id == PlagiarismTask.id)
+            .order_by(FileModel.created_at.desc())
+        )
+        
+        files = files_result.all()
+        print(f"Found {len(files)} files")
+        
+        # Get max similarity for each file
+        file_ids = [row.id for row in files]
+        
+        # Query to get max similarity per file
+        similarity_result = await db.execute(
+            select(
+                SimilarityResult.file_a_id,
+                SimilarityResult.file_b_id,
+                func.max(SimilarityResult.ast_similarity).label("max_similarity")
+            )
+            .where(
+                (SimilarityResult.file_a_id.in_(file_ids)) | 
+                (SimilarityResult.file_b_id.in_(file_ids))
+            )
+            .group_by(SimilarityResult.file_a_id, SimilarityResult.file_b_id)
+        )
+        
+        # Build a map of file_id -> max_similarity
+        max_similarities = {}
+        for row in similarity_result.all():
+            sim = row.max_similarity or 0
+            # Update max for file_a
+            if row.file_a_id not in max_similarities or sim > max_similarities[row.file_a_id]:
+                max_similarities[row.file_a_id] = sim
+            # Update max for file_b
+            if row.file_b_id not in max_similarities or sim > max_similarities[row.file_b_id]:
+                max_similarities[row.file_b_id] = sim
+        
+        response_data = [
+            {
+                "id": str(row.id),
+                "filename": row.filename,
+                "language": row.language,
+                "created_at": str(row.created_at) if row.created_at else None,
+                "task_id": str(row.task_id),
+                "status": row.status,
+                "similarity": max_similarities.get(row.id),
+            }
+            for row in files
+        ]
+        print(f"Returning {len(response_data)} files")
+        return response_data
+    except Exception as e:
+        print(f"Error in get_all_files: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 @router.get("/{task_id}")

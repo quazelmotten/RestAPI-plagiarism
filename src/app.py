@@ -2,13 +2,24 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from plagiarism.router import router as router_plagiarism
 from auth import router as router_auth
 from exceptions.error_handler import add_exception_handler
 from startup.create_exchange import create_queues_and_exchanges
+from config import settings
 
 app = FastAPI(title="Plagiarism Detection API")
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include API routers first (so they take precedence)
 app.include_router(router_plagiarism)
