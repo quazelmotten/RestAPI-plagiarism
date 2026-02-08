@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route } from 'react-router';
 import {
   Box,
   Flex,
@@ -12,6 +12,7 @@ import Students from './Students';
 import Submissions from './Submissions';
 import PlagiarismGraph from './PlagiarismGraph';
 import Upload from './Upload';
+import Results from './Results';
 
 const Dashboard: React.FC = () => {
   return (
@@ -26,6 +27,7 @@ const Dashboard: React.FC = () => {
             <Route path="/submissions" element={<Submissions />} />
             <Route path="/graph" element={<PlagiarismGraph />} />
             <Route path="/upload" element={<Upload />} />
+            <Route path="/results" element={<Results />} />
           </Routes>
         </Box>
       </Box>

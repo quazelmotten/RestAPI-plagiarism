@@ -17,6 +17,7 @@ import {
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
@@ -27,7 +28,7 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await login(username, password);
+      await login(username, email, password);
       toast({
         title: 'Login successful',
         status: 'success',
@@ -74,6 +75,17 @@ const Login: React.FC = () => {
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
+                    required
+                  />
+                </FormControl>
+
+                <FormControl>
+                  <FormLabel htmlFor="email">Email</FormLabel>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     required
                   />
                 </FormControl>

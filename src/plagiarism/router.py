@@ -95,6 +95,28 @@ async def check_plagiarism(
         "files_count": len(files)
     }
 
+@router.get("/tasks")
+async def get_all_tasks(
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Get all plagiarism tasks with their results."""
+    result = await db.execute(
+        select(PlagiarismTask).order_by(PlagiarismTask.id)
+    )
+    tasks = result.scalars().all()
+    
+    return [
+        {
+            "task_id": str(task.id),
+            "status": task.status,
+            "similarity": task.similarity,
+            "matches": task.matches,
+            "error": task.error,
+        }
+        for task in tasks
+    ]
+
+
 @router.get("/{task_id}")
 async def get_plagiarism_result(
     task_id: str,

@@ -92,6 +92,8 @@ services:
     volumes:
       - uploads-data:/app/uploads
       - s3-storage:/app/s3_storage
+      - ./frontend/dist:/app/frontend/dist
+      - ./src:/app
     networks:
       - plagiarism-network
     restart: unless-stopped

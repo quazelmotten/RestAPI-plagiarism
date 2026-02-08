@@ -45,8 +45,8 @@ const Header: React.FC = () => {
             rightIcon={<FiChevronDown />}
           >
             <Flex align="center">
-              <Avatar size="sm" name={user?.username} mr={2} />
-              <Text>{user?.username}</Text>
+              <Avatar size="sm" name={user?.username || 'User'} mr={2} />
+              <Text>{user?.username || 'User'}</Text>
             </Flex>
           </MenuButton>
           <MenuList>

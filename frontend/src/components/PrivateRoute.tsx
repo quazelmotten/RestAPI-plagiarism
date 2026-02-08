@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
 import { Center, Spinner } from '@chakra-ui/react';
 

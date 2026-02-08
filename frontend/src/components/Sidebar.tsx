@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router';
 import {
   Box,
   VStack,
@@ -8,7 +8,7 @@ import {
   Flex,
   useColorModeValue,
 } from '@chakra-ui/react';
-import { FiHome, FiUsers, FiFileText, FiShare2, FiUpload } from 'react-icons/fi';
+import { FiHome, FiUsers, FiFileText, FiShare2, FiUpload, FiBarChart2 } from 'react-icons/fi';
 
 const menuItems = [
   { path: '/dashboard', label: 'Overview', icon: FiHome },
@@ -16,6 +16,7 @@ const menuItems = [
   { path: '/dashboard/submissions', label: 'Submissions', icon: FiFileText },
   { path: '/dashboard/graph', label: 'Plagiarism Graph', icon: FiShare2 },
   { path: '/dashboard/upload', label: 'Upload Files', icon: FiUpload },
+  { path: '/dashboard/results', label: 'Results', icon: FiBarChart2 },
 ];
 
 const Sidebar: React.FC = () => {
