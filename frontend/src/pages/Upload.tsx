@@ -57,25 +57,24 @@ const Upload: React.FC = () => {
     setUploadProgress(0);
 
     try {
-      // Upload each file
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('language', language);
+      // Upload all files at once to /plagiarism/check
+      const formData = new FormData();
+      files.forEach((file) => {
+        formData.append('files', file);
+      });
+      formData.append('language', language);
 
-        await api.post('/submissions', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-          onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round(
-              ((i + (progressEvent.loaded / (progressEvent.total || 1))) / files.length) * 100
-            );
-            setUploadProgress(percentCompleted);
-          },
-        });
-      }
+      await api.post('/plagiarism/check', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded / (progressEvent.total || 1)) * 100
+          );
+          setUploadProgress(percentCompleted);
+        },
+      });
 
       toast({
         title: 'Upload successful',
