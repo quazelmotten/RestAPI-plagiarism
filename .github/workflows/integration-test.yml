@@ -2,9 +2,9 @@ name: Full Integration Test
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: **
   pull_request:
-    branches: [ main, master ]
+    branches: **
   workflow_dispatch:
     inputs:
       test_type:
