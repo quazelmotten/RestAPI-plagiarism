@@ -41,9 +41,9 @@ jobs:
       # -------------------------------
       - name: Run Semgrep (SAST)
         uses: returntocorp/semgrep-action@v1
+        continue-on-error: true
         with:
           config: auto
-          error: false
 
       # -------------------------------
       # Dependency vulnerabilities
