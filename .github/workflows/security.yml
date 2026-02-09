@@ -15,13 +15,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # -------------------------------
+      # Checkout
+      # -------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       # -------------------------------
-      # Python setup
+      # Python setup (for pip-audit)
       # -------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -31,28 +34,34 @@ jobs:
       - name: Install Python security tools
         run: |
           pip install --upgrade pip
-          pip install pip-audit semgrep
+          pip install pip-audit
 
       # -------------------------------
-      # SAST – source code scan
+      # SAST – Semgrep (CORRECT WAY)
       # -------------------------------
       - name: Run Semgrep (SAST)
-        run: |
-          semgrep --config=auto --error --verbose
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: auto
+          error: true
 
       # -------------------------------
       # Dependency vulnerabilities
       # -------------------------------
-      - name: Run pip-audit on API
+      - name: Run pip-audit (API)
         run: |
           if [ -f src/requirements.txt ]; then
             pip-audit -r src/requirements.txt
+          else
+            echo "No src/requirements.txt found, skipping"
           fi
 
-      - name: Run pip-audit on Worker
+      - name: Run pip-audit (Worker)
         run: |
           if [ -f worker/requirements.txt ]; then
             pip-audit -r worker/requirements.txt
+          else
+            echo "No worker/requirements.txt found, skipping"
           fi
 
       # -------------------------------
@@ -66,65 +75,50 @@ jobs:
           fail: true
 
       # -------------------------------
-      # Docker build - API
+      # Docker build
       # -------------------------------
       - name: Build API Docker image
-        run: |
-          docker build -f api.Dockerfile -t plagitype-api:ci .
+        run: docker build -f api.Dockerfile -t plagitype-api:ci .
 
-      # -------------------------------
-      # Docker build - Worker
-      # -------------------------------
       - name: Build Worker Docker image
-        run: |
-          docker build -f worker.Dockerfile -t plagitype-worker:ci .
+        run: docker build -f worker.Dockerfile -t plagitype-worker:ci .
 
-      # -------------------------------
-      # Docker build - DB
-      # -------------------------------
       - name: Build DB Docker image
-        run: |
-          docker build -f db.Dockerfile -t plagitype-db:ci .
+        run: docker build -f db.Dockerfile -t plagitype-db:ci .
 
       # -------------------------------
-      # Trivy – Docker image scan (API)
+      # Trivy – Docker image scan
       # -------------------------------
-      - name: Trivy scan (API Docker image)
+      - name: Trivy scan (API)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "plagitype-api:ci"
-          format: "table"
-          severity: "CRITICAL,HIGH"
+          image-ref: plagitype-api:ci
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - name: Trivy scan (Worker)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: plagitype-worker:ci
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - name: Trivy scan (DB)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: plagitype-db:ci
+          format: table
+          severity: CRITICAL,HIGH
           exit-code: "1"
 
       # -------------------------------
-      # Trivy – Docker image scan (Worker)
-      # -------------------------------
-      - name: Trivy scan (Worker Docker image)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: "plagitype-worker:ci"
-          format: "table"
-          severity: "CRITICAL,HIGH"
-          exit-code: "1"
-
-      # -------------------------------
-      # Trivy – Docker image scan (DB)
-      # -------------------------------
-      - name: Trivy scan (DB Docker image)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: "plagitype-db:ci"
-          format: "table"
-          severity: "CRITICAL,HIGH"
-          exit-code: "1"
-
-      # -------------------------------
-      # Trivy – repo & config scan
+      # Trivy – repo & IaC scan
       # -------------------------------
       - name: Trivy scan (filesystem & IaC)
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: "fs"
-          format: "table"
-          severity: "CRITICAL,HIGH"
+          scan-type: fs
+          format: table
+          severity: CRITICAL,HIGH
