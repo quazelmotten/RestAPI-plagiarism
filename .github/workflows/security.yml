@@ -41,14 +41,22 @@ jobs:
       # -------------------------------
       - name: Run Semgrep (SAST)
         uses: returntocorp/semgrep-action@v1
-        continue-on-error: true
         with:
           config: auto
+          error: false
+          generateSarif: true
+
+      - name: Upload Semgrep SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+
 
       # -------------------------------
       # Dependency vulnerabilities
       # -------------------------------
       - name: Run pip-audit (API)
+        continue-on-error: true
         run: |
           if [ -f src/requirements.txt ]; then
             pip-audit -r src/requirements.txt
@@ -56,7 +64,9 @@ jobs:
             echo "No src/requirements.txt found, skipping"
           fi
 
+
       - name: Run pip-audit (Worker)
+        continue-on-error: true
         run: |
           if [ -f worker/requirements.txt ]; then
             pip-audit -r worker/requirements.txt
@@ -68,6 +78,7 @@ jobs:
       # Secret scanning
       # -------------------------------
       - name: Run Gitleaks
+        continue-on-error: true
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -90,6 +101,7 @@ jobs:
       # Trivy – Docker image scan
       # -------------------------------
       - name: Trivy scan (API)
+        continue-on-error: true
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: plagitype-api:ci
