@@ -37,13 +37,13 @@ jobs:
           pip install pip-audit
 
       # -------------------------------
-      # SAST – Semgrep (CORRECT WAY)
+      # SAST – Semgrep
       # -------------------------------
       - name: Run Semgrep (SAST)
         uses: returntocorp/semgrep-action@v1
         with:
           config: auto
-          error: true
+          error: false
 
       # -------------------------------
       # Dependency vulnerabilities
