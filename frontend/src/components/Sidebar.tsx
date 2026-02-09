@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router';
+import { keyframes } from '@emotion/react';
 import {
   Box,
   VStack,
@@ -9,6 +10,11 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import { FiHome, FiUsers, FiFileText, FiShare2, FiUpload, FiBarChart2, FiGitBranch } from 'react-icons/fi';
+
+const blink = keyframes`
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+`;
 
 const menuItems = [
   { path: '/dashboard', label: 'Overview', icon: FiHome },
@@ -38,9 +44,30 @@ const Sidebar: React.FC = () => {
       py={6}
       px={4}
     >
-      <Text fontSize="2xl" fontWeight="bold" mb={8} px={4}>
-        Plagiarism Detection
-      </Text>
+      <Box mb={8} textAlign="center">
+        <Text
+          fontSize="2.14rem"
+          fontWeight="bold"
+          fontFamily="monospace"
+          letterSpacing="0.1em"
+          display="inline-block"
+        >
+          <Box as="span" color="black">plagi</Box>
+          <Box as="span" color="green.500">type</Box>
+          <Box as="span" animation={`${blink} 1s infinite`}>_</Box>
+        </Text>
+        <Text
+          fontSize="sm"
+          fontFamily="monospace"
+          color="green.400"
+          letterSpacing="0.05em"
+          textAlign="center"
+          width="100%"
+          whiteSpace="nowrap"
+        >
+          detect software plagiarism
+        </Text>
+      </Box>
       
       <VStack spacing={2} align="stretch">
         {menuItems.map((item) => (
