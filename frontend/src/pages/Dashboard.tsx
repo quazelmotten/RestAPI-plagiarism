@@ -13,6 +13,7 @@ import Submissions from './Submissions';
 import PlagiarismGraph from './PlagiarismGraph';
 import Upload from './Upload';
 import Results from './Results';
+import Compare from './Compare';
 
 const Dashboard: React.FC = () => {
   return (
@@ -23,11 +24,12 @@ const Dashboard: React.FC = () => {
         <Box as="main" p={8} pt={24}>
           <Routes>
             <Route path="/" element={<Overview />} />
-            <Route path="/students" element={<Students />} />
-            <Route path="/submissions" element={<Submissions />} />
-            <Route path="/graph" element={<PlagiarismGraph />} />
-            <Route path="/upload" element={<Upload />} />
-            <Route path="/results" element={<Results />} />
+            <Route path="students" element={<Students />} />
+            <Route path="submissions" element={<Submissions />} />
+            <Route path="graph" element={<PlagiarismGraph />} />
+            <Route path="upload" element={<Upload />} />
+            <Route path="results" element={<Results />} />
+            <Route path="compare/:fileAId/:fileBId" element={<Compare />} />
           </Routes>
         </Box>
       </Box>

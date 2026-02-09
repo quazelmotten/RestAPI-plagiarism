@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Box,
   Heading,
@@ -33,6 +34,7 @@ const Submissions: React.FC = () => {
   const [submissions, setSubmissions] = useState<FileSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchSubmissions();
@@ -53,6 +55,11 @@ const Submissions: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleViewComparison = (submissionId: string) => {
+    // Navigate to results page and filter for this submission
+    navigate(`/dashboard/results?filter=${submissionId}`);
   };
 
   const getStatusColor = (status: string) => {
@@ -138,7 +145,12 @@ const Submissions: React.FC = () => {
                     </Td>
                     <Td>{formatDate(submission.created_at)}</Td>
                     <Td>
-                      <Button size="sm" leftIcon={<FiEye />} variant="ghost">
+                      <Button 
+                        size="sm" 
+                        leftIcon={<FiEye />} 
+                        variant="ghost"
+                        onClick={() => handleViewComparison(submission.id)}
+                      >
                         View
                       </Button>
                     </Td>

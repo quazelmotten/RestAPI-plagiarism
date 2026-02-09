@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Box,
   Heading,
@@ -31,7 +32,8 @@ import {
   FiActivity,
   FiChevronDown,
   FiChevronUp,
-  FiLayers
+  FiLayers,
+  FiEye
 } from 'react-icons/fi';
 import api from '../services/api';
 
@@ -87,6 +89,7 @@ const getStatusIcon = (status: string) => {
 
 const SimilarityCard: React.FC<{ result: PlagiarismResult }> = ({ result }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   
@@ -140,14 +143,24 @@ const SimilarityCard: React.FC<{ result: PlagiarismResult }> = ({ result }) => {
             </Text>
           </HStack>
           
-          <Button 
-            size="sm" 
-            variant="ghost" 
-            rightIcon={isOpen ? <FiChevronUp /> : <FiChevronDown />}
-            onClick={() => setIsOpen(!isOpen)}
-          >
-            {isOpen ? 'Hide Details' : 'View Matches'}
-          </Button>
+          <HStack spacing={2}>
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              rightIcon={isOpen ? <FiChevronUp /> : <FiChevronDown />}
+              onClick={() => setIsOpen(!isOpen)}
+            >
+              {isOpen ? 'Hide Details' : 'View Matches'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              leftIcon={<FiEye />}
+              onClick={() => navigate(`/dashboard/compare/${result.file_a.id}/${result.file_b.id}`)}
+            >
+              Compare
+            </Button>
+          </HStack>
           
           <Collapse in={isOpen}>
             <Box 

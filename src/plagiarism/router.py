@@ -260,3 +260,36 @@ async def get_plagiarism_results(
         "files": [{"id": str(f.id), "filename": f.filename} for f in files],
         "results": formatted_results
     }
+
+
+@router.get("/files/{file_id}/content")
+async def get_file_content(
+    file_id: str,
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Get file content by file ID."""
+    # Get file metadata
+    file_result = await db.get(FileModel, file_id)
+    if not file_result:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Download from S3 storage
+    try:
+        # The file_path is stored as full path, but download_file expects key
+        # We need to extract the key part (relative to bucket)
+        key = file_result.file_path.split(f"{BUCKET_NAME}/")[-1]
+        
+        content = s3_storage.download_file(bucket_name=BUCKET_NAME, key=key)
+        
+        if content is None:
+            raise HTTPException(status_code=404, detail="File content not found in storage")
+        
+        return {
+            "id": str(file_result.id),
+            "filename": file_result.filename,
+            "content": content.decode('utf-8'),
+            "language": file_result.language,
+            "file_path": file_result.file_path
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to download file: {str(e)}")
