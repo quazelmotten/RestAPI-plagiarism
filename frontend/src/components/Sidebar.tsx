@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router';
 import { keyframes } from '@emotion/react';
 import {
@@ -30,6 +30,7 @@ const Sidebar: React.FC = () => {
   const location = useLocation();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const [isBlinking, setIsBlinking] = useState(false);
 
   return (
     <Box
@@ -44,17 +45,18 @@ const Sidebar: React.FC = () => {
       py={6}
       px={4}
     >
-      <Box mb={8} textAlign="center">
+      <Box mb={8} textAlign="center" cursor="pointer" onClick={() => setIsBlinking(!isBlinking)} title="Click to toggle blink">
         <Text
           fontSize="2.14rem"
           fontWeight="bold"
           fontFamily="monospace"
           letterSpacing="0.1em"
           display="inline-block"
+          userSelect="none"
         >
           <Box as="span" color="black">plagi</Box>
           <Box as="span" color="green.500">type</Box>
-          <Box as="span" animation={`${blink} 1s infinite`}>_</Box>
+          <Box as="span" animation={isBlinking ? `${blink} 1s infinite` : undefined}>_</Box>
         </Text>
         <Text
           fontSize="sm"
