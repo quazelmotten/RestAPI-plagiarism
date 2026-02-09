@@ -76,7 +76,7 @@ const PlagiarismGraph: React.FC = () => {
             const detailsResponse = await api.get(`/plagiarism/${task.task_id}/results`);
             return detailsResponse.data as Task;
           } catch (err) {
-            console.error(`Failed to fetch details for task ${task.task_id}`, err);
+            console.error('Failed to fetch details for task %s', task.task_id, err);
             return null;
           }
         })

@@ -111,7 +111,7 @@ const Compare: React.FC = () => {
             break;
           }
         } catch (err) {
-          console.error(`Error fetching task ${task.task_id}:`, err);
+          console.error('Error fetching task %s:', task.task_id, err);
         }
       }
       
