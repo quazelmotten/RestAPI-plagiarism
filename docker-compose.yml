@@ -92,8 +92,12 @@ services:
     volumes:
       - uploads-data:/app/uploads
       - s3-storage:/app/s3_storage
-      - ./frontend/dist:/app/frontend/dist
-      - ./src:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - plagiarism-network
     restart: unless-stopped
