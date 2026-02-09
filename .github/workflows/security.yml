@@ -1,0 +1,87 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -------------------------------
+      # Python setup
+      # -------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python security tools
+        run: |
+          pip install --upgrade pip
+          pip install pip-audit semgrep
+
+      # -------------------------------
+      # SAST – source code scan
+      # -------------------------------
+      - name: Run Semgrep (SAST)
+        run: |
+          semgrep --config=auto --error
+
+      # -------------------------------
+      # Dependency vulnerabilities
+      # -------------------------------
+      - name: Run pip-audit
+        run: |
+          if [ -f requirements.txt ]; then
+            pip-audit -r requirements.txt
+          else
+            pip-audit
+          fi
+
+      # -------------------------------
+      # Secret scanning
+      # -------------------------------
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          fail: true
+
+      # -------------------------------
+      # Docker build
+      # -------------------------------
+      - name: Build Docker image
+        run: |
+          docker build -t plagitype-api:ci .
+
+      # -------------------------------
+      # Trivy – Docker image scan
+      # -------------------------------
+      - name: Trivy scan (Docker image)
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: "plagitype-api:ci"
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+      # -------------------------------
+      # Trivy – repo & config scan
+      # -------------------------------
+      - name: Trivy scan (filesystem & IaC)
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          scan-type: "fs"
+          format: "table"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
