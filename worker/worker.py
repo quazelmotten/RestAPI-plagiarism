@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 
 from crud import update_plagiarism_task, save_similarity_result
 
-from plagiarism.analyzer import analyze_plagiarism
+from plagiarism.analyzer import analyze_plagiarism_cached
+from redis_cache import cache, connect_cache
 
 
 if TYPE_CHECKING:
@@ -90,10 +91,19 @@ def process_new_message(
             
             try:
                 log.info(f"Comparing {file_a.get('filename')} vs {file_b.get('filename')}")
-                
-                # Run plagiarism analysis
-                ast_similarity, raw_matches = analyze_plagiarism(file_a_path, file_b_path, language)
-                
+
+                # Get file hashes for caching
+                file_a_hash = file_a.get('hash')
+                file_b_hash = file_b.get('hash')
+
+                # Run plagiarism analysis with caching
+                ast_similarity, raw_matches = analyze_plagiarism_cached(
+                    file_a_path, file_b_path,
+                    file_a_hash, file_b_hash,
+                    cache=cache,
+                    language=language
+                )
+
                 # Calculate token similarity (we need to extract this from analyze_plagiarism or calculate separately)
                 # For now, we'll use the same value
                 token_similarity = ast_similarity
@@ -169,10 +179,18 @@ def consume_messages(ch: "BlockingChannel") -> None:
 if __name__ == "__main__":
     configure_logging(level=logging.INFO)
     log = logging.getLogger(__name__)
-    
+
+    # Connect to Redis cache
+    log.info("Connecting to Redis cache...")
+    redis_connected = connect_cache()
+    if redis_connected:
+        log.info("✓ Redis cache connected and ready")
+    else:
+        log.warning("⚠ Redis cache unavailable, running without caching")
+
     max_retries = 30
     retry_delay = 2
-    
+
     for attempt in range(max_retries):
         try:
             log.info(f"Connecting to RabbitMQ (attempt {attempt + 1}/{max_retries})...")

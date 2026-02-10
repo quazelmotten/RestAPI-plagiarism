@@ -84,10 +84,18 @@ services:
       # Monitoring
       SENTRY_DSN: ${SENTRY_DSN:-}
       METRICS_ENDPOINT: ${METRICS_ENDPOINT:-}
+
+      # Redis
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_TTL: ${REDIS_TTL:-86400}
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - uploads-data:/app/uploads
@@ -119,7 +127,7 @@ services:
       DB_NAME: ${DB_NAME:-plagiarism_db}
       DB_USER: ${DB_USER:-plagiarism_user}
       DB_PASS: ${DB_PASS}
-      
+
       # RabbitMQ
       RMQ_HOST: rabbitmq
       RMQ_PORT: ${RMQ_PORT:-5672}
@@ -131,14 +139,20 @@ services:
       RMQ_QUEUE_DEAD_LETTER_EXCHANGE: ${RMQ_QUEUE_DEAD_LETTER_EXCHANGE:-plagiarism_dlx}
       RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER: ${RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER:-plagiarism.dead}
       RMQ_QUEUE_DEAD_LETTER_NAME: ${RMQ_QUEUE_DEAD_LETTER_NAME:-plagiarism_dead}
-      
+
+      # Redis
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_TTL: ${REDIS_TTL:-86400}
+
       # Worker
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
       WORKER_PREFETCH_COUNT: ${WORKER_PREFETCH_COUNT:-1}
-      
+
       # Security
       SECRET_KEY: ${SECRET_KEY}
-      
+
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: ${LOG_FORMAT:-json}
@@ -146,6 +160,8 @@ services:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - uploads-data:/app/uploads
@@ -181,10 +197,33 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  redis:
+    container_name: plagiarism-redis
+    hostname: redis
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - plagiarism-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   postgres-data:
     driver: local
   rabbitmq-data:
+    driver: local
+  redis-data:
     driver: local
   uploads-data:
     driver: local
