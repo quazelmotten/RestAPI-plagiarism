@@ -41,7 +41,7 @@ def save_similarity_result(
     file_b_id: str,
     token_similarity: float = None,
     ast_similarity: float = None,
-    matches: dict = None,
+    matches = None,
     error: str = None,
 ) -> str:
     """Save similarity result between two files. Returns the result ID."""

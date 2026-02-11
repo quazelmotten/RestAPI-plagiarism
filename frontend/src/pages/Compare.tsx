@@ -94,6 +94,12 @@ const Compare: React.FC = () => {
       const tasksResponse = await api.get('/plagiarism/tasks');
       const tasks = tasksResponse.data;
       
+      // Validate tasks is an array
+      if (!Array.isArray(tasks)) {
+        console.error('Expected array from /plagiarism/tasks, got:', typeof tasks, tasks);
+        throw new Error('Invalid data format received from server');
+      }
+      
       let foundComparison: ComparisonResult | null = null;
       
       for (const task of tasks) {

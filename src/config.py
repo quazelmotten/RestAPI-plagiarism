@@ -85,6 +85,16 @@ class Settings(BaseSettings):
     metrics_endpoint: Optional[str] = Field(default=None, validation_alias="METRICS_ENDPOINT")
     
     # =============================================================================
+    # REDIS CONFIGURATION
+    # =============================================================================
+    redis_host: str = Field(default="localhost", validation_alias="REDIS_HOST")
+    redis_port: int = Field(default=6379, validation_alias="REDIS_PORT")
+    redis_db: int = Field(default=0, validation_alias="REDIS_DB")
+    redis_password: Optional[str] = Field(default=None, validation_alias="REDIS_PASSWORD")
+    redis_fingerprint_ttl: int = Field(default=604800, validation_alias="REDIS_FINGERPRINT_TTL")  # 7 days
+    redis_use_ssl: bool = Field(default=False, validation_alias="REDIS_USE_SSL")
+    
+    # =============================================================================
     # VALIDATORS
     # =============================================================================
     
@@ -156,6 +166,13 @@ class Settings(BaseSettings):
     def rmq_url(self) -> str:
         """Generate RabbitMQ AMQP URL."""
         return f"amqp://{self.rmq_user}:{self.rmq_pass}@{self.rmq_host}:{self.rmq_port}/"
+
+    @property
+    def redis_url(self) -> str:
+        """Generate Redis URL."""
+        password_part = f":{self.redis_password}@" if self.redis_password else ""
+        scheme = "rediss" if self.redis_use_ssl else "redis"
+        return f"{scheme}://{password_part}{self.redis_host}:{self.redis_port}/{self.redis_db}"
     
     @property
     def cors_origins_list(self) -> List[str]:

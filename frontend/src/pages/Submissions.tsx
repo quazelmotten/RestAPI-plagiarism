@@ -46,6 +46,15 @@ const Submissions: React.FC = () => {
       console.log('Fetching submissions from /plagiarism/files/all');
       const response = await api.get('/plagiarism/files/all');
       console.log('Response:', response.data);
+      
+      // Validate response is an array
+      if (!Array.isArray(response.data)) {
+        console.error('Expected array from /plagiarism/files/all, got:', typeof response.data, response.data);
+        setError('Invalid data format received from server');
+        setSubmissions([]);
+        return;
+      }
+      
       setSubmissions(response.data);
       setError(null);
     } catch (err: any) {

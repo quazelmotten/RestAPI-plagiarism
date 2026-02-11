@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from crud import update_plagiarism_task, save_similarity_result
 
-from plagiarism.analyzer import analyze_plagiarism
+from plagiarism.redis_analyzer import analyze_plagiarism_redis
 
 
 if TYPE_CHECKING:
@@ -91,12 +91,14 @@ def process_new_message(
             try:
                 log.info(f"Comparing {file_a.get('filename')} vs {file_b.get('filename')}")
                 
-                # Run plagiarism analysis
-                ast_similarity, raw_matches = analyze_plagiarism(file_a_path, file_b_path, language)
+                # Get file hashes for Redis lookup
+                file_a_hash = file_a.get('hash')
+                file_b_hash = file_b.get('hash')
                 
-                # Calculate token similarity (we need to extract this from analyze_plagiarism or calculate separately)
-                # For now, we'll use the same value
-                token_similarity = ast_similarity
+                # Run plagiarism analysis using Redis
+                token_similarity, ast_similarity, raw_matches = analyze_plagiarism_redis(
+                    file_a_path, file_b_path, file_a_hash, file_b_hash, language
+                )
                 
                 # Convert matches to JSON-serializable format
                 matches_data = []
@@ -119,10 +121,12 @@ def process_new_message(
                 )
                 
                 processed_pairs += 1
-                log.info(f"Saved similarity result {result_id}: ast_similarity={ast_similarity}")
+                log.info(f"Saved similarity result {result_id}: token_sim={token_similarity:.4f}, ast_sim={ast_similarity:.4f}")
                 
             except Exception as e:
                 log.error(f"Error comparing files {file_a_id} vs {file_b_id}: {e}")
+                import traceback
+                log.error(traceback.format_exc())
                 # Save failed result
                 save_similarity_result(
                     task_id=task_id,

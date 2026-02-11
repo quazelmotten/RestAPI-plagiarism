@@ -67,6 +67,15 @@ const PlagiarismGraph: React.FC = () => {
     try {
       setLoading(true);
       const response = await api.get('/plagiarism/tasks');
+      
+      // Validate response is an array
+      if (!Array.isArray(response.data)) {
+        console.error('Expected array from /plagiarism/tasks, got:', typeof response.data, response.data);
+        setError('Invalid data format received from server');
+        setTasks([]);
+        return;
+      }
+      
       const taskList = response.data as Array<{ task_id: string; status: string }>;
       
       // Fetch detailed results for each task
@@ -125,9 +134,18 @@ const PlagiarismGraph: React.FC = () => {
       },
     }));
 
-    // Build edges from similarity results
+    // Get set of valid file IDs
+    const validFileIds = new Set(selectedTask.files.map((file) => file.id));
+
+    // Build edges from similarity results, filtering out edges with non-existent targets
     const edges: cytoscape.ElementDefinition[] = selectedTask.results
-      .filter((result) => (result.ast_similarity || 0) >= similarityThreshold)
+      .filter((result) => {
+        // Only include edges where both source and target exist in the files list
+        const sourceExists = validFileIds.has(result.file_a.id);
+        const targetExists = validFileIds.has(result.file_b.id);
+        const meetsThreshold = (result.ast_similarity || 0) >= similarityThreshold;
+        return sourceExists && targetExists && meetsThreshold;
+      })
       .map((result) => ({
         data: {
           source: result.file_a.id,

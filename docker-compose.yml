@@ -84,10 +84,18 @@ services:
       # Monitoring
       SENTRY_DSN: ${SENTRY_DSN:-}
       METRICS_ENDPOINT: ${METRICS_ENDPOINT:-}
+      
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - uploads-data:/app/uploads
@@ -138,10 +146,18 @@ services:
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: ${LOG_FORMAT:-json}
+      
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - uploads-data:/app/uploads
@@ -177,6 +193,27 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  redis:
+    container_name: plagiarism-redis
+    hostname: redis
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - plagiarism-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    command: redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru
+
 volumes:
   postgres-data:
     driver: local
@@ -185,6 +222,8 @@ volumes:
   uploads-data:
     driver: local
   s3-storage:
+    driver: local
+  redis-data:
     driver: local
 
 networks:

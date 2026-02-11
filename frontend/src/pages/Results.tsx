@@ -248,6 +248,14 @@ const Results: React.FC = () => {
       const response = await api.get('/plagiarism/tasks');
       const taskList = response.data;
       
+      // Validate that taskList is an array
+      if (!Array.isArray(taskList)) {
+        console.error('Expected array from /plagiarism/tasks, got:', typeof taskList, taskList);
+        setError('Invalid data format received from server');
+        setTasks([]);
+        return;
+      }
+      
       // Fetch detailed results for each task
       const tasksWithDetails = await Promise.all(
         taskList.map(async (task: any) => {

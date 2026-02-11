@@ -9,7 +9,7 @@ import {
   Flex,
   useColorModeValue,
 } from '@chakra-ui/react';
-import { FiHome, FiUsers, FiFileText, FiShare2, FiUpload, FiBarChart2, FiGitBranch } from 'react-icons/fi';
+import { FiHome, FiUsers, FiFileText, FiShare2, FiUpload, FiBarChart2, FiGitBranch, FiColumns } from 'react-icons/fi';
 
 const blink = keyframes`
   0%, 50% { opacity: 1; }
@@ -24,6 +24,7 @@ const menuItems = [
   { path: '/dashboard/upload', label: 'Upload Files', icon: FiUpload },
   { path: '/dashboard/results', label: 'Results', icon: FiBarChart2 },
   { path: '/dashboard/compare', label: 'Compare Files', icon: FiGitBranch },
+  { path: '/dashboard/pair-comparison', label: 'Pair Comparison', icon: FiColumns },
 ];
 
 const Sidebar: React.FC = () => {
