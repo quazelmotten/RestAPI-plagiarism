@@ -5,7 +5,7 @@ from itertools import combinations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from crud import update_plagiarism_task, save_similarity_result
+from crud import update_plagiarism_task, save_similarity_result, get_all_files
 
 from plagiarism.analyzer import analyze_plagiarism_cached
 from redis_cache import cache, connect_cache
@@ -71,30 +71,38 @@ def process_new_message(
             task_id=task_id,
             status="processing"
         )
-        
+
+        # Get all existing files from other tasks for cross-task comparison
+        log.info("Fetching existing files from other tasks for cross-task comparison...")
+        existing_files = get_all_files(exclude_task_id=task_id)
+        log.info(f"Found {len(existing_files)} existing files from other tasks")
+
         # Process all pairs of files
         total_pairs = 0
         processed_pairs = 0
-        
-        # Generate all combinations of file pairs
-        for file_a, file_b in combinations(files, 2):
+
+        def process_pair(file_a, file_b, is_cross_task=False):
+            """Process a single pair of files."""
+            nonlocal total_pairs, processed_pairs
+
             total_pairs += 1
-            
+
             file_a_id = file_a.get("id")
             file_b_id = file_b.get("id")
-            file_a_path = file_a.get("path")
-            file_b_path = file_b.get("path")
-            
+            file_a_path = file_a.get("path") or file_a.get("file_path")
+            file_b_path = file_b.get("path") or file_b.get("file_path")
+
             if not file_a_id or not file_b_id or not file_a_path or not file_b_path:
                 log.warning(f"Skipping pair due to missing file info: {file_a}, {file_b}")
-                continue
-            
+                return
+
             try:
-                log.info(f"Comparing {file_a.get('filename')} vs {file_b.get('filename')}")
+                task_type = "cross-task" if is_cross_task else "intra-task"
+                log.info(f"[{task_type}] Comparing {file_a.get('filename')} vs {file_b.get('filename')}")
 
                 # Get file hashes for caching
-                file_a_hash = file_a.get('hash')
-                file_b_hash = file_b.get('hash')
+                file_a_hash = file_a.get('hash') or file_a.get('file_hash')
+                file_b_hash = file_b.get('hash') or file_b.get('file_hash')
 
                 # Run plagiarism analysis with caching
                 ast_similarity, raw_matches = analyze_plagiarism_cached(
@@ -107,7 +115,7 @@ def process_new_message(
                 # Calculate token similarity (we need to extract this from analyze_plagiarism or calculate separately)
                 # For now, we'll use the same value
                 token_similarity = ast_similarity
-                
+
                 # Convert matches to JSON-serializable format
                 matches_data = []
                 for match in raw_matches:
@@ -117,7 +125,7 @@ def process_new_message(
                         "file_b_start_line": match["file2"]["start_line"],
                         "file_b_end_line": match["file2"]["end_line"]
                     })
-                
+
                 # Save result to database
                 result_id = save_similarity_result(
                     task_id=task_id,
@@ -127,10 +135,10 @@ def process_new_message(
                     ast_similarity=ast_similarity,
                     matches=matches_data
                 )
-                
+
                 processed_pairs += 1
-                log.info(f"Saved similarity result {result_id}: ast_similarity={ast_similarity}")
-                
+                log.info(f"Saved similarity result {result_id}: ast_similarity={ast_similarity:.4f}")
+
             except Exception as e:
                 log.error(f"Error comparing files {file_a_id} vs {file_b_id}: {e}")
                 # Save failed result
@@ -140,6 +148,20 @@ def process_new_message(
                     file_b_id=file_b_id,
                     error=str(e)
                 )
+
+        # 1. Compare files within the new task (intra-task comparisons)
+        log.info(f"Processing {len(files)} files within task {task_id}...")
+        for file_a, file_b in combinations(files, 2):
+            process_pair(file_a, file_b, is_cross_task=False)
+
+        # 2. Compare new task files against all existing files (cross-task comparisons)
+        if existing_files:
+            log.info(f"Processing cross-task comparisons: {len(files)} new files vs {len(existing_files)} existing files...")
+            for new_file in files:
+                for existing_file in existing_files:
+                    process_pair(new_file, existing_file, is_cross_task=True)
+        else:
+            log.info("No existing files to compare against (this is the first task)")
         
         # Update status to completed
         update_plagiarism_task(
@@ -149,7 +171,7 @@ def process_new_message(
             matches={"total_pairs": total_pairs, "processed_pairs": processed_pairs}
         )
         
-        log.info(f"+++ Finished processing task {task_id}: {processed_pairs}/{total_pairs} pairs analyzed")
+        log.info(f"+++ Finished processing task {task_id}: {processed_pairs}/{total_pairs} pairs analyzed (including cross-task comparisons)")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         
     except Exception as e:

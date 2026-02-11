@@ -39,6 +39,15 @@ if static_path.exists():
         app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
 
 
+@app.get("/favicon.png")
+async def favicon():
+    """Serve favicon"""
+    favicon_path = static_path / "favicon.png"
+    if favicon_path.exists():
+        return FileResponse(favicon_path, media_type="image/png")
+    return {"detail": "Not Found"}
+
+
 @app.on_event("startup")
 async def on_startup():
     await create_queues_and_exchanges()
