@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
 import {
   Box,
   Heading,
@@ -24,6 +23,7 @@ import {
   useColorModeValue,
   Grid,
   GridItem,
+  Flex,
 } from '@chakra-ui/react';
 import { 
   FiFileText, 
@@ -33,9 +33,17 @@ import {
   FiChevronDown,
   FiChevronUp,
   FiLayers,
-  FiEye
+  FiEye,
+  FiArrowLeft
 } from 'react-icons/fi';
 import api from '../services/api';
+
+interface PlagiarismMatch {
+  file_a_start_line: number;
+  file_a_end_line: number;
+  file_b_start_line: number;
+  file_b_end_line: number;
+}
 
 interface PlagiarismResult {
   file_a: {
@@ -48,7 +56,7 @@ interface PlagiarismResult {
   };
   token_similarity: number;
   ast_similarity: number;
-  matches: any[];
+  matches: PlagiarismMatch[];
   created_at: string;
 }
 
@@ -58,6 +66,13 @@ interface Task {
   total_pairs: number;
   files: { id: string; filename: string }[];
   results: PlagiarismResult[];
+}
+
+interface FileContent {
+  id: string;
+  filename: string;
+  content: string;
+  language: string;
 }
 
 const getSimilarityColor = (similarity: number) => {
@@ -87,148 +102,6 @@ const getStatusIcon = (status: string) => {
   }
 };
 
-const SimilarityCard: React.FC<{ result: PlagiarismResult }> = ({ result }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const navigate = useNavigate();
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
-  
-  return (
-    <Card 
-      variant="outline" 
-      borderColor={borderColor}
-      bg={bgColor}
-      boxShadow="sm"
-      _hover={{ boxShadow: 'md', transform: 'translateY(-2px)' }}
-      transition="all 0.2s"
-    >
-      <CardBody>
-        <VStack align="stretch" spacing={3}>
-          <HStack justify="space-between">
-            <HStack spacing={2} flex={1}>
-              <FiFileText />
-              <Text fontWeight="semibold" fontSize="sm" noOfLines={1}>
-                {result.file_a.filename}
-              </Text>
-            </HStack>
-            <Text color="gray.500" fontSize="xs">vs</Text>
-            <HStack spacing={2} flex={1} justify="flex-end">
-              <Text fontWeight="semibold" fontSize="sm" noOfLines={1} textAlign="right">
-                {result.file_b.filename}
-              </Text>
-              <FiFileText />
-            </HStack>
-          </HStack>
-          
-          <Box 
-            p={4} 
-            borderRadius="lg"
-            bg={getSimilarityGradient(result.ast_similarity || 0)}
-            color="white"
-          >
-            <VStack spacing={1}>
-              <Text fontSize="2xl" fontWeight="bold">
-                {((result.ast_similarity || 0) * 100).toFixed(1)}%
-              </Text>
-              <Text fontSize="xs" opacity={0.9}>Similarity Score</Text>
-            </VStack>
-          </Box>
-          
-          <HStack justify="space-between" fontSize="sm">
-            <Text color="gray.600">
-              Token: {((result.token_similarity || 0) * 100).toFixed(1)}%
-            </Text>
-            <Text color="gray.600">
-              AST: {((result.ast_similarity || 0) * 100).toFixed(1)}%
-            </Text>
-          </HStack>
-          
-          <HStack spacing={2}>
-            <Button 
-              size="sm" 
-              variant="ghost" 
-              rightIcon={isOpen ? <FiChevronUp /> : <FiChevronDown />}
-              onClick={() => setIsOpen(!isOpen)}
-            >
-              {isOpen ? 'Hide Details' : 'View Matches'}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              leftIcon={<FiEye />}
-              onClick={() => navigate(`/dashboard/compare/${result.file_a.id}/${result.file_b.id}`)}
-            >
-              Compare
-            </Button>
-          </HStack>
-          
-          <Collapse in={isOpen}>
-            <Box 
-              bg={useColorModeValue('gray.50', 'gray.700')} 
-              p={3} 
-              borderRadius="md"
-              fontSize="sm"
-            >
-              {result.matches && result.matches.length > 0 ? (
-                <VStack align="stretch" spacing={2}>
-                  <Text fontWeight="semibold">Matching Blocks:</Text>
-                  {result.matches.map((match, idx) => (
-                    <HStack key={idx} justify="space-between" fontSize="xs">
-                      <Text>
-                        {result.file_a.filename}: Lines {match.file_a_start_line}-{match.file_a_end_line}
-                      </Text>
-                      <Text>
-                        {result.file_b.filename}: Lines {match.file_b_start_line}-{match.file_b_end_line}
-                      </Text>
-                    </HStack>
-                  ))}
-                </VStack>
-              ) : (
-                <Text color="gray.500">No specific matches found</Text>
-              )}
-            </Box>
-          </Collapse>
-        </VStack>
-      </CardBody>
-    </Card>
-  );
-};
-
-const HeatmapCell: React.FC<{ 
-  similarity: number; 
-  fileA: string; 
-  fileB: string;
-  isDiagonal?: boolean;
-}> = ({ similarity, fileA, fileB, isDiagonal }) => {
-  const bg = isDiagonal ? 'gray.200' : getSimilarityGradient(similarity);
-  const color = isDiagonal ? 'gray.500' : 'white';
-  
-  return (
-    <Tooltip 
-      label={isDiagonal ? fileA : `${fileA} vs ${fileB}: ${(similarity * 100).toFixed(1)}%`}
-      placement="top"
-    >
-      <Box
-        w="100%"
-        h="100%"
-        minH="60px"
-        bg={bg}
-        color={color}
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-        fontSize="sm"
-        fontWeight="bold"
-        borderRadius="md"
-        cursor={isDiagonal ? 'default' : 'pointer'}
-        opacity={isDiagonal ? 0.5 : 1}
-      >
-        {isDiagonal ? '—' : `${(similarity * 100).toFixed(0)}%`}
-      </Box>
-    </Tooltip>
-  );
-};
-
 const Results: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
@@ -236,7 +109,20 @@ const Results: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'heatmap'>('cards');
   
+  // Compare mode state
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedPair, setSelectedPair] = useState<PlagiarismResult | null>(null);
+  const [fileAContent, setFileAContent] = useState<FileContent | null>(null);
+  const [fileBContent, setFileBContent] = useState<FileContent | null>(null);
+  const [loadingContent, setLoadingContent] = useState(false);
+  
+  // Color mode values
   const cardBg = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const selectedBg = useColorModeValue('blue.50', 'blue.900');
+  const codeBg = useColorModeValue('gray.50', 'gray.800');
+  const hoverBg = useColorModeValue('gray.50', 'gray.700');
+  const matchBg = useColorModeValue('gray.50', 'gray.700');
   
   useEffect(() => {
     fetchTasks();
@@ -250,7 +136,7 @@ const Results: React.FC = () => {
       
       // Fetch detailed results for each task
       const tasksWithDetails = await Promise.all(
-        taskList.map(async (task: any) => {
+        taskList.map(async (task: Task) => {
           try {
             const detailsResponse = await api.get(`/plagiarism/${task.task_id}/results`);
             return detailsResponse.data;
@@ -276,6 +162,33 @@ const Results: React.FC = () => {
   };
   
   const selectedTask = tasks.find(t => t.task_id === selectedTaskId);
+  
+  const handleCompare = async (result: PlagiarismResult) => {
+    setSelectedPair(result);
+    setCompareMode(true);
+    setLoadingContent(true);
+    
+    try {
+      const [fileAResponse, fileBResponse] = await Promise.all([
+        api.get(`/plagiarism/files/${result.file_a.id}/content`).catch(() => null),
+        api.get(`/plagiarism/files/${result.file_b.id}/content`).catch(() => null)
+      ]);
+      
+      if (fileAResponse?.data) setFileAContent(fileAResponse.data);
+      if (fileBResponse?.data) setFileBContent(fileBResponse.data);
+    } catch (err) {
+      console.error('Error fetching file contents:', err);
+    } finally {
+      setLoadingContent(false);
+    }
+  };
+
+  const handleBackToResults = () => {
+    setCompareMode(false);
+    setSelectedPair(null);
+    setFileAContent(null);
+    setFileBContent(null);
+  };
   
   const getStats = () => {
     if (!selectedTask || !selectedTask.results) return { high: 0, medium: 0, low: 0, avg: 0 };
@@ -351,12 +264,37 @@ const Results: React.FC = () => {
               </GridItem>
               {files.map((fileB, j) => (
                 <GridItem key={j}>
-                  <HeatmapCell
-                    similarity={matrix[i][j]}
-                    fileA={fileA.filename}
-                    fileB={fileB.filename}
-                    isDiagonal={i === j}
-                  />
+                  <Tooltip 
+                    label={i === j ? fileA.filename : `${fileA.filename} vs ${fileB.filename}: ${(matrix[i][j] * 100).toFixed(1)}%`}
+                    placement="top"
+                  >
+                    <Box
+                      w="100%"
+                      h="100%"
+                      minH="60px"
+                      bg={i === j ? 'gray.200' : getSimilarityGradient(matrix[i][j])}
+                      color={i === j ? 'gray.500' : 'white'}
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      fontSize="sm"
+                      fontWeight="bold"
+                      borderRadius="md"
+                      cursor={i === j ? 'default' : 'pointer'}
+                      opacity={i === j ? 0.5 : 1}
+                      onClick={() => {
+                        if (i !== j) {
+                          const result = selectedTask?.results.find(
+                            r => (r.file_a.id === files[i].id && r.file_b.id === files[j].id) ||
+                                 (r.file_a.id === files[j].id && r.file_b.id === files[i].id)
+                          );
+                          if (result) handleCompare(result);
+                        }
+                      }}
+                    >
+                      {i === j ? '—' : `${(matrix[i][j] * 100).toFixed(0)}%`}
+                    </Box>
+                  </Tooltip>
                 </GridItem>
               ))}
             </React.Fragment>
@@ -365,6 +303,211 @@ const Results: React.FC = () => {
       </Box>
     );
   };
+
+  // Compare Mode UI
+  if (compareMode && selectedPair && selectedTask) {
+    return (
+      <Flex h="calc(100vh - 150px)" gap={4}>
+        {/* Compact Results List - Left Side */}
+        <Box w="320px" flexShrink={0}>
+          <Card h="100%" bg={cardBg} borderColor={borderColor}>
+            <CardBody p={0}>
+              <VStack align="stretch" h="100%" spacing={0}>
+                <Box p={4} borderBottomWidth={1} borderColor={borderColor}>
+                  <HStack justify="space-between">
+                    <Heading size="sm">Results ({selectedTask.results.length})</Heading>
+                    <Button
+                      size="sm"
+                      leftIcon={<FiArrowLeft />}
+                      onClick={handleBackToResults}
+                    >
+                      Back
+                    </Button>
+                  </HStack>
+                </Box>
+                
+                <Box overflowY="auto" flex={1} maxH="calc(100vh - 250px)">
+                  <VStack align="stretch" spacing={1} p={2}>
+                    {selectedTask.results
+                      .sort((a, b) => (b.ast_similarity || 0) - (a.ast_similarity || 0))
+                      .map((result, idx) => (
+                        <Box
+                          key={idx}
+                          p={3}
+                          borderRadius="md"
+                          cursor="pointer"
+                          bg={selectedPair.file_a.id === result.file_a.id && selectedPair.file_b.id === result.file_b.id ? selectedBg : 'transparent'}
+                          _hover={{ bg: selectedPair.file_a.id === result.file_a.id && selectedPair.file_b.id === result.file_b.id ? selectedBg : hoverBg }}
+                          onClick={() => handleCompare(result)}
+                          borderWidth={1}
+                          borderColor={selectedPair.file_a.id === result.file_a.id && selectedPair.file_b.id === result.file_b.id ? 'blue.300' : borderColor}
+                        >
+                          <VStack align="stretch" spacing={1}>
+                            <Text fontSize="xs" fontWeight="medium" noOfLines={1}>
+                              {result.file_a.filename}
+                            </Text>
+                            <Text fontSize="xs" color="gray.500" textAlign="center">
+                              vs
+                            </Text>
+                            <Text fontSize="xs" fontWeight="medium" noOfLines={1}>
+                              {result.file_b.filename}
+                            </Text>
+                            <Box
+                              mt={1}
+                              p={1}
+                              borderRadius="md"
+                              bg={getSimilarityGradient(result.ast_similarity || 0)}
+                              color="white"
+                              textAlign="center"
+                            >
+                              <Text fontSize="sm" fontWeight="bold">
+                                {((result.ast_similarity || 0) * 100).toFixed(1)}%
+                              </Text>
+                            </Box>
+                          </VStack>
+                        </Box>
+                      ))}
+                  </VStack>
+                </Box>
+              </VStack>
+            </CardBody>
+          </Card>
+        </Box>
+
+        {/* Main Compare Window - Right Side */}
+        <Box flex={1} overflow="auto">
+          <Card bg={cardBg}>
+            <CardBody>
+              <VStack align="stretch" spacing={6}>
+                {/* Header with Similarity */}
+                <HStack justify="space-between">
+                  <Heading size="lg">Compare Files</Heading>
+                </HStack>
+                
+                <Card variant="outline">
+                  <CardBody>
+                    <VStack spacing={4}>
+                      <HStack justify="space-between" w="100%">
+                        <Text fontWeight="bold">{selectedPair.file_a.filename}</Text>
+                        <Text color="gray.500">vs</Text>
+                        <Text fontWeight="bold">{selectedPair.file_b.filename}</Text>
+                      </HStack>
+                      
+                      <Box
+                        w="100%"
+                        p={6}
+                        borderRadius="lg"
+                        bg={getSimilarityGradient(selectedPair.ast_similarity || 0)}
+                        color="white"
+                        textAlign="center"
+                      >
+                        <Text fontSize="3xl" fontWeight="bold">
+                          {((selectedPair.ast_similarity || 0) * 100).toFixed(1)}%
+                        </Text>
+                        <Text fontSize="sm">Similarity Score (AST)</Text>
+                        <Text fontSize="xs" opacity={0.8}>
+                          Token: {((selectedPair.token_similarity || 0) * 100).toFixed(1)}%
+                        </Text>
+                      </Box>
+                      
+                      <Text fontSize="sm" color="gray.600">
+                        Matches: {selectedPair.matches?.length || 0} regions
+                      </Text>
+                    </VStack>
+                  </CardBody>
+                </Card>
+
+                {/* File Contents */}
+                {loadingContent ? (
+                  <Box textAlign="center" py={8}>
+                    <Spinner size="lg" />
+                    <Text mt={2}>Loading file contents...</Text>
+                  </Box>
+                ) : (
+                  <>
+                    <Flex gap={4}>
+                      {/* File A */}
+                      <Card flex={1}>
+                        <CardBody>
+                          <VStack align="stretch" spacing={3}>
+                            <HStack justify="space-between">
+                              <Text fontWeight="bold">{selectedPair.file_a.filename}</Text>
+                              <Badge colorScheme="blue">{fileAContent?.language || 'unknown'}</Badge>
+                            </HStack>
+                            <Box
+                              bg={codeBg}
+                              p={4}
+                              borderRadius="md"
+                              maxH="500px"
+                              overflowY="auto"
+                              fontFamily="monospace"
+                              fontSize="sm"
+                              whiteSpace="pre-wrap"
+                            >
+                              <Text>{fileAContent?.content || 'File content not available'}</Text>
+                            </Box>
+                          </VStack>
+                        </CardBody>
+                      </Card>
+
+                      {/* File B */}
+                      <Card flex={1}>
+                        <CardBody>
+                          <VStack align="stretch" spacing={3}>
+                            <HStack justify="space-between">
+                              <Text fontWeight="bold">{selectedPair.file_b.filename}</Text>
+                              <Badge colorScheme="green">{fileBContent?.language || 'unknown'}</Badge>
+                            </HStack>
+                            <Box
+                              bg={codeBg}
+                              p={4}
+                              borderRadius="md"
+                              maxH="500px"
+                              overflowY="auto"
+                              fontFamily="monospace"
+                              fontSize="sm"
+                              whiteSpace="pre-wrap"
+                            >
+                              <Text>{fileBContent?.content || 'File content not available'}</Text>
+                            </Box>
+                          </VStack>
+                        </CardBody>
+                      </Card>
+                    </Flex>
+
+                    {/* Matches */}
+                    {selectedPair.matches && selectedPair.matches.length > 0 && (
+                      <Card>
+                        <CardBody>
+                          <Heading size="sm" mb={4}>Matching Regions</Heading>
+                          <VStack align="stretch" spacing={3}>
+                            {selectedPair.matches.map((match, index) => (
+                              <Box key={index} p={3} bg={matchBg} borderRadius="md">
+                                <Flex gap={4}>
+                                  <Box flex={1}>
+                                    <Text fontSize="sm" fontWeight="medium">{selectedPair.file_a.filename}</Text>
+                                    <Text fontSize="sm">Lines {match.file_a_start_line} - {match.file_a_end_line}</Text>
+                                  </Box>
+                                  <Box flex={1}>
+                                    <Text fontSize="sm" fontWeight="medium">{selectedPair.file_b.filename}</Text>
+                                    <Text fontSize="sm">Lines {match.file_b_start_line} - {match.file_b_end_line}</Text>
+                                  </Box>
+                                </Flex>
+                              </Box>
+                            ))}
+                          </VStack>
+                        </CardBody>
+                      </Card>
+                    )}
+                  </>
+                )}
+              </VStack>
+            </CardBody>
+          </Card>
+        </Box>
+      </Flex>
+    );
+  }
   
   if (loading) {
     return (
@@ -545,7 +688,14 @@ const Results: React.FC = () => {
                     {selectedTask.results
                       .sort((a, b) => (b.ast_similarity || 0) - (a.ast_similarity || 0))
                       .map((result, idx) => (
-                        <SimilarityCard key={idx} result={result} />
+                        <SimilarityCard 
+                          key={idx} 
+                          result={result} 
+                          cardBg={cardBg}
+                          borderColor={borderColor}
+                          matchBg={matchBg}
+                          onCompare={() => handleCompare(result)}
+                        />
                       ))}
                   </SimpleGrid>
                 </>
@@ -555,6 +705,118 @@ const Results: React.FC = () => {
         </VStack>
       )}
     </Box>
+  );
+};
+
+interface SimilarityCardProps {
+  result: PlagiarismResult;
+  cardBg: string;
+  borderColor: string;
+  matchBg: string;
+  onCompare: () => void;
+}
+
+const SimilarityCard: React.FC<SimilarityCardProps> = ({ result, cardBg, borderColor, matchBg, onCompare }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  return (
+    <Card 
+      variant="outline" 
+      borderColor={borderColor}
+      bg={cardBg}
+      boxShadow="sm"
+      _hover={{ boxShadow: 'md', transform: 'translateY(-2px)' }}
+      transition="all 0.2s"
+    >
+      <CardBody>
+        <VStack align="stretch" spacing={3}>
+          <HStack justify="space-between">
+            <HStack spacing={2} flex={1}>
+              <FiFileText />
+              <Text fontWeight="semibold" fontSize="sm" noOfLines={1}>
+                {result.file_a.filename}
+              </Text>
+            </HStack>
+            <Text color="gray.500" fontSize="xs">vs</Text>
+            <HStack spacing={2} flex={1} justify="flex-end">
+              <Text fontWeight="semibold" fontSize="sm" noOfLines={1} textAlign="right">
+                {result.file_b.filename}
+              </Text>
+              <FiFileText />
+            </HStack>
+          </HStack>
+          
+          <Box 
+            p={4} 
+            borderRadius="lg"
+            bg={getSimilarityGradient(result.ast_similarity || 0)}
+            color="white"
+          >
+            <VStack spacing={1}>
+              <Text fontSize="2xl" fontWeight="bold">
+                {((result.ast_similarity || 0) * 100).toFixed(1)}%
+              </Text>
+              <Text fontSize="xs" opacity={0.9}>Similarity Score</Text>
+            </VStack>
+          </Box>
+          
+          <HStack justify="space-between" fontSize="sm">
+            <Text color="gray.600">
+              Token: {((result.token_similarity || 0) * 100).toFixed(1)}%
+            </Text>
+            <Text color="gray.600">
+              AST: {((result.ast_similarity || 0) * 100).toFixed(1)}%
+            </Text>
+          </HStack>
+          
+          <HStack spacing={2}>
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              rightIcon={isOpen ? <FiChevronUp /> : <FiChevronDown />}
+              onClick={() => setIsOpen(!isOpen)}
+            >
+              {isOpen ? 'Hide Details' : 'View Matches'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              leftIcon={<FiEye />}
+              onClick={onCompare}
+            >
+              Compare
+            </Button>
+          </HStack>
+          
+          <Collapse in={isOpen}>
+            <Box 
+              bg={matchBg}
+              p={3} 
+              borderRadius="md"
+              fontSize="sm"
+            >
+              {result.matches && result.matches.length > 0 ? (
+                <VStack align="stretch" spacing={2}>
+                  <Text fontWeight="semibold">Matching Blocks:</Text>
+                  {result.matches.map((match, idx) => (
+                    <HStack key={idx} justify="space-between" fontSize="xs">
+                      <Text>
+                        {result.file_a.filename}: Lines {match.file_a_start_line}-{match.file_a_end_line}
+                      </Text>
+                      <Text>
+                        {result.file_b.filename}: Lines {match.file_b_start_line}-{match.file_b_end_line}
+                      </Text>
+                    </HStack>
+                  ))}
+                </VStack>
+              ) : (
+                <Text color="gray.500">No specific matches found</Text>
+              )}
+            </Box>
+          </Collapse>
+        </VStack>
+      </CardBody>
+    </Card>
   );
 };
 
