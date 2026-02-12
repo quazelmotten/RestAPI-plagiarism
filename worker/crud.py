@@ -72,6 +72,19 @@ def save_similarity_result(
     from uuid import uuid4
     session = next(get_session())
     
+    # Check if result already exists for this pair in this task
+    existing = session.execute(
+        select(SimilarityResult).where(
+            SimilarityResult.task_id == task_id,
+            SimilarityResult.file_a_id == file_a_id,
+            SimilarityResult.file_b_id == file_b_id
+        )
+    ).scalar_one_or_none()
+    
+    if existing:
+        session.close()
+        return str(existing.id)
+    
     result = SimilarityResult(
         id=str(uuid4()),
         task_id=task_id,

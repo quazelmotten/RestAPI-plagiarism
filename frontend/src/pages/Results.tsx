@@ -7,6 +7,7 @@ import {
   CardBody,
   Text,
   Badge,
+  Button,
   Progress,
   Stat,
   StatLabel,
@@ -18,20 +19,15 @@ import {
   Spinner,
   Alert,
   AlertIcon,
-  Collapse,
-  Button,
   useColorModeValue,
   Grid,
   GridItem,
   Flex,
 } from '@chakra-ui/react';
 import { 
-  FiFileText, 
   FiCheckCircle, 
   FiAlertCircle, 
   FiActivity,
-  FiChevronDown,
-  FiChevronUp,
   FiLayers,
   FiArrowLeft
 } from 'react-icons/fi';
@@ -683,154 +679,65 @@ const Results: React.FC = () => {
                   </CardBody>
                 </Card>
               ) : (
-                <>
-                  <HStack justify="space-between" align="center">
-                    <Heading size="md">Detailed Results</Heading>
-                    <Text color="gray.500" fontSize="sm">
-                      {selectedTask.results.length} pairs analyzed
-                    </Text>
-                  </HStack>
-                  
-                  <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
-                    {selectedTask.results
-                      .sort((a, b) => (b.ast_similarity || 0) - (a.ast_similarity || 0))
-                      .map((result, idx) => (
-                        <SimilarityCard 
-                          key={idx} 
-                          result={result} 
-                          cardBg={cardBg}
-                          borderColor={borderColor}
-                          matchBg={matchBg}
-                          onCompare={() => handleCompare(result)}
-                        />
-                      ))}
-                  </SimpleGrid>
-                </>
+                <Card bg={cardBg}>
+                  <CardBody>
+                    <HStack justify="space-between" align="center" mb={4}>
+                      <Heading size="md">Top Similarities</Heading>
+                      <Text color="gray.500" fontSize="sm">
+                        {selectedTask.results.length} pairs analyzed
+                      </Text>
+                    </HStack>
+                    
+                    <VStack align="stretch" spacing={2}>
+                      {selectedTask.results
+                        .sort((a, b) => (b.ast_similarity || 0) - (a.ast_similarity || 0))
+                        .slice(0, 50)
+                        .map((result, idx) => (
+                          <HStack
+                            key={idx}
+                            p={3}
+                            borderWidth={1}
+                            borderColor={borderColor}
+                            borderRadius="md"
+                            cursor="pointer"
+                            _hover={{ bg: hoverBg }}
+                            onClick={() => handleCompare(result)}
+                            justify="space-between"
+                          >
+                            <HStack flex={1} spacing={4}>
+                              <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="200px">
+                                {result.file_a.filename}
+                              </Text>
+                              <Text fontSize="xs" color="gray.500">vs</Text>
+                              <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="200px">
+                                {result.file_b.filename}
+                              </Text>
+                            </HStack>
+                            <Badge 
+                              colorScheme={getSimilarityColor(result.ast_similarity || 0)}
+                              fontSize="md"
+                              px={3}
+                              py={1}
+                            >
+                              {((result.ast_similarity || 0) * 100).toFixed(1)}%
+                            </Badge>
+                          </HStack>
+                        ))}
+                    </VStack>
+                    
+                    {selectedTask.results.length > 50 && (
+                      <Text textAlign="center" color="gray.500" mt={4} fontSize="sm">
+                        Showing top 50 of {selectedTask.results.length} results
+                      </Text>
+                    )}
+                  </CardBody>
+                </Card>
               )}
             </>
           )}
         </VStack>
       )}
     </Box>
-  );
-};
-
-interface SimilarityCardProps {
-  result: PlagiarismResult;
-  cardBg: string;
-  borderColor: string;
-  matchBg: string;
-  onCompare: () => void;
-}
-
-const SimilarityCard: React.FC<SimilarityCardProps> = ({ result, cardBg, borderColor, matchBg, onCompare }) => {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <Card
-      variant="outline"
-      borderColor={borderColor}
-      bg={cardBg}
-      boxShadow="sm"
-      _hover={{ boxShadow: 'md', transform: 'translateY(-2px)', cursor: 'pointer' }}
-      transition="all 0.2s"
-      onClick={onCompare}
-    >
-      <CardBody>
-        <VStack align="stretch" spacing={3}>
-          <HStack justify="space-between">
-            <HStack spacing={2} flex={1}>
-              <FiFileText />
-              <Text fontWeight="semibold" fontSize="sm" noOfLines={1}>
-                {result.file_a.filename}
-              </Text>
-            </HStack>
-            <Text color="gray.500" fontSize="xs">vs</Text>
-            <HStack spacing={2} flex={1} justify="flex-end">
-              <Text fontWeight="semibold" fontSize="sm" noOfLines={1} textAlign="right">
-                {result.file_b.filename}
-              </Text>
-              <FiFileText />
-            </HStack>
-          </HStack>
-          
-          <Box 
-            p={4} 
-            borderRadius="lg"
-            bg={getSimilarityGradient(result.ast_similarity || 0)}
-            color="white"
-          >
-            <VStack spacing={1}>
-              <Text fontSize="2xl" fontWeight="bold">
-                {((result.ast_similarity || 0) * 100).toFixed(1)}%
-              </Text>
-              <Text fontSize="xs" opacity={0.9}>Similarity Score</Text>
-            </VStack>
-          </Box>
-          
-          <HStack justify="space-between" fontSize="sm">
-            <Text color="gray.600">
-              Token: {((result.token_similarity || 0) * 100).toFixed(1)}%
-            </Text>
-            <Text color="gray.600">
-              AST: {((result.ast_similarity || 0) * 100).toFixed(1)}%
-            </Text>
-          </HStack>
-          
-          <Box 
-            onClick={onCompare}
-            cursor="pointer"
-            p={2}
-            borderRadius="md"
-            _hover={{ bg: 'gray.100' }}
-            textAlign="center"
-          >
-            <Text fontSize="sm" color="blue.500" fontWeight="medium">
-              Click to view full comparison
-            </Text>
-          </Box>
-          
-          <Button 
-            size="sm" 
-            variant="ghost" 
-            rightIcon={isOpen ? <FiChevronUp /> : <FiChevronDown />}
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsOpen(!isOpen);
-            }}
-          >
-            {isOpen ? 'Hide Details' : 'View Matches'}
-          </Button>
-          
-          <Collapse in={isOpen}>
-            <Box 
-              bg={matchBg}
-              p={3} 
-              borderRadius="md"
-              fontSize="sm"
-            >
-              {result.matches && result.matches.length > 0 ? (
-                <VStack align="stretch" spacing={2}>
-                  <Text fontWeight="semibold">Matching Blocks:</Text>
-                  {result.matches.map((match, idx) => (
-                    <HStack key={idx} justify="space-between" fontSize="xs">
-                      <Text>
-                        {result.file_a.filename}: Lines {match.file_a_start_line}-{match.file_a_end_line}
-                      </Text>
-                      <Text>
-                        {result.file_b.filename}: Lines {match.file_b_start_line}-{match.file_b_end_line}
-                      </Text>
-                    </HStack>
-                  ))}
-                </VStack>
-              ) : (
-                <Text color="gray.500">No specific matches found</Text>
-              )}
-            </Box>
-          </Collapse>
-        </VStack>
-      </CardBody>
-    </Card>
   );
 };
 
