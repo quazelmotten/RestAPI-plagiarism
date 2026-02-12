@@ -71,7 +71,15 @@ class Settings(BaseSettings):
     # =============================================================================
     worker_concurrency: int = Field(default=4, validation_alias="WORKER_CONCURRENCY")
     worker_prefetch_count: int = Field(default=1, validation_alias="WORKER_PREFETCH_COUNT")
-    
+
+    # =============================================================================
+    # REDIS CONFIGURATION
+    # =============================================================================
+    redis_host: str = Field(default="localhost", validation_alias="REDIS_HOST")
+    redis_port: int = Field(default=6379, validation_alias="REDIS_PORT")
+    redis_db: int = Field(default=0, validation_alias="REDIS_DB")
+    redis_ttl: int = Field(default=86400, validation_alias="REDIS_TTL")  # 24 hours
+
     # =============================================================================
     # LOGGING
     # =============================================================================
@@ -156,7 +164,12 @@ class Settings(BaseSettings):
     def rmq_url(self) -> str:
         """Generate RabbitMQ AMQP URL."""
         return f"amqp://{self.rmq_user}:{self.rmq_pass}@{self.rmq_host}:{self.rmq_port}/"
-    
+
+    @property
+    def redis_url(self) -> str:
+        """Generate Redis URL."""
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
     @property
     def cors_origins_list(self) -> List[str]:
         """Parse CORS origins into list."""

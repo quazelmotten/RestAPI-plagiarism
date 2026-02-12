@@ -13,7 +13,6 @@ import Submissions from './Submissions';
 import PlagiarismGraph from './PlagiarismGraph';
 import Upload from './Upload';
 import Results from './Results';
-import Compare from './Compare';
 import PairComparison from './PairComparison';
 
 const Dashboard: React.FC = () => {
@@ -30,7 +29,6 @@ const Dashboard: React.FC = () => {
             <Route path="graph" element={<PlagiarismGraph />} />
             <Route path="upload" element={<Upload />} />
             <Route path="results" element={<Results />} />
-            <Route path="compare/:fileAId/:fileBId" element={<Compare />} />
             <Route path="pair-comparison" element={<PairComparison />} />
           </Routes>
         </Box>

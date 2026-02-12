@@ -4,6 +4,7 @@
 ![Postgres](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)
 ![RabbitMQ](https://img.shields.io/badge/Rabbitmq-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
 
 ## About
 
@@ -15,49 +16,190 @@ Using the REST API, users submit code files for plagiarism analysis. The worker 
 
 ### Repository Structure:
 - **src/** - FastAPI application with plagiarism detection endpoints
-- **worker/** - Background worker for processing plagiarism checks
+- **worker/** - Background worker for processing plagiarism checks  
+- **frontend/** - React frontend application
 - **database/** - Database migrations
 - **docker-compose.yml** - Docker orchestration for all services
+- **scripts/** - Setup and testing scripts
 
-## API Endpoints
+## 🚀 Quick Start (One-Command Setup)
 
-### Plagiarism Detection
+### Prerequisites
+- Docker
+- Docker Compose
 
-**POST /plagiarism/check** - Submit two files for plagiarism comparison
-- Upload two source code files
-- Returns a task ID for tracking
+### Option 1: Automatic Setup (Recommended)
 
-**GET /plagiarism/{task_id}** - Get plagiarism check results
-- Retrieve similarity score and matching segments
+Run the comprehensive setup script:
 
-## Getting Started
+```bash
+./scripts/setup-complete.sh
+```
 
-### Option 1: Docker (Recommended)
+This will:
+1. ✅ Check all prerequisites
+2. ✅ Generate secure `.env` file with random passwords
+3. ✅ Create necessary directories
+4. ✅ Build all Docker images
+5. ✅ Start all services (API, Worker, Database, RabbitMQ)
+6. ✅ Wait for services to be healthy
+7. ✅ Run a quick health check
 
-To run the entire application stack:
+**That's it!** Your application will be running at:
+- **API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+- **RabbitMQ Management**: http://localhost:15672
 
-```shell
+### Option 2: Development Mode with Hot Reload
+
+For development with hot reload enabled:
+
+```bash
+./scripts/setup-complete.sh dev
+```
+
+This starts the API with hot reload for rapid development.
+
+### Option 3: Manual Docker Setup
+
+If you prefer manual control:
+
+```bash
+# Generate environment file
+./setup.sh
+
+# Build and start all services
 docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
 ```
 
-The API will be available at `http://localhost:8000`
+### Option 4: Manual Setup (Without Docker)
 
-To stop the application:
-```shell
-docker-compose down
+See [Manual Setup](#manual-setup) section below.
+
+## 🧪 Testing
+
+### Run Integration Tests
+
+To verify everything is working correctly:
+
+```bash
+./scripts/test-integration.sh
 ```
 
-### Option 2: Manual Setup
+This will test:
+- ✅ API health endpoints
+- ✅ Database connectivity
+- ✅ RabbitMQ connectivity
+- ✅ User registration & login
+- ✅ File upload functionality
+- ✅ Plagiarism check workflow
+- ✅ Frontend serving
 
-#### Start the API
+### Run Smoke Test (Quick)
+
+```bash
+curl http://localhost:8000/health
+```
+
+## 🛠️ Development
+
+### Frontend Development
+
+The frontend is built with React and TypeScript.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend dev server runs at http://localhost:3000
+
+### API Development
+
+For API development with hot reload:
+
+```bash
+./scripts/setup-complete.sh dev
+```
+
+Or manually:
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+### Running Tests
+
+#### Unit Tests
+
+```bash
+cd src
+pytest
+```
+
+#### Integration Tests
+
+```bash
+./scripts/test-integration.sh
+```
+
+#### Load Tests
+
+```bash
+# Run 10 concurrent health checks
+for i in {1..10}; do
+  curl -s http://localhost:8000/health &
+done
+wait
+```
+
+## 📊 API Documentation
+
+When the API is running, visit:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+## 🏗️ Architecture
+
+The system uses a producer-consumer pattern:
+- **API** receives file uploads and publishes tasks to RabbitMQ
+- **Worker** consumes tasks from the queue and performs plagiarism analysis
+- **Database** stores task status and results
+- **Dead Letter Queue** handles failed tasks for retry or review
+
+### Service Architecture
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│   Client    │────▶│   API (8000) │────▶│  PostgreSQL │
+└─────────────┘     └──────┬───────┘     └─────────────┘
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │   RabbitMQ   │
+                    └──────┬───────┘
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │    Worker    │
+                    └──────────────┘
+```
+
+## 🔧 Manual Setup
+
+### Start the API
 
 1. Go to the directory `src`
-```shell
+```bash
 cd src
 ```
 
 2. Create `.env` file:
-```shell
+```bash
 touch .env
 ```
 
@@ -83,40 +225,40 @@ RMQ_QUEUE_DEAD_LETTER_NAME=plagiarism_dead
 ```
 
 4. Install packages:
-```shell
+```bash
 pip install -r requirements.txt
 ```
 
 5. Run the API:
-```shell
+```bash
 uvicorn app:app --reload
 ```
 
-#### Start the Worker
+### Start the Worker
 
 1. Go to the directory `worker`
-```shell
+```bash
 cd worker
 ```
 
 2. Create `.env` file with the same variables as above
 
 3. Install packages:
-```shell
+```bash
 pip install -r requirements.txt
 ```
 
 4. Run the worker:
-```shell
+```bash
 python3 worker.py
 ```
 
-## Database Setup
+## 🗄️ Database Setup
 
 To set up the database schema:
 
 1. Go to the directory `database`
-```shell
+```bash
 cd database
 ```
 
@@ -130,42 +272,90 @@ DB_PASS=password
 ```
 
 3. Run migrations:
-```shell
+```bash
 alembic upgrade head
 ```
 
-## Architecture
+## 🐳 Docker Commands
 
-The system uses a producer-consumer pattern:
-- **API** receives file uploads and publishes tasks to RabbitMQ
-- **Worker** consumes tasks from the queue and performs plagiarism analysis
-- **Database** stores task status and results
-- **Dead Letter Queue** handles failed tasks for retry or review
+```bash
+# Build and start all services
+docker-compose up -d --build
 
-## API Documentation
+# View logs
+docker-compose logs -f
 
-When the API is running, visit:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+# View specific service logs
+docker-compose logs -f api
 
-## Development
+# Stop all services
+docker-compose down
 
-### Adding New Features
+# Stop and remove volumes (clears all data)
+docker-compose down -v
 
-The codebase is organized as follows:
-- `src/plagiarism/` - Plagiarism detection logic and API routes
-- `src/models/` - SQLAlchemy database models
-- `worker/engines/engine_plagiarism/` - Plagiarism analysis implementation
-- `src/rabbit.py` - RabbitMQ connection management
-- `src/startup/` - Application startup tasks
+# Restart a service
+docker-compose restart api
 
-### Testing
-
-Run tests (when implemented):
-```shell
-pytest
+# Scale workers
+docker-compose up -d --scale worker=4
 ```
 
-## License
+## 🔒 Security
+
+The setup script automatically generates secure passwords for:
+- Database password
+- RabbitMQ password
+- API secret key
+
+**Never commit the `.env` file!** It's already in `.gitignore`.
+
+## 📝 Environment Variables
+
+See `.env.example` for all available environment variables and their descriptions.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Run tests: `./scripts/test-integration.sh`
+4. Submit a pull request
+
+## 📄 License
 
 This project is for educational use at the university.
+
+## 🆘 Troubleshooting
+
+### Services won't start
+
+```bash
+# Check what's running
+docker-compose ps
+
+# View logs
+docker-compose logs <service-name>
+
+# Restart everything
+docker-compose down -v
+docker-compose up -d --build
+```
+
+### Frontend not showing
+
+The frontend is built into the API Docker image. If you need to rebuild:
+
+```bash
+docker-compose build --no-cache api
+docker-compose up -d
+```
+
+### Database connection issues
+
+Make sure the database is healthy before starting the API:
+
+```bash
+docker-compose up -d postgres
+sleep 10
+docker-compose up -d api worker
+```

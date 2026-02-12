@@ -4,10 +4,14 @@ import tree_sitter_cpp as tscpp
 
 from collections import defaultdict, Counter
 import hashlib
+import logging
+from typing import Optional, List, Dict, Any, Tuple
 
 # -------------------------------
 # Tree-sitter language setup
 # -------------------------------
+
+logger = logging.getLogger(__name__)
 
 LANGUAGE_MAP = {
     'python': Language(tspython.language()),
@@ -241,3 +245,119 @@ def analyze_plagiarism(
     )
 
     return ast_sim, matches
+
+
+# -------------------------------
+# Cached Analysis with Redis
+# -------------------------------
+
+def analyze_plagiarism_cached(
+    file1_path: str,
+    file2_path: str,
+    file1_hash: str,
+    file2_hash: str,
+    cache=None,
+    language: str = 'python',
+    token_threshold: float = 0.15,
+    ast_threshold: float = 0.30,
+) -> Tuple[float, float, List[Dict[str, Any]]]:
+    """
+    Analyze plagiarism with Redis caching support.
+
+    Args:
+        file1_path: Path to first file
+        file2_path: Path to second file
+        file1_hash: SHA1 hash of first file content
+        file2_hash: SHA1 hash of second file content
+        cache: Redis cache instance (optional)
+        language: Programming language
+        token_threshold: Minimum token similarity to proceed to AST check
+        ast_threshold: Minimum AST similarity to return matches
+
+    Returns:
+        Tuple of (token_similarity, ast_similarity, matches)
+    """
+    # Try to get cached data for file1
+    tokens1 = None
+    fps1 = None
+    index1 = None
+    ast1 = None
+
+    if cache and cache.is_connected:
+        # Try to get cached fingerprints and AST hashes
+        fps1 = cache.get_fingerprints(file1_hash)
+        ast1 = cache.get_ast_hashes(file1_hash)
+        tokens1 = cache.get_tokens(file1_hash)
+
+        if fps1 is not None:
+            logger.debug(f"Cache hit for file1 fingerprints: {file1_hash[:16]}...")
+            index1 = index_fingerprints(fps1)
+        if ast1 is None or tokens1 is None or fps1 is None:
+            logger.debug(f"Cache miss for file1, computing from scratch: {file1_hash[:16]}...")
+
+    # If not in cache, compute from file
+    if tokens1 is None:
+        tokens1 = tokenize_with_tree_sitter(file1_path, language)
+    if fps1 is None:
+        fps1 = winnow_fingerprints(compute_fingerprints(tokens1))
+        index1 = index_fingerprints(fps1)
+    if ast1 is None:
+        ast1 = extract_ast_hashes(file1_path, language, min_depth=3)
+
+    # Cache file1 data if we computed it and cache is available
+    if cache and cache.is_connected:
+        cache.cache_fingerprints(file1_hash, fps1, ast1, tokens1)
+
+    # Try to get cached data for file2
+    tokens2 = None
+    fps2 = None
+    index2 = None
+    ast2 = None
+
+    if cache and cache.is_connected:
+        fps2 = cache.get_fingerprints(file2_hash)
+        ast2 = cache.get_ast_hashes(file2_hash)
+        tokens2 = cache.get_tokens(file2_hash)
+
+        if fps2 is not None:
+            logger.debug(f"Cache hit for file2 fingerprints: {file2_hash[:16]}...")
+            index2 = index_fingerprints(fps2)
+        if ast2 is None or tokens2 is None or fps2 is None:
+            logger.debug(f"Cache miss for file2, computing from scratch: {file2_hash[:16]}...")
+
+    # If not in cache, compute from file
+    if tokens2 is None:
+        tokens2 = tokenize_with_tree_sitter(file2_path, language)
+    if fps2 is None:
+        fps2 = winnow_fingerprints(compute_fingerprints(tokens2))
+        index2 = index_fingerprints(fps2)
+    if ast2 is None:
+        ast2 = extract_ast_hashes(file2_path, language, min_depth=3)
+
+    # Cache file2 data if we computed it and cache is available
+    if cache and cache.is_connected:
+        cache.cache_fingerprints(file2_hash, fps2, ast2, tokens2)
+
+    # --- Token similarity check ---
+    tok_sim = token_similarity(index1, index2)
+    logger.debug(f"Token similarity: {tok_sim:.4f}")
+
+    if tok_sim < token_threshold:
+        logger.debug(f"Token similarity {tok_sim:.4f} below threshold {token_threshold}, skipping AST check")
+        return tok_sim, 0.0, []
+
+    # --- AST similarity check ---
+    ast_sim = ast_similarity(ast1, ast2)
+    logger.debug(f"AST similarity: {ast_sim:.4f}")
+
+    if ast_sim < ast_threshold:
+        logger.debug(f"AST similarity {ast_sim:.4f} below threshold {ast_threshold}, returning without matches")
+        return tok_sim, ast_sim, []
+
+    # --- Find matching regions ---
+    matches = merge_adjacent_matches(
+        find_matching_regions(index1, index2)
+    )
+
+    logger.info(f"Plagiarism analysis complete: tok_sim={tok_sim:.4f}, ast_sim={ast_sim:.4f}, matches={len(matches)}")
+    return tok_sim, ast_sim, matches

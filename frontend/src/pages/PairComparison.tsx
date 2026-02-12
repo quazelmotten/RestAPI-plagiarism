@@ -101,7 +101,7 @@ const PairComparison: React.FC = () => {
       setLoading(true);
       setError(null);
       const response = await api.get('/plagiarism/results/all');
-      
+
       // Validate that response.data is an array
       if (!Array.isArray(response.data)) {
         console.error('Expected array from /plagiarism/results/all, got:', typeof response.data, response.data);
@@ -109,8 +109,8 @@ const PairComparison: React.FC = () => {
         setPairs([]);
         return;
       }
-      
-      setPairs(response.data);
+
+      setPairs(response.data || []);
     } catch (err) {
       console.error('Error fetching pairs:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch pairs';
@@ -488,7 +488,11 @@ const PairComparison: React.FC = () => {
                   </Thead>
                   <Tbody>
                     {sortedPairs.map((pair) => (
-                      <Tr key={pair.id} _hover={{ bg: hoverBg }}>
+                      <Tr
+                        key={pair.id}
+                        _hover={{ bg: hoverBg, cursor: 'pointer' }}
+                        onClick={() => handleCompare(pair)}
+                      >
                         <Td>
                           <Text fontWeight="medium" noOfLines={1} maxW="200px">
                             {pair.file_a.filename}
@@ -512,16 +516,8 @@ const PairComparison: React.FC = () => {
                         <Td isNumeric>
                           <Text fontSize="sm">{pair.matches?.length || 0}</Text>
                         </Td>
-                        <Td>
-                          <Tooltip label="Compare files">
-                            <Button
-                              size="sm"
-                              leftIcon={<FiEye />}
-                              onClick={() => handleCompare(pair)}
-                            >
-                              Compare
-                            </Button>
-                          </Tooltip>
+                        <Td isNumeric>
+                          <Text fontSize="sm" color="gray.500">Click row to view</Text>
                         </Td>
                       </Tr>
                     ))}

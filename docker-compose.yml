@@ -84,12 +84,12 @@ services:
       # Monitoring
       SENTRY_DSN: ${SENTRY_DSN:-}
       METRICS_ENDPOINT: ${METRICS_ENDPOINT:-}
-      
+
       # Redis
-      REDIS_HOST: redis
+      REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_DB: ${REDIS_DB:-0}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_TTL: ${REDIS_TTL:-86400}
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,8 +100,12 @@ services:
     volumes:
       - uploads-data:/app/uploads
       - s3-storage:/app/s3_storage
-      - ./frontend/dist:/app/frontend/dist
-      - ./src:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - plagiarism-network
     restart: unless-stopped
@@ -123,7 +127,7 @@ services:
       DB_NAME: ${DB_NAME:-plagiarism_db}
       DB_USER: ${DB_USER:-plagiarism_user}
       DB_PASS: ${DB_PASS}
-      
+
       # RabbitMQ
       RMQ_HOST: rabbitmq
       RMQ_PORT: ${RMQ_PORT:-5672}
@@ -135,23 +139,23 @@ services:
       RMQ_QUEUE_DEAD_LETTER_EXCHANGE: ${RMQ_QUEUE_DEAD_LETTER_EXCHANGE:-plagiarism_dlx}
       RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER: ${RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER:-plagiarism.dead}
       RMQ_QUEUE_DEAD_LETTER_NAME: ${RMQ_QUEUE_DEAD_LETTER_NAME:-plagiarism_dead}
-      
+
+      # Redis
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_TTL: ${REDIS_TTL:-86400}
+
       # Worker
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
       WORKER_PREFETCH_COUNT: ${WORKER_PREFETCH_COUNT:-1}
-      
+
       # Security
       SECRET_KEY: ${SECRET_KEY}
-      
+
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: ${LOG_FORMAT:-json}
-      
-      # Redis
-      REDIS_HOST: redis
-      REDIS_PORT: ${REDIS_PORT:-6379}
-      REDIS_DB: ${REDIS_DB:-0}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -197,6 +201,7 @@ services:
     container_name: plagiarism-redis
     hostname: redis
     image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
@@ -212,18 +217,17 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    command: redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru
 
 volumes:
   postgres-data:
     driver: local
   rabbitmq-data:
     driver: local
+  redis-data:
+    driver: local
   uploads-data:
     driver: local
   s3-storage:
-    driver: local
-  redis-data:
     driver: local
 
 networks:

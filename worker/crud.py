@@ -9,8 +9,32 @@ from uuid import UUID
 
 from sqlalchemy import select, update
 
-from models import PlagiarismTask, SimilarityResult
+from models import PlagiarismTask, SimilarityResult, File
 from database import get_session
+
+
+def get_all_files(exclude_task_id: str = None) -> list:
+    """Get all files from the database, optionally excluding a specific task."""
+    session = next(get_session())
+    try:
+        stmt = select(File)
+        if exclude_task_id:
+            stmt = stmt.where(File.task_id != exclude_task_id)
+        result = session.execute(stmt)
+        files = result.scalars().all()
+        return [
+            {
+                "id": str(f.id),
+                "task_id": str(f.task_id),
+                "filename": f.filename,
+                "file_path": f.file_path,
+                "file_hash": f.file_hash,
+                "language": f.language
+            }
+            for f in files
+        ]
+    finally:
+        session.close()
 
 
 def update_plagiarism_task(
