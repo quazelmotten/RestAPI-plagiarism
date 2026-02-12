@@ -70,20 +70,23 @@ def save_similarity_result(
 ) -> str:
     """Save similarity result between two files. Returns the result ID."""
     from uuid import uuid4
+    from sqlalchemy.exc import IntegrityError
+    
     session = next(get_session())
     
     # Check if result already exists for this pair in this task
+    # Use .first() instead of scalar_one_or_none() to handle existing duplicates
     existing = session.execute(
         select(SimilarityResult).where(
             SimilarityResult.task_id == task_id,
             SimilarityResult.file_a_id == file_a_id,
             SimilarityResult.file_b_id == file_b_id
         )
-    ).scalar_one_or_none()
+    ).first()
     
     if existing:
         session.close()
-        return str(existing.id)
+        return str(existing[0].id)
     
     result = SimilarityResult(
         id=str(uuid4()),
@@ -95,6 +98,23 @@ def save_similarity_result(
         matches=matches if error is None else {"error": error}
     )
     session.add(result)
-    session.commit()
     
-    return str(result.id)
+    try:
+        session.commit()
+        return str(result.id)
+    except IntegrityError:
+        # Another worker inserted this pair concurrently
+        session.rollback()
+        # Fetch the existing result
+        existing = session.execute(
+            select(SimilarityResult).where(
+                SimilarityResult.task_id == task_id,
+                SimilarityResult.file_a_id == file_a_id,
+                SimilarityResult.file_b_id == file_b_id
+            )
+        ).first()
+        if existing:
+            return str(existing[0].id)
+        raise
+    finally:
+        session.close()
