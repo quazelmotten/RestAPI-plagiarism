@@ -21,9 +21,8 @@ import {
   Progress,
   useColorModeValue,
   Flex,
-  Tooltip,
 } from '@chakra-ui/react';
-import { FiArrowLeft, FiEye, FiChevronUp, FiChevronDown } from 'react-icons/fi';
+import { FiArrowLeft, FiChevronUp, FiChevronDown } from 'react-icons/fi';
 import api from '../services/api';
 
 interface FileInfo {

@@ -33,7 +33,6 @@ import {
   FiChevronDown,
   FiChevronUp,
   FiLayers,
-  FiEye,
   FiArrowLeft
 } from 'react-icons/fi';
 import api from '../services/api';
