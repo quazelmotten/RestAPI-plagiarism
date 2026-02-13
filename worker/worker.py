@@ -3,12 +3,13 @@ import logging
 import sys
 from itertools import combinations
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Set, Tuple
 
 from crud import update_plagiarism_task, save_similarity_result, get_all_files
 
-from plagiarism.analyzer import analyze_plagiarism_cached
+from plagiarism.analyzer import analyze_plagiarism_cached, tokenize_with_tree_sitter, winnow_fingerprints, compute_fingerprints
 from redis_cache import cache, connect_cache
+from inverted_index import inverted_index
 
 
 if TYPE_CHECKING:
@@ -76,17 +77,124 @@ def process_new_message(
         log.info("Fetching existing files from other tasks for cross-task comparison...")
         existing_files = get_all_files(exclude_task_id=task_id)
         log.info(f"Found {len(existing_files)} existing files from other tasks")
+        
+        # Index fingerprints for all new files in the inverted index
+        # This enables fast candidate lookup for future tasks
+        log.info("Indexing fingerprints for new files in inverted index...")
+        for file_info in files:
+            file_hash = file_info.get('hash') or file_info.get('file_hash')
+            file_path = file_info.get('path') or file_info.get('file_path')
+            
+            if not file_hash or not file_path:
+                continue
+                
+            try:
+                # Check if already in inverted index
+                if inverted_index.get_file_fingerprints(file_hash, language):
+                    log.debug(f"File {file_info.get('filename')} already in inverted index")
+                    continue
+                
+                # Compute fingerprints
+                tokens = tokenize_with_tree_sitter(file_path, language)
+                fingerprints = winnow_fingerprints(compute_fingerprints(tokens))
+                
+                # Add to inverted index
+                inverted_index.add_file_fingerprints(file_hash, fingerprints, language)
+                log.debug(f"Indexed {len(fingerprints)} fingerprints for {file_info.get('filename')}")
+            except Exception as e:
+                log.warning(f"Failed to index file {file_info.get('filename')}: {e}")
+        
+        log.info("Finished indexing fingerprints for new files")
 
-        # Process all pairs of files
-        total_pairs = 0
-        processed_pairs = 0
-
+        # PHASE 1: Count all pairs upfront
+        log.info("=" * 70)
+        log.info("PHASE 1: Counting total candidate pairs...")
+        log.info("=" * 70)
+        
+        intra_task_pairs: List[Tuple[dict, dict]] = []
+        cross_task_pairs: List[Tuple[dict, dict]] = []
+        
+        # 1. Count intra-task pairs (within the new task)
+        for file_a, file_b in combinations(files, 2):
+            intra_task_pairs.append((file_a, file_b))
+        
+        log.info(f"Intra-task pairs (within this task): {len(intra_task_pairs)}")
+        
+        # 2. Count cross-task pairs (against existing files using inverted index)
+        if existing_files:
+            for new_file in files:
+                new_file_hash = new_file.get('hash') or new_file.get('file_hash')
+                new_file_path = new_file.get('path') or new_file.get('file_path')
+                
+                if not new_file_hash or not new_file_path:
+                    continue
+                
+                try:
+                    # Get fingerprints for the new file
+                    fingerprints = cache.get_fingerprints(new_file_hash)
+                    if fingerprints is None:
+                        tokens = tokenize_with_tree_sitter(new_file_path, language)
+                        fingerprints = winnow_fingerprints(compute_fingerprints(tokens))
+                        cache.cache_fingerprints(new_file_hash, fingerprints, [], tokens)
+                    
+                    # Find candidate files using inverted index
+                    candidate_hashes = inverted_index.find_candidate_files(fingerprints, language)
+                    
+                    if not candidate_hashes:
+                        log.info(f"  {new_file.get('filename')}: 0 candidates (all {len(existing_files)} files filtered out)")
+                        continue
+                    
+                    # Get candidate files
+                    candidate_files = [
+                        f for f in existing_files 
+                        if (f.get('hash') or f.get('file_hash')) in candidate_hashes
+                    ]
+                    
+                    # Add pairs to cross-task list
+                    for existing_file in candidate_files:
+                        cross_task_pairs.append((new_file, existing_file))
+                    
+                    skipped = len(existing_files) - len(candidate_files)
+                    log.info(f"  {new_file.get('filename')}: {len(candidate_files)} candidates (filtered {skipped} files)")
+                    
+                except Exception as e:
+                    log.error(f"Error counting candidates for {new_file.get('filename')}: {e}")
+                    # Fallback: count all existing files as candidates
+                    for existing_file in existing_files:
+                        cross_task_pairs.append((new_file, existing_file))
+                    log.warning(f"  {new_file.get('filename')}: Fallback to {len(existing_files)} candidates")
+        
+        log.info(f"Cross-task pairs (filtered candidates): {len(cross_task_pairs)}")
+        
+        # Calculate total
+        total_pairs_count = len(intra_task_pairs) + len(cross_task_pairs)
+        
+        log.info("=" * 70)
+        log.info(f"TOTAL CANDIDATE PAIRS TO ANALYZE: {total_pairs_count}")
+        log.info(f"  - Intra-task: {len(intra_task_pairs)}")
+        log.info(f"  - Cross-task: {len(cross_task_pairs)}")
+        log.info("=" * 70)
+        
+        # Store total_pairs in database
+        update_plagiarism_task(
+            task_id=task_id,
+            status="processing",
+            total_pairs=total_pairs_count,
+            processed_pairs=0
+        )
+        
+        # PHASE 2: Process all pairs
+        log.info("")
+        log.info("=" * 70)
+        log.info("PHASE 2: Processing pairs with progress tracking...")
+        log.info("=" * 70)
+        
+        processed_count = 0
+        
         def process_pair(file_a, file_b, is_cross_task=False):
-            """Process a single pair of files."""
-            nonlocal total_pairs, processed_pairs
-
-            total_pairs += 1
-
+            """Process a single pair of files and update progress."""
+            nonlocal processed_count
+            
             file_a_id = file_a.get("id")
             file_b_id = file_b.get("id")
             file_a_path = file_a.get("path") or file_a.get("file_path")
@@ -97,15 +205,16 @@ def process_new_message(
                 return
 
             try:
-                task_type = "cross-task" if is_cross_task else "intra-task"
-                log.info(f"[{task_type}] Comparing {file_a.get('filename')} vs {file_b.get('filename')}")
+                task_type = "cross" if is_cross_task else "intra"
+                progress_pct = (processed_count / total_pairs_count * 100) if total_pairs_count > 0 else 0
+                log.info(f"[{task_type}] ({processed_count}/{total_pairs_count} - {progress_pct:.1f}%) "
+                        f"{file_a.get('filename')} vs {file_b.get('filename')}")
 
                 # Get file hashes for caching
                 file_a_hash = file_a.get('hash') or file_a.get('file_hash')
                 file_b_hash = file_b.get('hash') or file_b.get('file_hash')
 
                 # Run plagiarism analysis with caching
-                # Returns: (token_similarity, ast_similarity, matches)
                 result = analyze_plagiarism_cached(
                     file_a_path, file_b_path,
                     file_a_hash, file_b_hash,
@@ -119,6 +228,7 @@ def process_new_message(
                 else:
                     ast_similarity, raw_matches = result
                     token_similarity = ast_similarity
+                
                 # Convert matches to JSON-serializable format
                 matches_data = []
                 for match in raw_matches:
@@ -139,10 +249,20 @@ def process_new_message(
                     matches=matches_data
                 )
 
-                processed_pairs += 1
-                log.info(f"Saved similarity result {result_id}: token_sim={token_similarity:.4f}, ast_sim={ast_similarity:.4f}")
+                processed_count += 1
+                
+                # Update progress in database every 10 pairs or at milestones
+                if processed_count % 10 == 0 or processed_count == total_pairs_count:
+                    update_plagiarism_task(
+                        task_id=task_id,
+                        status="processing",
+                        processed_pairs=processed_count
+                    )
+                
+                log.info(f"  ✓ Saved result {result_id}: token={token_similarity:.4f}, ast={ast_similarity:.4f}")
+                
             except Exception as e:
-                log.error(f"Error comparing files {file_a_id} vs {file_b_id}: {e}")
+                log.error(f"  ✗ Error comparing files {file_a_id} vs {file_b_id}: {e}")
                 import traceback
                 log.error(traceback.format_exc())
                 # Save failed result
@@ -152,34 +272,41 @@ def process_new_message(
                     file_b_id=file_b_id,
                     error=str(e)
                 )
+                processed_count += 1
 
-        # 1. Compare files within the new task (intra-task comparisons)
-        log.info(f"Processing {len(files)} files within task {task_id}...")
-        for file_a, file_b in combinations(files, 2):
-            process_pair(file_a, file_b, is_cross_task=False)
-
-        # 2. Compare new task files against all existing files (cross-task comparisons)
-        if existing_files:
-            log.info(f"Processing cross-task comparisons: {len(files)} new files vs {len(existing_files)} existing files...")
-            for new_file in files:
-                for existing_file in existing_files:
-                    process_pair(new_file, existing_file, is_cross_task=True)
-        else:
-            log.info("No existing files to compare against (this is the first task)")
+        # Process intra-task pairs
+        if intra_task_pairs:
+            log.info(f"\nProcessing {len(intra_task_pairs)} intra-task pairs...")
+            for file_a, file_b in intra_task_pairs:
+                process_pair(file_a, file_b, is_cross_task=False)
+        
+        # Process cross-task pairs
+        if cross_task_pairs:
+            log.info(f"\nProcessing {len(cross_task_pairs)} cross-task pairs...")
+            for new_file, existing_file in cross_task_pairs:
+                process_pair(new_file, existing_file, is_cross_task=True)
         
         # Update status to completed
         update_plagiarism_task(
             task_id=task_id,
             status="completed",
-            similarity=None,  # No longer storing here, results are in similarity_results table
-            matches={"total_pairs": total_pairs, "processed_pairs": processed_pairs}
+            similarity=None,
+            matches={"total_pairs": total_pairs_count, "processed_pairs": processed_count},
+            total_pairs=total_pairs_count,
+            processed_pairs=processed_count
         )
         
-        log.info(f"+++ Finished processing task {task_id}: {processed_pairs}/{total_pairs} pairs analyzed (including cross-task comparisons)")
+        log.info("")
+        log.info("=" * 70)
+        log.info(f"+++ Task {task_id} COMPLETED: {processed_count}/{total_pairs_count} pairs analyzed")
+        log.info("=" * 70)
+        
         ch.basic_ack(delivery_tag=method.delivery_tag)
         
     except Exception as e:
         log.error(f"Error processing message: {e}")
+        import traceback
+        log.error(traceback.format_exc())
         # Update status to failed
         if task_id:
             update_plagiarism_task(
@@ -213,6 +340,15 @@ if __name__ == "__main__":
         log.info("✓ Redis cache connected and ready")
     else:
         log.warning("⚠ Redis cache unavailable, running without caching")
+    
+    # Check inverted index stats
+    try:
+        stats = inverted_index.get_stats()
+        log.info(f"Inverted index stats: {stats['indexed_files']} files indexed, "
+                f"{stats['unique_hashes']} unique hashes, "
+                f"threshold={stats['min_overlap_threshold']:.0%}")
+    except Exception as e:
+        log.warning(f"⚠ Could not get inverted index stats: {e}")
 
     max_retries = 30
     retry_delay = 2

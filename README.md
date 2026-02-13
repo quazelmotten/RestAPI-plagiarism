@@ -170,6 +170,26 @@ The system uses a producer-consumer pattern:
 - **Worker** consumes tasks from the queue and performs plagiarism analysis
 - **Database** stores task status and results
 - **Dead Letter Queue** handles failed tasks for retry or review
+- **Inverted Index** (Redis) enables fast candidate filtering for cross-task comparisons
+
+### Performance Optimization
+
+The system includes an **Inverted Index** for efficient cross-task plagiarism detection:
+
+- **Without Inverted Index**: O(n×m) comparisons (new files × all existing files)
+- **With Inverted Index**: Only O(n×k) comparisons (new files × viable candidates)
+
+The inverted index uses Redis to store fingerprint-to-files mappings, allowing the system to:
+1. Index all file fingerprints as they're processed
+2. Quickly find candidate files that share significant fingerprint overlap
+3. Skip detailed analysis for files below the similarity threshold (default: 15%)
+
+This dramatically reduces processing time when the database contains thousands of files.
+
+**Configuration**: 
+- Set `INVERTED_INDEX_MIN_OVERLAP_THRESHOLD` in `.env` (default: 0.15 for 15%)
+- Lower values = more thorough but slower
+- Higher values = faster but may miss borderline cases
 
 ### Service Architecture
 

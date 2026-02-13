@@ -43,17 +43,34 @@ def update_plagiarism_task(
     similarity: float = None,
     matches: dict = None,
     error: str = None,
+    total_pairs: int = None,
+    processed_pairs: int = None,
 ) -> None:
     session = next(get_session())
+    
+    # Build update values dynamically
+    values = {
+        "status": status,
+        "similarity": similarity,
+        "matches": matches,
+        "error": error,
+    }
+    
+    if total_pairs is not None:
+        values["total_pairs"] = total_pairs
+    
+    if processed_pairs is not None:
+        values["processed_pairs"] = processed_pairs
+        # Calculate progress percentage
+        if total_pairs is not None and total_pairs > 0:
+            values["progress"] = processed_pairs / total_pairs
+        elif values.get("total_pairs") is not None and values["total_pairs"] > 0:
+            values["progress"] = processed_pairs / values["total_pairs"]
+    
     stmt = (
         update(PlagiarismTask)
         .where(PlagiarismTask.id == task_id)
-        .values(
-            status=status,
-            similarity=similarity,
-            matches=matches,
-            error=error
-        )
+        .values(**values)
     )
     session.execute(stmt)
     session.commit()

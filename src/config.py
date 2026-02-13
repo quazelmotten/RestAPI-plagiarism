@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     redis_use_ssl: bool = Field(default=False, validation_alias="REDIS_USE_SSL")
     
     # =============================================================================
+    # INVERTED INDEX CONFIGURATION
+    # =============================================================================
+    inverted_index_min_overlap_threshold: float = Field(default=0.15, validation_alias="INVERTED_INDEX_MIN_OVERLAP_THRESHOLD")  # 15% default
+    
+    # =============================================================================
     # VALIDATORS
     # =============================================================================
     

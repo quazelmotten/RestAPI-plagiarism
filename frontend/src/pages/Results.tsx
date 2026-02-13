@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Heading,
@@ -29,7 +29,8 @@ import {
   FiAlertCircle, 
   FiActivity,
   FiLayers,
-  FiArrowLeft
+  FiArrowLeft,
+  FiRefreshCw
 } from 'react-icons/fi';
 import api from '../services/api';
 
@@ -61,6 +62,12 @@ interface Task {
   total_pairs: number;
   files: { id: string; filename: string }[];
   results: PlagiarismResult[];
+  progress?: {
+    completed: number;
+    total: number;
+    percentage: number;
+    display: string;
+  };
 }
 
 interface FileContent {
@@ -110,6 +117,10 @@ const Results: React.FC = () => {
   const [fileAContent, setFileAContent] = useState<FileContent | null>(null);
   const [fileBContent, setFileBContent] = useState<FileContent | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
+  
+  // Ref to store tasks for interval check
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
   
   // Color mode values
   const cardBg = useColorModeValue('white', 'gray.800');
@@ -552,14 +563,25 @@ const Results: React.FC = () => {
                   <Select
                     value={selectedTaskId}
                     onChange={(e) => setSelectedTaskId(e.target.value)}
-                    w="300px"
+                    w="400px"
                   >
                     {tasks.map((task) => (
                       <option key={task.task_id} value={task.task_id}>
-                        {task.task_id.substring(0, 8)}... ({task.status}) - {task.total_pairs} pairs
+                        {task.task_id.substring(0, 8)}... ({task.status}) - {task.progress?.display || `${task.total_pairs} pairs`}
                       </option>
                     ))}
                   </Select>
+                  {selectedTask?.status === 'processing' && (
+                    <Spinner size="sm" color="orange.500" speed="0.8s" />
+                  )}
+                  <Button
+                    size="sm"
+                    leftIcon={<FiRefreshCw />}
+                    onClick={fetchTasks}
+                    isLoading={loading}
+                  >
+                    Refresh
+                  </Button>
                 </HStack>
                 
                 <HStack>
@@ -605,7 +627,7 @@ const Results: React.FC = () => {
                       <StatLabel>Status</StatLabel>
                       <HStack mt={2}>
                         {getStatusIcon(selectedTask.status)}
-                        <Badge colorScheme={selectedTask.status === 'completed' ? 'green' : 'yellow'}>
+                        <Badge colorScheme={selectedTask.status === 'completed' ? 'green' : selectedTask.status === 'processing' ? 'orange' : 'yellow'}>
                           {selectedTask.status}
                         </Badge>
                       </HStack>
@@ -624,6 +646,40 @@ const Results: React.FC = () => {
                   </CardBody>
                 </Card>
               </SimpleGrid>
+              
+              {/* Task Progress */}
+              {selectedTask.status === 'processing' && selectedTask.progress && (
+                <Card bg={cardBg} borderColor="orange.300" borderWidth={2}>
+                  <CardBody>
+                    <VStack align="stretch" spacing={3}>
+                      <HStack justify="space-between">
+                        <Heading size="sm" color="orange.600">
+                          Processing Task...
+                        </Heading>
+                        <Text fontWeight="bold" color="orange.600">
+                          {selectedTask.progress.display}
+                        </Text>
+                      </HStack>
+                      <Progress 
+                        value={selectedTask.progress.percentage} 
+                        max={100}
+                        colorScheme="orange"
+                        size="lg"
+                        borderRadius="full"
+                        hasStripe
+                        isAnimated
+                      />
+                      <HStack justify="space-between" fontSize="sm" color="gray.600">
+                        <Text>{selectedTask.progress.completed} comparisons completed</Text>
+                        <Text>{selectedTask.progress.total} total to analyze</Text>
+                      </HStack>
+                      <Text fontSize="xs" color="gray.500" textAlign="center">
+                        Using inverted index to skip non-viable candidates below 15% similarity threshold
+                      </Text>
+                    </VStack>
+                  </CardBody>
+                </Card>
+)}
               
               {/* Similarity Distribution */}
               <Card bg={cardBg}>
@@ -683,9 +739,16 @@ const Results: React.FC = () => {
                   <CardBody>
                     <HStack justify="space-between" align="center" mb={4}>
                       <Heading size="md">Top Similarities</Heading>
-                      <Text color="gray.500" fontSize="sm">
-                        {selectedTask.results.length} pairs analyzed
-                      </Text>
+                      <HStack>
+                        <Text color="gray.500" fontSize="sm">
+                          {selectedTask.results.length} pairs analyzed
+                        </Text>
+                        {selectedTask.status === 'processing' && (
+                          <Badge colorScheme="orange" size="sm">
+                            Processing...
+                          </Badge>
+                        )}
+                      </HStack>
                     </HStack>
                     
                     <VStack align="stretch" spacing={2}>

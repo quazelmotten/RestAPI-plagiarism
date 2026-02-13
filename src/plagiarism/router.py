@@ -99,7 +99,7 @@ async def check_plagiarism(
 async def get_all_tasks(
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Get all plagiarism tasks with their results."""
+    """Get all plagiarism tasks with their results and progress."""
     result = await db.execute(
         select(PlagiarismTask).order_by(PlagiarismTask.id)
     )
@@ -112,6 +112,12 @@ async def get_all_tasks(
             "similarity": task.similarity,
             "matches": task.matches,
             "error": task.error,
+            "progress": {
+                "completed": task.processed_pairs or 0,
+                "total": task.total_pairs or 0,
+                "percentage": round((task.progress or 0) * 100, 1),
+                "display": f"{task.processed_pairs or 0}/{task.total_pairs or 0}"
+            }
         }
         for task in tasks
     ]
@@ -206,6 +212,12 @@ async def get_plagiarism_result(
         "similarity": task.similarity,
         "matches": task.matches,
         "error": task.error,
+        "progress": {
+            "completed": task.processed_pairs or 0,
+            "total": task.total_pairs or 0,
+            "percentage": float(round((task.progress or 0) * 100, 1)),
+            "display": f"{task.processed_pairs or 0}/{task.total_pairs or 0}"
+        }
     }
 
 
@@ -213,8 +225,29 @@ async def get_plagiarism_result(
 async def get_all_results(
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Get all similarity results across all tasks with file details."""
+    """Get all similarity results across all tasks with file details and progress."""
     try:
+        # Get all tasks with their progress
+        tasks_result = await db.execute(
+            select(
+                PlagiarismTask.id,
+                PlagiarismTask.status,
+                PlagiarismTask.total_pairs,
+                PlagiarismTask.processed_pairs,
+                PlagiarismTask.progress
+            )
+        )
+        tasks_map = {
+            str(row.id): {
+                "status": row.status,
+                "total_pairs": row.total_pairs or 0,
+                "processed_pairs": row.processed_pairs or 0,
+                "progress_pct": float(round((row.progress or 0) * 100, 1)),
+                "progress_display": f"{row.processed_pairs or 0}/{row.total_pairs or 0}"
+            }
+            for row in tasks_result.all()
+        }
+        
         # Get all similarity results with file details
         results_result = await db.execute(
             select(
@@ -245,6 +278,9 @@ async def get_all_results(
         
         formatted_results = []
         for result in results:
+            task_id = str(result.task_id)
+            task_progress = tasks_map.get(task_id, {})
+            
             formatted_results.append({
                 "id": str(result.id),
                 "file_a": {
@@ -259,7 +295,8 @@ async def get_all_results(
                 "ast_similarity": result.ast_similarity,
                 "matches": result.matches,
                 "created_at": str(result.created_at) if result.created_at else None,
-                "task_id": str(result.task_id)
+                "task_id": task_id,
+                "task_progress": task_progress
             })
         
         return formatted_results
@@ -275,7 +312,7 @@ async def get_plagiarism_results(
     task_id: str,
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Get detailed similarity results for all file pairs in a task."""
+    """Get detailed similarity results for all file pairs in a task with progress."""
     # Check if task exists
     task = await db.get(PlagiarismTask, task_id)
     if not task:
@@ -317,6 +354,12 @@ async def get_plagiarism_results(
     return {
         "task_id": task_id,
         "status": task.status,
+        "progress": {
+            "completed": task.processed_pairs or 0,
+            "total": task.total_pairs or len(formatted_results),
+            "percentage": round((task.progress or 0) * 100, 1) if task.total_pairs else 100.0,
+            "display": f"{task.processed_pairs or len(formatted_results)}/{task.total_pairs or len(formatted_results)}"
+        },
         "total_pairs": len(formatted_results),
         "files": [{"id": str(f.id), "filename": f.filename} for f in files],
         "results": formatted_results
@@ -354,64 +397,3 @@ async def get_file_content(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to download file: {str(e)}")
-
-
-@router.get("/results/all")
-async def get_all_results(
-    db: AsyncSession = Depends(get_async_session),
-):
-    """Get all similarity results across all tasks with file details."""
-    try:
-        # Get all similarity results with file details
-        results_result = await db.execute(
-            select(
-                SimilarityResult.id,
-                SimilarityResult.file_a_id,
-                SimilarityResult.file_b_id,
-                SimilarityResult.token_similarity,
-                SimilarityResult.ast_similarity,
-                SimilarityResult.matches,
-                SimilarityResult.created_at,
-                PlagiarismTask.id.label("task_id"),
-                FileModel.filename.label("file_a_filename"),
-            )
-            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
-            .join(FileModel, SimilarityResult.file_a_id == FileModel.id)
-            .order_by(SimilarityResult.ast_similarity.desc())
-        )
-        
-        results = results_result.all()
-        
-        # Get file_b filenames in a separate query
-        file_b_ids = [row.file_b_id for row in results]
-        files_result = await db.execute(
-            select(FileModel.id, FileModel.filename)
-            .where(FileModel.id.in_(file_b_ids))
-        )
-        file_map = {str(row.id): row.filename for row in files_result.all()}
-        
-        formatted_results = []
-        for result in results:
-            formatted_results.append({
-                "id": str(result.id),
-                "file_a": {
-                    "id": str(result.file_a_id),
-                    "filename": result.file_a_filename
-                },
-                "file_b": {
-                    "id": str(result.file_b_id),
-                    "filename": file_map.get(str(result.file_b_id), "Unknown")
-                },
-                "token_similarity": result.token_similarity,
-                "ast_similarity": result.ast_similarity,
-                "matches": result.matches,
-                "created_at": str(result.created_at) if result.created_at else None,
-                "task_id": str(result.task_id)
-            })
-        
-        return formatted_results
-    except Exception as e:
-        print(f"Error in get_all_results: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to fetch results: {str(e)}")

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Text, Float, ForeignKey
+from sqlalchemy import Column, String, DateTime, Text, Float, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.sql import func
 import uuid
@@ -14,6 +14,9 @@ class PlagiarismTask(Base):
     similarity = Column(Float, nullable=True)
     matches = Column(JSONB, nullable=True)
     error = Column(Text, nullable=True)
+    total_pairs = Column(Integer, nullable=True)  # Total candidate pairs to analyze
+    processed_pairs = Column(Integer, nullable=True)  # Pairs completed so far
+    progress = Column(Float, nullable=True)  # Progress percentage (0.0 - 1.0)
 
 
 class File(Base):

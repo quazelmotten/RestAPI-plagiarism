@@ -78,7 +78,14 @@ class Settings(BaseSettings):
     redis_host: str = Field(default="localhost", validation_alias="REDIS_HOST")
     redis_port: int = Field(default=6379, validation_alias="REDIS_PORT")
     redis_db: int = Field(default=0, validation_alias="REDIS_DB")
+    redis_password: Optional[str] = Field(default=None, validation_alias="REDIS_PASSWORD")
+    redis_use_ssl: bool = Field(default=False, validation_alias="REDIS_USE_SSL")
     redis_ttl: int = Field(default=86400, validation_alias="REDIS_TTL")  # 24 hours
+    
+    # =============================================================================
+    # INVERTED INDEX CONFIGURATION
+    # =============================================================================
+    inverted_index_min_overlap_threshold: float = Field(default=0.15, validation_alias="INVERTED_INDEX_MIN_OVERLAP_THRESHOLD")  # 15% default
 
     # =============================================================================
     # LOGGING
