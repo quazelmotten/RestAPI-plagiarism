@@ -10,6 +10,26 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+class RegisterRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+
+class RegisterResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+
+@router.post("/register", response_model=RegisterResponse)
+async def register(request: RegisterRequest):
+    """Register a new user (demo implementation - accepts any credentials)"""
+    # In production, you would validate and store in database
+    return RegisterResponse(
+        id=1,
+        username=request.username,
+        email=request.email
+    )
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:

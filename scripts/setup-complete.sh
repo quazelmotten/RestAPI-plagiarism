@@ -132,9 +132,14 @@ print_success "Directories created"
 print_status "Building Docker images (this may take a few minutes)..."
 
 if [ "$ENVIRONMENT" = "dev" ]; then
-    # Development mode - mount source code for hot reload
-    print_status "Starting in DEVELOPMENT mode with hot reload..."
-    docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+    # Development mode
+    print_status "Starting in DEVELOPMENT mode..."
+    if [ -f "docker-compose.dev.yml" ]; then
+        docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+    else
+        print_warning "docker-compose.dev.yml not found, using standard docker-compose.yml"
+        docker-compose up -d --build
+    fi
 elif [ "$ENVIRONMENT" = "test" ]; then
     # Test mode - run tests and exit
     print_status "Starting in TEST mode..."

@@ -355,10 +355,10 @@ async def get_plagiarism_results(
         "task_id": task_id,
         "status": task.status,
         "progress": {
-            "completed": task.processed_pairs or 0,
-            "total": task.total_pairs or len(formatted_results),
-            "percentage": round((task.progress or 0) * 100, 1) if task.total_pairs else 100.0,
-            "display": f"{task.processed_pairs or len(formatted_results)}/{task.total_pairs or len(formatted_results)}"
+            "completed": len(formatted_results),
+            "total": len(formatted_results),
+            "percentage": 100.0 if task.status == 'completed' else round((len(formatted_results) / max(task.total_pairs, len(formatted_results)) * 100), 1),
+            "display": f"{len(formatted_results)}/{len(formatted_results)}"
         },
         "total_pairs": len(formatted_results),
         "files": [{"id": str(f.id), "filename": f.filename} for f in files],

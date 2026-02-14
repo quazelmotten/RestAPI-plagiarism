@@ -59,8 +59,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const login = async (username: string, email: string, password: string) => {
+    console.log('=== LOGIN FUNCTION START ===');
+    console.log('API URL:', api.defaults.baseURL);
+    console.log('Attempting login with:', { username, email });
+    
     try {
-      const response = await api.post('/auth/login', { username, email, password });
+      const loginUrl = '/auth/login';
+      console.log('Making POST request to:', loginUrl);
+      
+      const response = await api.post(loginUrl, { username, email, password });
+      
+      console.log('Login response received:', response.status);
+      console.log('Login response data:', response.data);
       
       // Check if the response contains an error
       if (response.data.detail) {
@@ -69,13 +79,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       const { access_token } = response.data;
       
+      if (!access_token) {
+        throw new Error('No access token received');
+      }
+      
       localStorage.setItem('token', access_token);
       api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
       
       await fetchUser();
       navigate('/dashboard');
-    } catch (error) {
-      throw new Error('Invalid credentials');
+    } catch (error: any) {
+      console.error('=== LOGIN ERROR ===');
+      console.error('Error type:', error.constructor.name);
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
+      console.error('Error config:', error.config);
+      
+      if (error.response) {
+        console.error('Error response status:', error.response.status);
+        console.error('Error response data:', error.response.data);
+        console.error('Error response headers:', error.response.headers);
+      } else if (error.request) {
+        console.error('Error request:', error.request);
+      }
+      
+      throw new Error(error.response?.data?.detail || error.message || 'Invalid credentials');
+    } finally {
+      console.log('=== LOGIN FUNCTION END ===');
     }
   };
 

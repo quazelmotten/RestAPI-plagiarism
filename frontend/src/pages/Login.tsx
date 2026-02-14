@@ -25,21 +25,40 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('Form submitted - preventing default');
+    console.log('Values:', { username, email, password: '***' });
+    
+    if (!username || !email || !password) {
+      toast({
+        title: 'Missing fields',
+        description: 'Please fill in all fields',
+        status: 'error',
+        duration: 3000,
+      });
+      return;
+    }
+    
     setIsLoading(true);
 
     try {
+      console.log('Calling login function...');
       await login(username, email, password);
+      console.log('Login successful');
       toast({
         title: 'Login successful',
         status: 'success',
         duration: 3000,
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Login error in component:', error);
+      console.error('Error message:', error.message);
       toast({
         title: 'Login failed',
-        description: 'Invalid username or password',
+        description: error.message || 'Invalid username or password',
         status: 'error',
-        duration: 3000,
+        duration: 5000,
       });
     } finally {
       setIsLoading(false);

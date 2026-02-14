@@ -1,0 +1,342 @@
+name: Complete Setup and Integration Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  API_URL: http://localhost:8000
+
+jobs:
+  # ===========================================
+  # Job 1: Test Fresh Setup from Scratch
+  # ===========================================
+  test-fresh-setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Test Complete Setup Script
+        run: |
+          echo "Testing complete setup from scratch..."
+          chmod +x scripts/setup-complete.sh setup.sh
+          ./scripts/setup-complete.sh test
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for API to be ready..."
+          for i in {1..60}; do
+            if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✓ API is ready!"
+              exit 0
+            fi
+            echo -n "."
+            sleep 2
+          done
+          echo "✗ API failed to start"
+          docker-compose logs api
+          exit 1
+
+      - name: Test Health Endpoint
+        run: |
+          response=$(curl -s http://localhost:8000/health)
+          echo "Health response: $response"
+          if echo "$response" | grep -q "healthy"; then
+            echo "✓ Health check passed"
+          else
+            echo "✗ Health check failed"
+            exit 1
+          fi
+
+      - name: Test Version Endpoint
+        run: |
+          response=$(curl -s http://localhost:8000/version)
+          echo "Version response: $response"
+          if echo "$response" | grep -q "version"; then
+            echo "✓ Version endpoint working"
+          else
+            echo "✗ Version endpoint failed"
+            exit 1
+          fi
+
+      - name: Test User Registration
+        run: |
+          response=$(curl -s -X POST http://localhost:8000/auth/register \
+            -H "Content-Type: application/json" \
+            -d '{
+              "username": "testuser_'$(date +%s)'",
+              "email": "test_'$(date +%s)'@example.com",
+              "password": "TestPassword123!"
+            }')
+          echo "Register response: $response"
+          if echo "$response" | grep -q "id"; then
+            echo "✓ User registration working"
+          else
+            echo "✗ User registration failed"
+            exit 1
+          fi
+
+      - name: Test User Login
+        run: |
+          response=$(curl -s -X POST http://localhost:8000/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{
+              "username": "testuser_'$(date +%s)'",
+              "email": "test_'$(date +%s)'@example.com",
+              "password": "TestPassword123!"
+            }')
+          echo "Login response: $response"
+          if echo "$response" | grep -q "access_token"; then
+            echo "✓ User login working"
+          else
+            echo "✗ User login failed"
+            exit 1
+          fi
+
+      - name: Test Plagiarism Check with File Upload
+        run: |
+          # Create test files
+          echo "def hello():" > /tmp/test_file1.py
+          echo "    print('Hello World')" >> /tmp/test_file1.py
+          echo "def hello():" > /tmp/test_file2.py
+          echo "    print('Hello World')" >> /tmp/test_file2.py
+          
+          response=$(curl -s -X POST http://localhost:8000/plagiarism/check \
+            -F "files=@/tmp/test_file1.py" \
+            -F "files=@/tmp/test_file2.py" \
+            -F "language=python")
+          echo "Check response: $response"
+          if echo "$response" | grep -q "task_id"; then
+            echo "✓ Plagiarism check working"
+            echo "$response" | grep -o '"task_id":"[^"]*"' | cut -d'"' -f4 > /tmp/task_id
+          else
+            echo "✗ Plagiarism check failed"
+            exit 1
+          fi
+
+      - name: Test Task Status
+        run: |
+          task_id=$(cat /tmp/task_id)
+          response=$(curl -s http://localhost:8000/plagiarism/${task_id})
+          echo "Task status response: $response"
+          if echo "$response" | grep -q "status"; then
+            echo "✓ Task status endpoint working"
+          else
+            echo "✗ Task status endpoint failed"
+            exit 1
+          fi
+
+      - name: Test List Tasks
+        run: |
+          response=$(curl -s http://localhost:8000/plagiarism/tasks)
+          echo "Tasks list response: $response"
+          if [ -n "$response" ]; then
+            echo "✓ List tasks endpoint working"
+          else
+            echo "✗ List tasks endpoint failed"
+            exit 1
+          fi
+
+      - name: Test API Documentation
+        run: |
+          response=$(curl -s http://localhost:8000/docs)
+          if echo "$response" | grep -q "swagger\|openapi"; then
+            echo "✓ API documentation accessible"
+          else
+            echo "✗ API documentation not accessible"
+            exit 1
+          fi
+
+      - name: Test Frontend Serving
+        run: |
+          response=$(curl -s http://localhost:8000/)
+          if echo "$response" | grep -q "html\|<!DOCTYPE\|<div"; then
+            echo "✓ Frontend is being served"
+          else
+            echo "✗ Frontend not being served"
+            exit 1
+          fi
+
+      - name: Check Service Status
+        run: |
+          echo "=== Docker Compose Status ==="
+          docker-compose ps
+          echo ""
+          echo "=== Service Health ==="
+          docker-compose exec -T postgres pg_isready -U plagiarism_user -d plagiarism_db || true
+
+      - name: Capture logs on failure
+        if: failure()
+        run: |
+          echo "=== API Logs ==="
+          docker-compose logs api
+          echo ""
+          echo "=== Worker Logs ==="
+          docker-compose logs worker
+          echo ""
+          echo "=== Database Logs ==="
+          docker-compose logs postgres
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose down -v
+          docker system prune -f
+
+  # ===========================================
+  # Job 2: Run Integration Test Script
+  # ===========================================
+  run-integration-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create environment file
+        run: |
+          cat > .env << 'EOF'
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_NAME=plagiarism_db
+          DB_USER=plagiarism_user
+          DB_PASS=ci_test_password_12345
+          RMQ_HOST=rabbitmq
+          RMQ_PORT=5672
+          RMQ_USER=plagiarism_mq_user
+          RMQ_PASS=ci_test_mq_password_123
+          SECRET_KEY=ci_test_secret_key_for_github_actions_12345
+          ENVIRONMENT=test
+          API_HOST=0.0.0.0
+          API_PORT=8000
+          CORS_ORIGINS=http://localhost:3000
+          LOG_LEVEL=INFO
+          EOF
+
+      - name: Build and start services
+        run: |
+          docker-compose up -d --build
+          sleep 30
+
+      - name: Wait for API
+        run: |
+          for i in {1..60}; do
+            if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+              echo "API is ready!"
+              exit 0
+            fi
+            echo -n "."
+            sleep 2
+          done
+          echo "API failed to start"
+          docker-compose logs api
+          exit 1
+
+      - name: Run integration test script
+        run: |
+          chmod +x scripts/test-integration.sh
+          ./scripts/test-integration.sh
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose down -v
+
+  # ===========================================
+  # Job 3: Frontend Build Test
+  # ===========================================
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify build output
+        run: |
+          if [ -d frontend/dist ] && [ "$(ls -A frontend/dist)" ]; then
+            echo "✓ Frontend build successful"
+            ls -la frontend/dist
+          else
+            echo "✗ Frontend build failed or dist directory is empty"
+            exit 1
+          fi
+
+  # ===========================================
+  # Job 4: Docker Compose Validation
+  # ===========================================
+  validate-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: |
+          docker compose config > /dev/null
+          echo "✓ docker-compose.yml is valid"
+
+      - name: Check required files exist
+        run: |
+          required_files=(
+            "docker-compose.yml"
+            "api.Dockerfile"
+            "worker.Dockerfile"
+            "db.Dockerfile"
+            "setup.sh"
+            "scripts/setup-complete.sh"
+            "scripts/test-integration.sh"
+            ".env.example"
+            "src/app.py"
+            "src/requirements.txt"
+            "worker/worker.py"
+            "worker/requirements.txt"
+            "frontend/package.json"
+          )
+          
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "✗ Missing required file: $file"
+              exit 1
+            fi
+            echo "✓ Found: $file"
+          done
+
+      - name: Check scripts are executable
+        run: |
+          scripts=(
+            "setup.sh"
+            "scripts/setup-complete.sh"
+            "scripts/test-integration.sh"
+          )
+          
+          for script in "${scripts[@]}"; do
+            if [ ! -x "$script" ]; then
+              echo "⚠ Making $script executable"
+              chmod +x "$script"
+            fi
+            echo "✓ $script is executable"
+          done

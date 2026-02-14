@@ -85,8 +85,12 @@ test_user_registration() {
 test_user_login() {
     test_start "User Login"
     response=$(curl -s -X POST "${API_URL}/auth/login" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "username=testuser_$(date +%s)&password=TestPassword123!" 2>/dev/null || echo "")
+        -H "Content-Type: application/json" \
+        -d '{
+            "username": "testuser_'$(date +%s)'",
+            "email": "test_'$(date +%s)'@example.com",
+            "password": "TestPassword123!"
+        }' 2>/dev/null || echo "")
     
     if echo "$response" | grep -q "access_token\|token"; then
         test_pass "User Login"
@@ -96,50 +100,28 @@ test_user_login() {
     fi
 }
 
-# Test file upload endpoint
-test_file_upload() {
-    test_start "File Upload"
-    
-    # Create a test file
-    echo "def hello():" > /tmp/test_file.py
-    echo "    print('Hello World')" >> /tmp/test_file.py
-    
-    response=$(curl -s -X POST "${API_URL}/files/upload" \
-        -H "Authorization: Bearer $(cat /tmp/test_token 2>/dev/null || echo '')" \
-        -F "file=@/tmp/test_file.py" \
-        -F "language=python" 2>/dev/null || echo "")
-    
-    if echo "$response" | grep -q "id\|file_id\|filename"; then
-        test_pass "File Upload"
-        echo "$response" | grep -o '"id":[0-9]*' | cut -d: -f2 > /tmp/test_file_id
-    else
-        test_fail "File Upload"
-    fi
-}
-
-# Test plagiarism check endpoint
+# Test plagiarism check endpoint (includes file upload)
 test_plagiarism_check() {
-    test_start "Plagiarism Check"
+    test_start "Plagiarism Check with File Upload"
     
-    # This requires two files, so we might skip if we can't create a second file
-    if [ ! -f /tmp/test_file_id ]; then
-        test_fail "Plagiarism Check (no file ID)"
-        return
-    fi
+    # Create two test files
+    echo "def hello():" > /tmp/test_file1.py
+    echo "    print('Hello World')" >> /tmp/test_file1.py
+    
+    echo "def hello():" > /tmp/test_file2.py
+    echo "    print('Hello World')" >> /tmp/test_file2.py
     
     response=$(curl -s -X POST "${API_URL}/plagiarism/check" \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer $(cat /tmp/test_token 2>/dev/null || echo '')" \
-        -d '{
-            "file_ids": ['$(cat /tmp/test_file_id)'],
-            "threshold": 0.5
-        }' 2>/dev/null || echo "")
+        -F "files=@/tmp/test_file1.py" \
+        -F "files=@/tmp/test_file2.py" \
+        -F "language=python" 2>/dev/null || echo "")
     
-    if echo "$response" | grep -q "task_id\|id\|status"; then
-        test_pass "Plagiarism Check"
+    if echo "$response" | grep -q "task_id\|status"; then
+        test_pass "Plagiarism Check with File Upload"
         echo "$response" | grep -o '"task_id":"[^"]*"' | cut -d'"' -f4 > /tmp/test_task_id
     else
-        test_fail "Plagiarism Check"
+        test_fail "Plagiarism Check with File Upload"
+        echo "Response: $response"
     fi
 }
 
@@ -153,13 +135,13 @@ test_task_status() {
     fi
     
     task_id=$(cat /tmp/test_task_id)
-    response=$(curl -s "${API_URL}/plagiarism/${task_id}/status" \
-        -H "Authorization: Bearer $(cat /tmp/test_token 2>/dev/null || echo '')" 2>/dev/null || echo "")
+    response=$(curl -s "${API_URL}/plagiarism/${task_id}" 2>/dev/null || echo "")
     
     if echo "$response" | grep -q "status"; then
         test_pass "Task Status"
     else
         test_fail "Task Status"
+        echo "Response: $response"
     fi
 }
 
@@ -265,7 +247,6 @@ echo
 echo -e "${BLUE}--- Functional Tests ---${NC}"
 test_user_registration
 test_user_login
-test_file_upload
 test_plagiarism_check
 test_task_status
 test_list_tasks
