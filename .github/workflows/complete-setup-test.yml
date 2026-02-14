@@ -41,7 +41,7 @@ jobs:
             sleep 2
           done
           echo "✗ API failed to start"
-          docker-compose logs api
+          docker compose logs api
           exit 1
 
       - name: Test Health Endpoint
@@ -167,27 +167,27 @@ jobs:
       - name: Check Service Status
         run: |
           echo "=== Docker Compose Status ==="
-          docker-compose ps
+          docker compose ps
           echo ""
           echo "=== Service Health ==="
-          docker-compose exec -T postgres pg_isready -U plagiarism_user -d plagiarism_db || true
+          docker compose exec -T postgres pg_isready -U plagiarism_user -d plagiarism_db || true
 
       - name: Capture logs on failure
         if: failure()
         run: |
           echo "=== API Logs ==="
-          docker-compose logs api
+          docker compose logs api
           echo ""
           echo "=== Worker Logs ==="
-          docker-compose logs worker
+          docker compose logs worker
           echo ""
           echo "=== Database Logs ==="
-          docker-compose logs postgres
+          docker compose logs postgres
 
       - name: Cleanup
         if: always()
         run: |
-          docker-compose down -v
+          docker compose down -v
           docker system prune -f
 
   # ===========================================
@@ -224,7 +224,7 @@ jobs:
 
       - name: Build and start services
         run: |
-          docker-compose up -d --build
+          docker compose up -d --build
           sleep 30
 
       - name: Wait for API
@@ -238,7 +238,7 @@ jobs:
             sleep 2
           done
           echo "API failed to start"
-          docker-compose logs api
+          docker compose logs api
           exit 1
 
       - name: Run integration test script
@@ -249,7 +249,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          docker-compose down -v
+          docker compose down -v
 
   # ===========================================
   # Job 3: Frontend Build Test
@@ -294,15 +294,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Validate docker-compose.yml
+      - name: Validate docker compose.yml
         run: |
           docker compose config > /dev/null
-          echo "✓ docker-compose.yml is valid"
+          echo "✓ docker compose.yml is valid"
 
       - name: Check required files exist
         run: |
           required_files=(
-            "docker-compose.yml"
+            "docker compose.yml"
             "api.Dockerfile"
             "worker.Dockerfile"
             "db.Dockerfile"
