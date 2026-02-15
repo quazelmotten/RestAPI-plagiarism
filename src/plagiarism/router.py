@@ -333,6 +333,22 @@ async def get_plagiarism_results(
     )
     results = results_result.scalars().all()
     
+    # Get all file IDs from the results (both file_a and file_b, which might be from different tasks for cross-task comparison)
+    file_ids = set()
+    for result in results:
+        file_ids.add(str(result.file_a_id))
+        file_ids.add(str(result.file_b_id))
+    
+    # Get all files that appear in results (across all tasks for cross-task comparison)
+    if file_ids:
+        files_result = await db.execute(
+            select(FileModel).where(FileModel.id.in_(file_ids))
+        )
+        all_files = files_result.scalars().all()
+        file_map = {str(f.id): f.filename for f in all_files}
+    else:
+        file_map = {}
+    
     # Format results
     formatted_results = []
     for result in results:
