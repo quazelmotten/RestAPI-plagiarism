@@ -5,19 +5,8 @@ export interface User {
   role: 'teacher' | 'admin';
 }
 
-export interface Student {
-  id: string;
-  username: string;
-  email: string;
-  fullName: string;
-  createdAt: string;
-  submissionsCount: number;
-}
-
 export interface Submission {
   id: string;
-  studentId: string;
-  studentName: string;
   fileName: string;
   language: string;
   createdAt: string;

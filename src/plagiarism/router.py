@@ -112,6 +112,7 @@ async def get_all_tasks(
             "similarity": task.similarity,
             "matches": task.matches,
             "error": task.error,
+            "created_at": str(task.created_at) if task.created_at else None,
             "progress": {
                 "completed": task.processed_pairs or 0,
                 "total": task.total_pairs or 0,
@@ -364,16 +365,20 @@ async def get_plagiarism_results(
             "created_at": str(result.created_at) if result.created_at else None
         })
     
+    # Use task.total_pairs if available, otherwise fall back to results count
+    actual_total_pairs = task.total_pairs if task.total_pairs else len(formatted_results)
+    
     return {
         "task_id": task_id,
         "status": task.status,
+        "created_at": str(task.created_at) if task.created_at else None,
         "progress": {
-            "completed": len(formatted_results),
-            "total": len(formatted_results),
-            "percentage": 100.0 if task.status == 'completed' else round((len(formatted_results) / max(task.total_pairs, len(formatted_results)) * 100), 1),
-            "display": f"{len(formatted_results)}/{len(formatted_results)}"
+            "completed": task.processed_pairs or len(formatted_results),
+            "total": actual_total_pairs,
+            "percentage": round(((task.processed_pairs or len(formatted_results)) / max(actual_total_pairs, 1)) * 100, 1),
+            "display": f"{task.processed_pairs or len(formatted_results)}/{actual_total_pairs}"
         },
-        "total_pairs": len(formatted_results),
+        "total_pairs": actual_total_pairs,
         "files": [{"id": str(f.id), "filename": f.filename} for f in files],
         "results": formatted_results
     }

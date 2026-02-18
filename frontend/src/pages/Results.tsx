@@ -50,7 +50,6 @@ interface PlagiarismResult {
     id: string;
     filename: string;
   };
-  token_similarity: number;
   ast_similarity: number;
   matches: PlagiarismMatch[];
   created_at: string;
@@ -418,10 +417,7 @@ const Results: React.FC = () => {
                         <Text fontSize="3xl" fontWeight="bold">
                           {((selectedPair.ast_similarity || 0) * 100).toFixed(1)}%
                         </Text>
-                        <Text fontSize="sm">Similarity Score (AST)</Text>
-                        <Text fontSize="xs" opacity={0.8}>
-                          Token: {((selectedPair.token_similarity || 0) * 100).toFixed(1)}%
-                        </Text>
+                        <Text fontSize="sm">Similarity Score</Text>
                       </Box>
                       
                       <Text fontSize="sm" color="gray.600">

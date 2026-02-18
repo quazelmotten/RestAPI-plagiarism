@@ -38,7 +38,6 @@ interface Match {
 interface SimilarityResult {
   file_a: File;
   file_b: File;
-  token_similarity: number;
   ast_similarity: number;
   matches: Match[];
   created_at: string;

@@ -9,7 +9,7 @@ import {
   Flex,
   useColorModeValue,
 } from '@chakra-ui/react';
-import { FiHome, FiUsers, FiFileText, FiShare2, FiUpload, FiBarChart2, FiColumns } from 'react-icons/fi';
+import { FiHome, FiFileText, FiShare2, FiUpload, FiBarChart2, FiColumns } from 'react-icons/fi';
 
 const blink = keyframes`
   0%, 50% { opacity: 1; }
@@ -18,7 +18,6 @@ const blink = keyframes`
 
 const menuItems = [
   { path: '/dashboard', label: 'Overview', icon: FiHome },
-  { path: '/dashboard/students', label: 'Students', icon: FiUsers },
   { path: '/dashboard/submissions', label: 'Submissions', icon: FiFileText },
   { path: '/dashboard/graph', label: 'Plagiarism Graph', icon: FiShare2 },
   { path: '/dashboard/upload', label: 'Upload Files', icon: FiUpload },

@@ -45,7 +45,6 @@ interface PairResult {
   id: string;
   file_a: FileInfo;
   file_b: FileInfo;
-  token_similarity: number;
   ast_similarity: number;
   matches: PlagiarismMatch[];
   created_at: string;
@@ -65,7 +64,7 @@ interface LineInfo {
   matchIndex: number | null;
 }
 
-type SortField = 'file_a' | 'file_b' | 'ast_similarity' | 'token_similarity' | 'created_at';
+type SortField = 'file_a' | 'file_b' | 'ast_similarity' | 'created_at';
 type SortDirection = 'asc' | 'desc';
 
 const MATCH_COLORS = [
@@ -405,10 +404,6 @@ const PairComparison: React.FC = () => {
           valueA = a.ast_similarity || 0;
           valueB = b.ast_similarity || 0;
           break;
-        case 'token_similarity':
-          valueA = a.token_similarity || 0;
-          valueB = b.token_similarity || 0;
-          break;
         case 'created_at':
           valueA = new Date(a.created_at || 0).getTime();
           valueB = new Date(b.created_at || 0).getTime();
@@ -553,10 +548,7 @@ const PairComparison: React.FC = () => {
                         <Text fontSize="3xl" fontWeight="bold">
                           {((selectedPair.ast_similarity || 0) * 100).toFixed(1)}%
                         </Text>
-                        <Text fontSize="sm">Similarity Score (AST)</Text>
-                        <Text fontSize="xs" opacity={0.8}>
-                          Token: {((selectedPair.token_similarity || 0) * 100).toFixed(1)}%
-                        </Text>
+                        <Text fontSize="sm">Similarity Score</Text>
                       </Box>
                       
                       <Text fontSize="sm" color="gray.600">
@@ -726,14 +718,8 @@ const PairComparison: React.FC = () => {
                       </Th>
                       <Th cursor="pointer" onClick={() => handleSort('ast_similarity')} isNumeric>
                         <HStack spacing={1} justify="flex-end">
-                          <Text>AST Similarity</Text>
+                          <Text>Similarity</Text>
                           <SortIcon field="ast_similarity" />
-                        </HStack>
-                      </Th>
-                      <Th cursor="pointer" onClick={() => handleSort('token_similarity')} isNumeric>
-                        <HStack spacing={1} justify="flex-end">
-                          <Text>Token Similarity</Text>
-                          <SortIcon field="token_similarity" />
                         </HStack>
                       </Th>
                       <Th isNumeric>Matches</Th>
@@ -761,11 +747,6 @@ const PairComparison: React.FC = () => {
                           <Badge colorScheme={getSimilarityColor(pair.ast_similarity || 0)} fontSize="md">
                             {((pair.ast_similarity || 0) * 100).toFixed(1)}%
                           </Badge>
-                        </Td>
-                        <Td isNumeric>
-                          <Text fontSize="sm" color="gray.600">
-                            {((pair.token_similarity || 0) * 100).toFixed(1)}%
-                          </Text>
                         </Td>
                         <Td isNumeric>
                           <Text fontSize="sm">{pair.matches?.length || 0}</Text>

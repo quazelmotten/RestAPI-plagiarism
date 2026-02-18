@@ -17,6 +17,7 @@ class PlagiarismTask(Base):
     total_pairs = Column(Integer, nullable=True)  # Total candidate pairs to analyze
     processed_pairs = Column(Integer, nullable=True)  # Pairs completed so far
     progress = Column(Float, nullable=True)  # Progress percentage (0.0 - 1.0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class File(Base):
