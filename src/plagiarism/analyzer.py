@@ -102,17 +102,7 @@ def index_fingerprints(fingerprints):
         index[fp['hash']].append(fp)
     return index
 
-def token_similarity(index_a, index_b):
-    common = set(index_a) & set(index_b)
-    if not common:
-        return 0.0
 
-    Sa = sum(len(index_a[h]) for h in common)
-    Sb = sum(len(index_b[h]) for h in common)
-    Ta = sum(len(v) for v in index_a.values())
-    Tb = sum(len(v) for v in index_b.values())
-
-    return (Sa + Sb) / (Ta + Tb)
 
 # -------------------------------
 # AST Subtree Hashing (decision stage)
@@ -215,10 +205,9 @@ def analyze_plagiarism(
     file1,
     file2,
     language='python',
-    token_threshold=0.15,
     ast_threshold=0.30,
 ):
-    # --- token filter ---
+    # --- token fingerprints for match visualization ---
     tokens1 = tokenize_with_tree_sitter(file1, language)
     tokens2 = tokenize_with_tree_sitter(file2, language)
 
@@ -227,10 +216,6 @@ def analyze_plagiarism(
 
     index1 = index_fingerprints(fps1)
     index2 = index_fingerprints(fps2)
-
-    tok_sim = token_similarity(index1, index2)
-    if tok_sim < token_threshold:
-        return 0.0, []
 
     # --- AST decision ---
     ast1 = extract_ast_hashes(file1, language, min_depth=3)
@@ -258,9 +243,8 @@ def analyze_plagiarism_cached(
     file2_hash: str,
     cache=None,
     language: str = 'python',
-    token_threshold: float = 0.15,
     ast_threshold: float = 0.30,
-) -> Tuple[float, float, List[Dict[str, Any]]]:
+) -> Tuple[float, List[Dict[str, Any]]]:
     """
     Analyze plagiarism with Redis caching support.
 
@@ -271,11 +255,10 @@ def analyze_plagiarism_cached(
         file2_hash: SHA1 hash of second file content
         cache: Redis cache instance (optional)
         language: Programming language
-        token_threshold: Minimum token similarity to proceed to AST check
         ast_threshold: Minimum AST similarity to return matches
 
     Returns:
-        Tuple of (token_similarity, ast_similarity, matches)
+        Tuple of (ast_similarity, matches)
     """
     # Try to get cached data for file1
     tokens1 = None
@@ -296,13 +279,22 @@ def analyze_plagiarism_cached(
             logger.debug(f"Cache miss for file1, computing from scratch: {file1_hash[:16]}...")
 
     # If not in cache, compute from file
-    if tokens1 is None:
-        tokens1 = tokenize_with_tree_sitter(file1_path, language)
-    if fps1 is None:
-        fps1 = winnow_fingerprints(compute_fingerprints(tokens1))
-        index1 = index_fingerprints(fps1)
-    if ast1 is None:
-        ast1 = extract_ast_hashes(file1_path, language, min_depth=3)
+    try:
+        if tokens1 is None:
+            tokens1 = tokenize_with_tree_sitter(file1_path, language)
+            logger.info(f"File1 tokenized: {len(tokens1)} tokens")
+        if fps1 is None:
+            fps1 = winnow_fingerprints(compute_fingerprints(tokens1))
+            index1 = index_fingerprints(fps1)
+            logger.info(f"File1 fingerprints: {len(fps1)} fingerprints")
+        if ast1 is None:
+            ast1 = extract_ast_hashes(file1_path, language, min_depth=3)
+            logger.info(f"File1 AST hashes: {len(ast1)} hashes")
+    except Exception as e:
+        logger.error(f"Error processing file1 ({file1_path}): {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise
 
     # Cache file1 data if we computed it and cache is available
     if cache and cache.is_connected:
@@ -326,38 +318,45 @@ def analyze_plagiarism_cached(
             logger.debug(f"Cache miss for file2, computing from scratch: {file2_hash[:16]}...")
 
     # If not in cache, compute from file
-    if tokens2 is None:
-        tokens2 = tokenize_with_tree_sitter(file2_path, language)
-    if fps2 is None:
-        fps2 = winnow_fingerprints(compute_fingerprints(tokens2))
-        index2 = index_fingerprints(fps2)
-    if ast2 is None:
-        ast2 = extract_ast_hashes(file2_path, language, min_depth=3)
+    try:
+        if tokens2 is None:
+            tokens2 = tokenize_with_tree_sitter(file2_path, language)
+            logger.info(f"File2 tokenized: {len(tokens2)} tokens")
+        if fps2 is None:
+            fps2 = winnow_fingerprints(compute_fingerprints(tokens2))
+            index2 = index_fingerprints(fps2)
+            logger.info(f"File2 fingerprints: {len(fps2)} fingerprints")
+        if ast2 is None:
+            ast2 = extract_ast_hashes(file2_path, language, min_depth=3)
+            logger.info(f"File2 AST hashes: {len(ast2)} hashes")
+    except Exception as e:
+        logger.error(f"Error processing file2 ({file2_path}): {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise
 
     # Cache file2 data if we computed it and cache is available
     if cache and cache.is_connected:
         cache.cache_fingerprints(file2_hash, fps2, ast2, tokens2)
 
-    # --- Token similarity check ---
-    tok_sim = token_similarity(index1, index2)
-    logger.debug(f"Token similarity: {tok_sim:.4f}")
-
-    if tok_sim < token_threshold:
-        logger.debug(f"Token similarity {tok_sim:.4f} below threshold {token_threshold}, skipping AST check")
-        return tok_sim, 0.0, []
-
     # --- AST similarity check ---
+    logger.info(f"AST analysis: file1={file1_path}, file2={file2_path}")
+    logger.info(f"AST hashes count: file1={len(ast1) if ast1 else 0}, file2={len(ast2) if ast2 else 0}")
+    
+    if ast1 and ast2:
+        logger.info(f"AST hash samples: file1={ast1[:3] if len(ast1) >= 3 else ast1}, file2={ast2[:3] if len(ast2) >= 3 else ast2}")
+    
     ast_sim = ast_similarity(ast1, ast2)
-    logger.debug(f"AST similarity: {ast_sim:.4f}")
+    logger.info(f"AST similarity calculated: {ast_sim:.4f} ({ast_sim:.2%})")
 
     if ast_sim < ast_threshold:
-        logger.debug(f"AST similarity {ast_sim:.4f} below threshold {ast_threshold}, returning without matches")
-        return tok_sim, ast_sim, []
+        logger.info(f"AST similarity {ast_sim:.4f} below threshold {ast_threshold}, returning without matches")
+        return ast_sim, []
 
     # --- Find matching regions ---
     matches = merge_adjacent_matches(
         find_matching_regions(index1, index2)
     )
 
-    logger.info(f"Plagiarism analysis complete: tok_sim={tok_sim:.4f}, ast_sim={ast_sim:.4f}, matches={len(matches)}")
-    return tok_sim, ast_sim, matches
+    logger.info(f"Plagiarism analysis complete: ast_sim={ast_sim:.4f}, matches={len(matches)}")
+    return ast_sim, matches

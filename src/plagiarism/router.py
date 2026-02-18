@@ -254,7 +254,6 @@ async def get_all_results(
                 SimilarityResult.id,
                 SimilarityResult.file_a_id,
                 SimilarityResult.file_b_id,
-                SimilarityResult.token_similarity,
                 SimilarityResult.ast_similarity,
                 SimilarityResult.matches,
                 SimilarityResult.created_at,
@@ -291,7 +290,6 @@ async def get_all_results(
                     "id": str(result.file_b_id),
                     "filename": file_map.get(str(result.file_b_id), "Unknown")
                 },
-                "token_similarity": result.token_similarity,
                 "ast_similarity": result.ast_similarity,
                 "matches": result.matches,
                 "created_at": str(result.created_at) if result.created_at else None,
@@ -361,7 +359,6 @@ async def get_plagiarism_results(
                 "id": str(result.file_b_id),
                 "filename": file_map.get(str(result.file_b_id), "Unknown")
             },
-            "token_similarity": result.token_similarity,
             "ast_similarity": result.ast_similarity,
             "matches": result.matches,
             "created_at": str(result.created_at) if result.created_at else None

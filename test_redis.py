@@ -103,17 +103,16 @@ def test_similarity_calculation():
         fingerprint_store.store_token_fingerprints(hash_a, fps_a)
         fingerprint_store.store_token_fingerprints(hash_b, fps_b)
         
-        # Calculate similarity
-        token_sim, matches = fingerprint_store.calculate_token_similarity(hash_a, hash_b)
+        # Find matching regions
+        matches = fingerprint_store.find_matching_regions(hash_a, hash_b)
         
-        print(f"Token similarity: {token_sim:.2%}")
         print(f"Matching regions: {len(matches)}")
         
-        # Expected: 2 common / (3 + 3) total = 4/6 = 0.666...
-        if 0.6 <= token_sim <= 0.7 and len(matches) == 2:
-            print("✅ Similarity calculation correct")
+        # Expected: 2 matching regions (hashes 100 and 200)
+        if len(matches) == 2:
+            print("✅ Matching regions calculation correct")
         else:
-            print(f"❌ Unexpected similarity result")
+            print(f"❌ Unexpected matching regions result")
             return False
         
         # Cleanup
@@ -140,7 +139,6 @@ def test_caching():
         # Store a cached result
         fingerprint_store.cache_similarity_result(
             hash_a, hash_b,
-            token_sim=0.75,
             ast_sim=0.60,
             matches=[{'file1': {'start_line': 1}, 'file2': {'start_line': 5}}]
         )
@@ -150,12 +148,10 @@ def test_caching():
         
         if cached:
             print(f"✅ Result cached successfully")
-            print(f"   Token similarity: {cached['token_similarity']}")
             print(f"   AST similarity: {cached['ast_similarity']}")
             
             # Verify values
-            if (cached['token_similarity'] == 0.75 and 
-                cached['ast_similarity'] == 0.60 and
+            if (cached['ast_similarity'] == 0.60 and
                 len(cached['matches']) == 1):
                 print("✅ Cached values correct")
                 return True

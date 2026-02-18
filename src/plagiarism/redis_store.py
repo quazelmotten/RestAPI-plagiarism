@@ -153,33 +153,26 @@ class RedisFingerprintStore:
     # Similarity Calculation (Using Redis Operations)
     # ============================================================================
     
-    def calculate_token_similarity(self, file_a_hash: str, file_b_hash: str) -> Tuple[float, List[Dict]]:
+    def find_matching_regions(self, file_a_hash: str, file_b_hash: str) -> List[Dict]:
         """
-        Calculate token-based similarity using Redis Set operations.
-        Much faster than Python-based calculation for large datasets.
+        Find matching regions between two files using token fingerprints.
+        Uses Redis Set operations for fast intersection.
         
         Returns:
-            Tuple of (similarity_score, matching_regions)
+            List of matching regions with line/column positions
         """
         key_a = f"{self.TOKEN_FP_PREFIX}:{file_a_hash}"
         key_b = f"{self.TOKEN_FP_PREFIX}:{file_b_hash}"
         
         # Check if both exist
         if not self.redis.exists(f"{key_a}:hashes") or not self.redis.exists(f"{key_b}:hashes"):
-            return 0.0, []
-        
-        # Get counts
-        count_a = int(self.redis.hget(f"{key_a}:count", "total") or 0)
-        count_b = int(self.redis.hget(f"{key_b}:count", "total") or 0)
-        
-        if count_a == 0 or count_b == 0:
-            return 0.0, []
+            return []
         
         # Calculate intersection using Redis SINTER
         common_hashes = self.redis.sinter(f"{key_a}:hashes", f"{key_b}:hashes")
         
         if not common_hashes:
-            return 0.0, []
+            return []
         
         # Get positions for matching hashes
         positions_a = self.redis.hmget(f"{key_a}:positions", list(common_hashes))
@@ -206,11 +199,7 @@ class RedisFingerprintStore:
                     }
                 })
         
-        # Calculate similarity: (common_A + common_B) / (total_A + total_B)
-        common_count = len(common_hashes)
-        similarity = (2 * common_count) / (count_a + count_b)
-        
-        return similarity, matches
+        return matches
     
     def calculate_ast_similarity(self, file_a_hash: str, file_b_hash: str) -> float:
         """
@@ -257,7 +246,7 @@ class RedisFingerprintStore:
     # ============================================================================
     
     def cache_similarity_result(self, file_a_hash: str, file_b_hash: str, 
-                               token_sim: float, ast_sim: float, 
+                               ast_sim: float, 
                                matches: List[Dict]) -> None:
         """Cache similarity calculation result."""
         # Create consistent cache key (sorted hashes)
@@ -265,7 +254,6 @@ class RedisFingerprintStore:
         key = f"{self.SIMILARITY_CACHE_PREFIX}:{hashes[0]}:{hashes[1]}"
         
         data = {
-            'token_similarity': token_sim,
             'ast_similarity': ast_sim,
             'matches': json.dumps(matches)
         }
@@ -283,7 +271,6 @@ class RedisFingerprintStore:
             return None
         
         return {
-            'token_similarity': float(data.get('token_similarity', 0)),
             'ast_similarity': float(data.get('ast_similarity', 0)),
             'matches': json.loads(data.get('matches', '[]'))
         }

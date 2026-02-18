@@ -80,7 +80,6 @@ def save_similarity_result(
     task_id: str,
     file_a_id: str,
     file_b_id: str,
-    token_similarity: float = None,
     ast_similarity: float = None,
     matches = None,
     error: str = None,
@@ -110,7 +109,6 @@ def save_similarity_result(
         task_id=task_id,
         file_a_id=file_a_id,
         file_b_id=file_b_id,
-        token_similarity=token_similarity,
         ast_similarity=ast_similarity,
         matches=matches if error is None else {"error": error}
     )

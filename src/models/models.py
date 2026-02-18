@@ -38,7 +38,6 @@ class SimilarityResult(Base):
     task_id = Column(UUID(as_uuid=True), ForeignKey("plagiarism_tasks.id"), nullable=False)
     file_a_id = Column(UUID(as_uuid=True), ForeignKey("files.id"), nullable=False)
     file_b_id = Column(UUID(as_uuid=True), ForeignKey("files.id"), nullable=False)
-    token_similarity = Column(Float, nullable=True)
     ast_similarity = Column(Float, nullable=True)
     matches = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

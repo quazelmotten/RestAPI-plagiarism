@@ -222,12 +222,8 @@ def process_new_message(
                     language=language
                 )
                 
-                # Handle different return formats
-                if len(result) == 3:
-                    token_similarity, ast_similarity, raw_matches = result
-                else:
-                    ast_similarity, raw_matches = result
-                    token_similarity = ast_similarity
+                # Unpack result: (ast_similarity, raw_matches)
+                ast_similarity, raw_matches = result
                 
                 # Convert matches to JSON-serializable format
                 matches_data = []
@@ -244,7 +240,6 @@ def process_new_message(
                     task_id=task_id,
                     file_a_id=file_a_id,
                     file_b_id=file_b_id,
-                    token_similarity=token_similarity,
                     ast_similarity=ast_similarity,
                     matches=matches_data
                 )
@@ -259,7 +254,7 @@ def process_new_message(
                         processed_pairs=processed_count
                     )
                 
-                log.info(f"  ✓ Saved result {result_id}: token={token_similarity:.4f}, ast={ast_similarity:.4f}")
+                log.info(f"  ✓ Saved result {result_id}: ast={ast_similarity:.4f}")
                 
             except Exception as e:
                 log.error(f"  ✗ Error comparing files {file_a_id} vs {file_b_id}: {e}")

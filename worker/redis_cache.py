@@ -101,6 +101,11 @@ class PlagiarismCache:
         if not self.is_connected:
             return False
 
+        # Validate data before caching - don't cache empty AST hashes
+        if not ast_hashes:
+            logger.warning(f"Not caching empty AST hashes for {file_hash[:16]}...")
+            return False
+
         try:
             pipe = self._redis.pipeline()
 
