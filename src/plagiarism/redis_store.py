@@ -301,10 +301,10 @@ class RedisFingerprintStore:
     def clear_all_fingerprints(self) -> None:
         """Clear all fingerprint data from Redis. USE WITH CAUTION."""
         # Find all fingerprint keys
-        token_keys = self.redis.keys(f"{self.TOKEN_FP_PREFIX}:*")
-        ast_keys = self.redis.keys(f"{self.AST_FP_PREFIX}:*")
-        meta_keys = self.redis.keys(f"{self.FILE_META_PREFIX}:*")
-        cache_keys = self.redis.keys(f"{self.SIMILARITY_CACHE_PREFIX}:*")
+        token_keys = list(self.redis.scan_iter(match=f"{self.TOKEN_FP_PREFIX}:*"))
+        ast_keys = list(self.redis.scan_iter(match=f"{self.AST_FP_PREFIX}:*"))
+        meta_keys = list(self.redis.scan_iter(match=f"{self.FILE_META_PREFIX}:*"))
+        cache_keys = list(self.redis.scan_iter(match=f"{self.SIMILARITY_CACHE_PREFIX}:*"))
         
         all_keys = token_keys + ast_keys + meta_keys + cache_keys
         

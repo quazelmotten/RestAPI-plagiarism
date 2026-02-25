@@ -58,14 +58,7 @@ class PlagiarismCache:
     @property
     def is_connected(self) -> bool:
         """Check if Redis connection is active."""
-        if not self._connected or self._redis is None:
-            return False
-        try:
-            self._redis.ping()
-            return True
-        except:
-            self._connected = False
-            return False
+        return self._connected
 
     def _get_fingerprints_key(self, file_hash: str) -> str:
         """Generate Redis key for fingerprints."""
@@ -286,7 +279,7 @@ class PlagiarismCache:
 
         try:
             info = self._redis.info()
-            keys = self._redis.keys("plagiarism:*")
+            keys = list(self._redis.scan_iter(match="plagiarism:*"))
             fp_keys = [k for k in keys if k.startswith("plagiarism:fp:")]
             ast_keys = [k for k in keys if k.startswith("plagiarism:ast:")]
 

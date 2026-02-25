@@ -178,7 +178,7 @@ class InvertedIndex:
         
         # Count total unique hashes
         hash_pattern = f"{self.HASH_TO_FILES_PREFIX}:{language}:*"
-        hash_keys = self.redis.keys(hash_pattern)
+        hash_keys = list(self.redis.scan_iter(match=hash_pattern))
         
         return {
             "indexed_files": file_count,
@@ -195,8 +195,8 @@ class InvertedIndex:
             language: Programming language to clear
         """
         # Find all keys for this language
-        hash_keys = self.redis.keys(f"{self.HASH_TO_FILES_PREFIX}:{language}:*")
-        file_keys = self.redis.keys(f"{self.FILE_TO_HASHES_PREFIX}:{language}:*")
+        hash_keys = list(self.redis.scan_iter(match=f"{self.HASH_TO_FILES_PREFIX}:{language}:*"))
+        file_keys = list(self.redis.scan_iter(match=f"{self.FILE_TO_HASHES_PREFIX}:{language}:*"))
         
         all_keys = hash_keys + file_keys
         
@@ -211,9 +211,9 @@ class InvertedIndex:
     def clear_all(self) -> None:
         """Clear all entries from the inverted index. USE WITH CAUTION."""
         # Find all inverted index keys
-        hash_keys = self.redis.keys(f"{self.HASH_TO_FILES_PREFIX}:*")
-        file_keys = self.redis.keys(f"{self.FILE_TO_HASHES_PREFIX}:*")
-        meta_keys = self.redis.keys(f"{self.FILE_COUNT_PREFIX}:*")
+        hash_keys = list(self.redis.scan_iter(match=f"{self.HASH_TO_FILES_PREFIX}:*"))
+        file_keys = list(self.redis.scan_iter(match=f"{self.FILE_TO_HASHES_PREFIX}:*"))
+        meta_keys = list(self.redis.scan_iter(match=f"{self.FILE_COUNT_PREFIX}:*"))
         
         all_keys = hash_keys + file_keys + meta_keys
         
