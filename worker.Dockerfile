@@ -17,4 +17,7 @@ COPY ./src /app/src
 # Make src discoverable
 ENV PYTHONPATH=/app/src
 
+# Make CLI executable
+RUN chmod +x /app/src/plagiarism/cli.py
+
 CMD ["python3", "worker.py"]

@@ -1,5 +1,6 @@
 import json
 import logging
+import subprocess
 import sys
 from itertools import combinations
 from pathlib import Path
@@ -7,7 +8,6 @@ from typing import TYPE_CHECKING, Dict, List, Set, Tuple
 
 from crud import update_plagiarism_task, save_similarity_result, get_all_files
 
-from plagiarism.analyzer import analyze_plagiarism_cached, tokenize_with_tree_sitter, winnow_fingerprints, compute_fingerprints
 from redis_cache import cache, connect_cache
 from inverted_index import inverted_index
 
@@ -20,6 +20,63 @@ from config import settings
 from rabbit import get_connection, create_channel
 
 DEFAULT_LOG_FORMAT = "%(module)s:%(lineno)d %(levelname)-6s - %(message)s"
+
+CLI_PATH = Path(__file__).parent.parent / "src" / "plagiarism" / "cli.py"
+
+
+def run_cli_analyze(file1_path: str, file2_path: str, language: str = "python") -> Dict:
+    """
+    Run plagiarism analysis via CLI subprocess.
+    DEPRECATED: Use Redis-based similarity calculation instead.
+    Kept for backwards compatibility and debugging.
+    Returns parsed JSON result.
+    """
+    cmd = [
+        sys.executable,
+        str(CLI_PATH),
+        "analyze",
+        file1_path,
+        file2_path,
+        "--language", language
+    ]
+    
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=300
+    )
+    
+    if result.returncode != 0:
+        raise RuntimeError(f"CLI error: {result.stderr}")
+    
+    return json.loads(result.stdout)
+
+
+def run_cli_fingerprint(file_path: str, language: str = "python") -> Dict:
+    """
+    Run fingerprint extraction via CLI subprocess.
+    Returns parsed JSON result with fingerprints and ast_hashes.
+    """
+    cmd = [
+        sys.executable,
+        str(CLI_PATH),
+        "fingerprint",
+        file_path,
+        "--language", language
+    ]
+    
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=120
+    )
+    
+    if result.returncode != 0:
+        raise RuntimeError(f"CLI error: {result.stderr}")
+    
+    return json.loads(result.stdout)
 
 
 def configure_logging(
@@ -41,6 +98,7 @@ def process_new_message(
     body: bytes,
 ):
     log.info("[ ] Start processing plagiarism task")
+    task_id = None
 
     try:
         message = json.loads(body.decode())
@@ -94,13 +152,30 @@ def process_new_message(
                     log.debug(f"File {file_info.get('filename')} already in inverted index")
                     continue
                 
-                # Compute fingerprints
-                tokens = tokenize_with_tree_sitter(file_path, language)
-                fingerprints = winnow_fingerprints(compute_fingerprints(tokens))
+                # Compute fingerprints via CLI
+                fp_result = run_cli_fingerprint(file_path, language)
+                fingerprints = fp_result.get("fingerprints", [])
+                ast_hashes = fp_result.get("ast_hashes", [])
+                
+                # Convert fingerprint format for inverted index
+                fingerprints_for_index = [
+                    {
+                        "hash": fp["hash"],
+                        "start": tuple(fp["start"]),
+                        "end": tuple(fp["end"])
+                    }
+                    for fp in fingerprints
+                ]
                 
                 # Add to inverted index
-                inverted_index.add_file_fingerprints(file_hash, fingerprints, language)
+                inverted_index.add_file_fingerprints(file_hash, fingerprints_for_index, language)
                 log.debug(f"Indexed {len(fingerprints)} fingerprints for {file_info.get('filename')}")
+                
+                # Cache in Redis
+                tokens_serializable = fp_result.get("tokens", [])
+                tokens = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in tokens_serializable]
+                cache.cache_fingerprints(file_hash, fingerprints_for_index, ast_hashes, tokens)
+                
             except Exception as e:
                 log.warning(f"Failed to index file {file_info.get('filename')}: {e}")
         
@@ -133,9 +208,19 @@ def process_new_message(
                     # Get fingerprints for the new file
                     fingerprints = cache.get_fingerprints(new_file_hash)
                     if fingerprints is None:
-                        tokens = tokenize_with_tree_sitter(new_file_path, language)
-                        fingerprints = winnow_fingerprints(compute_fingerprints(tokens))
-                        cache.cache_fingerprints(new_file_hash, fingerprints, [], tokens)
+                        fp_result = run_cli_fingerprint(new_file_path, language)
+                        fingerprints = [
+                            {
+                                "hash": fp["hash"],
+                                "start": tuple(fp["start"]),
+                                "end": tuple(fp["end"])
+                            }
+                            for fp in fp_result.get("fingerprints", [])
+                        ]
+                        ast_hashes = fp_result.get("ast_hashes", [])
+                        tokens_serializable = fp_result.get("tokens", [])
+                        tokens = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in tokens_serializable]
+                        cache.cache_fingerprints(new_file_hash, fingerprints, ast_hashes, tokens)
                     
                     # Find candidate files using inverted index
                     candidate_hashes = inverted_index.find_candidate_files(fingerprints, language)
@@ -192,16 +277,22 @@ def process_new_message(
         processed_count = 0
         
         def process_pair(file_a, file_b, is_cross_task=False):
-            """Process a single pair of files and update progress."""
+            """Process a single pair of files using Redis-based similarity."""
             nonlocal processed_count
             
             file_a_id = file_a.get("id")
             file_b_id = file_b.get("id")
+            file_a_hash = file_a.get('hash') or file_a.get('file_hash')
+            file_b_hash = file_b.get('hash') or file_b.get('file_hash')
             file_a_path = file_a.get("path") or file_a.get("file_path")
             file_b_path = file_b.get("path") or file_b.get("file_path")
 
             if not file_a_id or not file_b_id or not file_a_path or not file_b_path:
                 log.warning(f"Skipping pair due to missing file info: {file_a}, {file_b}")
+                return
+            
+            if not file_a_hash or not file_b_hash:
+                log.warning(f"Skipping pair due to missing file hash")
                 return
 
             try:
@@ -210,32 +301,61 @@ def process_new_message(
                 log.info(f"[{task_type}] ({processed_count}/{total_pairs_count} - {progress_pct:.1f}%) "
                         f"{file_a.get('filename')} vs {file_b.get('filename')}")
 
-                # Get file hashes for caching
-                file_a_hash = file_a.get('hash') or file_a.get('file_hash')
-                file_b_hash = file_b.get('hash') or file_b.get('file_hash')
+                cached_result = cache.get_cached_similarity(file_a_hash, file_b_hash)
+                if cached_result:
+                    log.info(f"  ✓ Using cached similarity result")
+                    ast_similarity = cached_result['ast_similarity']
+                    matches_data = cached_result['matches']
+                else:
+                    if not cache.has_ast_fingerprints(file_a_hash):
+                        fp_result_a = run_cli_fingerprint(file_a_path, language)
+                        fingerprints_a = [
+                            {
+                                "hash": fp["hash"],
+                                "start": tuple(fp["start"]),
+                                "end": tuple(fp["end"])
+                            }
+                            for fp in fp_result_a.get("fingerprints", [])
+                        ]
+                        ast_hashes_a = fp_result_a.get("ast_hashes", [])
+                        tokens_a = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in fp_result_a.get("tokens", [])]
+                        cache.cache_fingerprints(file_a_hash, fingerprints_a, ast_hashes_a, tokens_a)
+                        log.debug(f"  Computed and cached fingerprints for {file_a.get('filename')}")
+                    
+                    if not cache.has_ast_fingerprints(file_b_hash):
+                        fp_result_b = run_cli_fingerprint(file_b_path, language)
+                        fingerprints_b = [
+                            {
+                                "hash": fp["hash"],
+                                "start": tuple(fp["start"]),
+                                "end": tuple(fp["end"])
+                            }
+                            for fp in fp_result_b.get("fingerprints", [])
+                        ]
+                        ast_hashes_b = fp_result_b.get("ast_hashes", [])
+                        tokens_b = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in fp_result_b.get("tokens", [])]
+                        cache.cache_fingerprints(file_b_hash, fingerprints_b, ast_hashes_b, tokens_b)
+                        log.debug(f"  Computed and cached fingerprints for {file_b.get('filename')}")
 
-                # Run plagiarism analysis with caching
-                result = analyze_plagiarism_cached(
-                    file_a_path, file_b_path,
-                    file_a_hash, file_b_hash,
-                    cache=cache,
-                    language=language
-                )
-                
-                # Unpack result: (ast_similarity, raw_matches)
-                ast_similarity, raw_matches = result
-                
-                # Convert matches to JSON-serializable format
-                matches_data = []
-                for match in raw_matches:
-                    matches_data.append({
-                        "file_a_start_line": match["file1"]["start_line"],
-                        "file_a_end_line": match["file1"]["end_line"],
-                        "file_b_start_line": match["file2"]["start_line"],
-                        "file_b_end_line": match["file2"]["end_line"]
-                    })
+                    ast_similarity = cache.calculate_ast_similarity(file_a_hash, file_b_hash)
+                    log.info(f"  AST similarity (Redis): {ast_similarity:.4f}")
 
-                # Save result to database
+                    matches_data = []
+                    if ast_similarity >= 0.15:
+                        raw_matches = cache.find_matching_regions(file_a_hash, file_b_hash)
+                        merged_matches = cache.merge_adjacent_matches(raw_matches)
+                        
+                        for match in merged_matches:
+                            matches_data.append({
+                                "file_a_start_line": match["file1"]["start_line"],
+                                "file_a_end_line": match["file1"]["end_line"],
+                                "file_b_start_line": match["file2"]["start_line"],
+                                "file_b_end_line": match["file2"]["end_line"]
+                            })
+                    
+                    cache.cache_similarity_result(file_a_hash, file_b_hash, ast_similarity, matches_data)
+                    log.debug(f"  Cached similarity result")
+
                 result_id = save_similarity_result(
                     task_id=task_id,
                     file_a_id=file_a_id,
@@ -246,7 +366,6 @@ def process_new_message(
 
                 processed_count += 1
                 
-                # Update progress in database every 10 pairs or at milestones
                 if processed_count % 10 == 0 or processed_count == total_pairs_count:
                     update_plagiarism_task(
                         task_id=task_id,
@@ -260,7 +379,6 @@ def process_new_message(
                 log.error(f"  ✗ Error comparing files {file_a_id} vs {file_b_id}: {e}")
                 import traceback
                 log.error(traceback.format_exc())
-                # Save failed result
                 save_similarity_result(
                     task_id=task_id,
                     file_a_id=file_a_id,
@@ -303,6 +421,10 @@ def process_new_message(
         import traceback
         log.error(traceback.format_exc())
         # Update status to failed
+        try:
+            task_id
+        except NameError:
+            task_id = None
         if task_id:
             update_plagiarism_task(
                 task_id=task_id,

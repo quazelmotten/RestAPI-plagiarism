@@ -200,6 +200,25 @@ class PlagiarismCache:
             logger.warning(f"Failed to get AST hashes from cache: {e}")
             return None
 
+    def has_ast_fingerprints(self, file_hash: str) -> bool:
+        """
+        Check if AST fingerprints exist for a file.
+
+        Args:
+            file_hash: SHA1 hash of the file content
+
+        Returns:
+            True if AST hashes exist, False otherwise
+        """
+        if not self.is_connected:
+            return False
+
+        try:
+            ast_key = self._get_ast_hashes_key(file_hash)
+            return self._redis.exists(ast_key) > 0
+        except RedisError:
+            return False
+
     def get_tokens(self, file_hash: str) -> Optional[List[Any]]:
         """
         Retrieve cached tokens for a file.
@@ -293,6 +312,214 @@ class PlagiarismCache:
         if total == 0:
             return None
         return hits / total
+
+    def _get_similarity_cache_key(self, file_a_hash: str, file_b_hash: str) -> str:
+        """Generate Redis key for cached similarity result."""
+        hashes = sorted([file_a_hash, file_b_hash])
+        return f"plagiarism:sim:{hashes[0]}:{hashes[1]}"
+
+    def calculate_ast_similarity(self, file_a_hash: str, file_b_hash: str) -> float:
+        """
+        Calculate AST-based similarity using Redis Set operations.
+        Uses Jaccard index: |A ∩ B| / |A ∪ B|
+        
+        Args:
+            file_a_hash: SHA1 hash of first file content
+            file_b_hash: SHA1 hash of second file content
+            
+        Returns:
+            Similarity score between 0.0 and 1.0
+        """
+        if not self.is_connected:
+            return 0.0
+
+        ast_key_a = self._get_ast_hashes_key(file_a_hash)
+        ast_key_b = self._get_ast_hashes_key(file_b_hash)
+
+        ast_a = self.get_ast_hashes(file_a_hash)
+        ast_b = self.get_ast_hashes(file_b_hash)
+
+        if not ast_a or not ast_b:
+            return 0.0
+
+        set_a = set(ast_a)
+        set_b = set(ast_b)
+
+        intersection = len(set_a & set_b)
+        union = len(set_a | set_b)
+
+        if union == 0:
+            return 0.0
+
+        return intersection / union
+
+    def find_matching_regions(self, file_a_hash: str, file_b_hash: str) -> List[Dict[str, Any]]:
+        """
+        Find matching regions between two files using token fingerprints.
+        
+        Args:
+            file_a_hash: SHA1 hash of first file content
+            file_b_hash: SHA1 hash of second file content
+            
+        Returns:
+            List of matching regions with line/column positions
+        """
+        if not self.is_connected:
+            return []
+
+        fps_a = self.get_fingerprints(file_a_hash)
+        fps_b = self.get_fingerprints(file_b_hash)
+
+        if not fps_a or not fps_b:
+            return []
+
+        index_a = {}
+        for fp in fps_a:
+            h = fp['hash']
+            if h not in index_a:
+                index_a[h] = []
+            index_a[h].append(fp)
+
+        index_b = {}
+        for fp in fps_b:
+            h = fp['hash']
+            if h not in index_b:
+                index_b[h] = []
+            index_b[h].append(fp)
+
+        common_hashes = set(index_a.keys()) & set(index_b.keys())
+
+        matches = []
+        for h in common_hashes:
+            for fp_a in index_a[h]:
+                for fp_b in index_b[h]:
+                    matches.append({
+                        'file1': {
+                            'start_line': fp_a['start'][0] if isinstance(fp_a['start'], (list, tuple)) else fp_a['start'][0],
+                            'start_col': fp_a['start'][1] if isinstance(fp_a['start'], (list, tuple)) else fp_a['start'][1],
+                            'end_line': fp_a['end'][0] if isinstance(fp_a['end'], (list, tuple)) else fp_a['end'][0],
+                            'end_col': fp_a['end'][1] if isinstance(fp_a['end'], (list, tuple)) else fp_a['end'][1],
+                        },
+                        'file2': {
+                            'start_line': fp_b['start'][0] if isinstance(fp_b['start'], (list, tuple)) else fp_b['start'][0],
+                            'start_col': fp_b['start'][1] if isinstance(fp_b['start'], (list, tuple)) else fp_b['start'][1],
+                            'end_line': fp_b['end'][0] if isinstance(fp_b['end'], (list, tuple)) else fp_b['end'][0],
+                            'end_col': fp_b['end'][1] if isinstance(fp_b['end'], (list, tuple)) else fp_b['end'][1],
+                        }
+                    })
+
+        return matches
+
+    def cache_similarity_result(
+        self,
+        file_a_hash: str,
+        file_b_hash: str,
+        ast_similarity: float,
+        matches: List[Dict[str, Any]]
+    ) -> bool:
+        """
+        Cache similarity calculation result.
+        
+        Args:
+            file_a_hash: SHA1 hash of first file content
+            file_b_hash: SHA1 hash of second file content
+            ast_similarity: AST similarity score
+            matches: List of matching regions
+            
+        Returns:
+            True if cached successfully, False otherwise
+        """
+        if not self.is_connected:
+            return False
+
+        try:
+            key = self._get_similarity_cache_key(file_a_hash, file_b_hash)
+            data = {
+                'ast_similarity': ast_similarity,
+                'matches': json.dumps(matches),
+                'file_a_hash': file_a_hash,
+                'file_b_hash': file_b_hash
+            }
+            self._redis.hset(key, mapping=data)
+            self._redis.expire(key, settings.redis_ttl)
+            logger.debug(f"Cached similarity result for {file_a_hash[:16]}... vs {file_b_hash[:16]}...")
+            return True
+        except RedisError as e:
+            logger.warning(f"Failed to cache similarity result: {e}")
+            return False
+
+    def get_cached_similarity(
+        self,
+        file_a_hash: str,
+        file_b_hash: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve cached similarity result.
+        
+        Args:
+            file_a_hash: SHA1 hash of first file content
+            file_b_hash: SHA1 hash of second file content
+            
+        Returns:
+            Dict with 'ast_similarity' and 'matches' or None if not cached
+        """
+        if not self.is_connected:
+            return None
+
+        try:
+            key = self._get_similarity_cache_key(file_a_hash, file_b_hash)
+            data = self._redis.hgetall(key)
+            if not data:
+                return None
+
+            return {
+                'ast_similarity': float(data.get('ast_similarity', 0)),
+                'matches': json.loads(data.get('matches', '[]'))
+            }
+        except RedisError as e:
+            logger.warning(f"Failed to get cached similarity: {e}")
+            return None
+
+    def merge_adjacent_matches(
+        self,
+        matches: List[Dict[str, Any]],
+        max_line_gap: int = 1,
+        max_col_gap: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        Merge adjacent or overlapping matches into larger regions.
+        
+        Args:
+            matches: List of match dictionaries
+            max_line_gap: Maximum line gap to consider adjacent
+            max_col_gap: Maximum column gap to consider adjacent
+            
+        Returns:
+            List of merged matches
+        """
+        if not matches:
+            return []
+
+        sorted_matches = sorted(matches, key=lambda m: (
+            m['file1']['start_line'],
+            m['file1']['start_col']
+        ))
+
+        merged = [sorted_matches[0]]
+
+        for m in sorted_matches[1:]:
+            last = merged[-1]
+            if (
+                m['file1']['start_line'] <= last['file1']['end_line'] + max_line_gap and
+                m['file1']['start_col'] - last['file1']['end_col'] <= max_col_gap
+            ):
+                for side in ('file1', 'file2'):
+                    last[side]['end_line'] = max(last[side]['end_line'], m[side]['end_line'])
+                    last[side]['end_col'] = max(last[side]['end_col'], m[side]['end_col'])
+            else:
+                merged.append(m)
+
+        return merged
 
     def warmup_cache_from_database(self, db_session) -> int:
         """
