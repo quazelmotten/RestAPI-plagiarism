@@ -206,6 +206,9 @@ class RedisFingerprintStore:
         Calculate AST-based similarity using Redis Set operations.
         Uses Jaccard index: |A ∩ B| / |A ∪ B|
         
+        Optimization: Uses cached counts instead of SUNION
+        |A ∪ B| = |A| + |B| - |A ∩ B|
+        
         Returns:
             Similarity score between 0.0 and 1.0
         """
@@ -216,14 +219,24 @@ class RedisFingerprintStore:
         if not self.redis.exists(f"{key_a}:hashes") or not self.redis.exists(f"{key_b}:hashes"):
             return 0.0
         
-        # Calculate intersection and union using Redis
-        intersection = self.redis.sinter(f"{key_a}:hashes", f"{key_b}:hashes")
-        union = self.redis.sunion(f"{key_a}:hashes", f"{key_b}:hashes")
+        # Get cached counts (O(1) operation)
+        count_a = int(self.redis.get(f"{key_a}:count") or 0)
+        count_b = int(self.redis.get(f"{key_b}:count") or 0)
         
-        if not union:
+        if count_a == 0 or count_b == 0:
             return 0.0
         
-        return len(intersection) / len(union)
+        # Calculate intersection using Redis SINTER
+        intersection = self.redis.sinter(f"{key_a}:hashes", f"{key_b}:hashes")
+        intersection_size = len(intersection)
+        
+        # Calculate union size using formula: |A ∪ B| = |A| + |B| - |A ∩ B|
+        union_size = count_a + count_b - intersection_size
+        
+        if union_size == 0:
+            return 0.0
+        
+        return intersection_size / union_size
     
     # ============================================================================
     # File Metadata
