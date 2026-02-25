@@ -1,10 +1,13 @@
+import functools
 import json
 import logging
 import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from itertools import combinations
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Set, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
 from crud import update_plagiarism_task, save_similarity_result, get_all_files
 
@@ -15,6 +18,7 @@ from inverted_index import inverted_index
 if TYPE_CHECKING:
     from pika.adapters.blocking_connection import BlockingChannel
     from pika.spec import Basic, BasicProperties
+    import pika
 
 from config import settings
 from rabbit import get_connection, create_channel
@@ -22,6 +26,10 @@ from rabbit import get_connection, create_channel
 DEFAULT_LOG_FORMAT = "%(module)s:%(lineno)d %(levelname)-6s - %(message)s"
 
 CLI_PATH = Path(__file__).parent.parent / "src" / "plagiarism" / "cli.py"
+
+connection: Optional["pika.BlockingConnection"] = None
+executor: Optional[ThreadPoolExecutor] = None
+log = logging.getLogger(__name__)
 
 
 def run_cli_analyze(file1_path: str, file2_path: str, language: str = "python") -> Dict:
@@ -91,13 +99,41 @@ def configure_logging(
     logging.getLogger("pika").setLevel(pika_log_level)
 
 
-def process_new_message(
-    ch: "BlockingChannel",
-    method: "Basic.Deliver",
-    properties: "BasicProperties",
+def ack_message(channel: "BlockingChannel", delivery_tag: int) -> None:
+    """
+    Acknowledge a message from RabbitMQ.
+    Must be called from the connection's thread via add_callback_threadsafe.
+    """
+    if channel.is_open:
+        channel.basic_ack(delivery_tag=delivery_tag)
+    else:
+        log.warning(f"Channel closed, cannot ack message {delivery_tag}")
+
+
+def reject_message(channel: "BlockingChannel", delivery_tag: int, requeue: bool = False) -> None:
+    """
+    Reject a message from RabbitMQ.
+    Must be called from the connection's thread via add_callback_threadsafe.
+    """
+    if channel.is_open:
+        channel.basic_reject(delivery_tag=delivery_tag, requeue=requeue)
+    else:
+        log.warning(f"Channel closed, cannot reject message {delivery_tag}")
+
+
+def process_task(
     body: bytes,
-):
-    log.info("[ ] Start processing plagiarism task")
+    channel: "BlockingChannel",
+    delivery_tag: int,
+) -> None:
+    """
+    Process a plagiarism detection task in a worker thread.
+    
+    Args:
+        body: Raw message body
+        channel: RabbitMQ channel (for ack/reject via callback)
+        delivery_tag: Message delivery tag for ack/reject
+    """
     task_id = None
 
     try:
@@ -106,39 +142,40 @@ def process_new_message(
         
         if not task_id:
             log.error("No task_id in message")
-            ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
+            if connection:
+                connection.add_callback_threadsafe(
+                    functools.partial(reject_message, channel, delivery_tag, False)
+                )
             return
 
-        log.info(f"Processing task {task_id}")
+        log.info(f"[Task {task_id}] Start processing plagiarism task")
         
-        # Extract file paths and language from message
         files = message.get("files", [])
         language = message.get("language", "python")
         
         if len(files) < 2:
-            log.error("Need at least 2 files for plagiarism check")
+            log.error(f"[Task {task_id}] Need at least 2 files for plagiarism check")
             update_plagiarism_task(
                 task_id=task_id,
                 status="failed",
                 error="Need at least 2 files for plagiarism check"
             )
-            ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
+            if connection:
+                connection.add_callback_threadsafe(
+                    functools.partial(reject_message, channel, delivery_tag, False)
+                )
             return
         
-        # Update status to processing
         update_plagiarism_task(
             task_id=task_id,
             status="processing"
         )
 
-        # Get all existing files from other tasks for cross-task comparison
-        log.info("Fetching existing files from other tasks for cross-task comparison...")
+        log.info(f"[Task {task_id}] Fetching existing files from other tasks...")
         existing_files = get_all_files(exclude_task_id=task_id)
-        log.info(f"Found {len(existing_files)} existing files from other tasks")
+        log.info(f"[Task {task_id}] Found {len(existing_files)} existing files from other tasks")
         
-        # Index fingerprints for all new files in the inverted index
-        # This enables fast candidate lookup for future tasks
-        log.info("Indexing fingerprints for new files in inverted index...")
+        log.info(f"[Task {task_id}] Indexing fingerprints for new files...")
         for file_info in files:
             file_hash = file_info.get('hash') or file_info.get('file_hash')
             file_path = file_info.get('path') or file_info.get('file_path')
@@ -147,17 +184,14 @@ def process_new_message(
                 continue
                 
             try:
-                # Check if already in inverted index
                 if inverted_index.get_file_fingerprints(file_hash, language):
-                    log.debug(f"File {file_info.get('filename')} already in inverted index")
+                    log.debug(f"[Task {task_id}] File {file_info.get('filename')} already in inverted index")
                     continue
                 
-                # Compute fingerprints via CLI
                 fp_result = run_cli_fingerprint(file_path, language)
                 fingerprints = fp_result.get("fingerprints", [])
                 ast_hashes = fp_result.get("ast_hashes", [])
                 
-                # Convert fingerprint format for inverted index
                 fingerprints_for_index = [
                     {
                         "hash": fp["hash"],
@@ -167,35 +201,28 @@ def process_new_message(
                     for fp in fingerprints
                 ]
                 
-                # Add to inverted index
                 inverted_index.add_file_fingerprints(file_hash, fingerprints_for_index, language)
-                log.debug(f"Indexed {len(fingerprints)} fingerprints for {file_info.get('filename')}")
+                log.debug(f"[Task {task_id}] Indexed {len(fingerprints)} fingerprints for {file_info.get('filename')}")
                 
-                # Cache in Redis
                 tokens_serializable = fp_result.get("tokens", [])
                 tokens = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in tokens_serializable]
                 cache.cache_fingerprints(file_hash, fingerprints_for_index, ast_hashes, tokens)
                 
             except Exception as e:
-                log.warning(f"Failed to index file {file_info.get('filename')}: {e}")
+                log.warning(f"[Task {task_id}] Failed to index file {file_info.get('filename')}: {e}")
         
-        log.info("Finished indexing fingerprints for new files")
+        log.info(f"[Task {task_id}] Finished indexing fingerprints")
 
-        # PHASE 1: Count all pairs upfront
-        log.info("=" * 70)
-        log.info("PHASE 1: Counting total candidate pairs...")
-        log.info("=" * 70)
+        log.info(f"[Task {task_id}] Counting total candidate pairs...")
         
         intra_task_pairs: List[Tuple[dict, dict]] = []
         cross_task_pairs: List[Tuple[dict, dict]] = []
         
-        # 1. Count intra-task pairs (within the new task)
         for file_a, file_b in combinations(files, 2):
             intra_task_pairs.append((file_a, file_b))
         
-        log.info(f"Intra-task pairs (within this task): {len(intra_task_pairs)}")
+        log.info(f"[Task {task_id}] Intra-task pairs: {len(intra_task_pairs)}")
         
-        # 2. Count cross-task pairs (against existing files using inverted index)
         if existing_files:
             for new_file in files:
                 new_file_hash = new_file.get('hash') or new_file.get('file_hash')
@@ -205,7 +232,6 @@ def process_new_message(
                     continue
                 
                 try:
-                    # Get fingerprints for the new file
                     fingerprints = cache.get_fingerprints(new_file_hash)
                     if fingerprints is None:
                         fp_result = run_cli_fingerprint(new_file_path, language)
@@ -222,45 +248,34 @@ def process_new_message(
                         tokens = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in tokens_serializable]
                         cache.cache_fingerprints(new_file_hash, fingerprints, ast_hashes, tokens)
                     
-                    # Find candidate files using inverted index
                     candidate_hashes = inverted_index.find_candidate_files(fingerprints, language)
                     
                     if not candidate_hashes:
-                        log.info(f"  {new_file.get('filename')}: 0 candidates (all {len(existing_files)} files filtered out)")
+                        log.info(f"[Task {task_id}] {new_file.get('filename')}: 0 candidates")
                         continue
                     
-                    # Get candidate files
                     candidate_files = [
                         f for f in existing_files 
                         if (f.get('hash') or f.get('file_hash')) in candidate_hashes
                     ]
                     
-                    # Add pairs to cross-task list
                     for existing_file in candidate_files:
                         cross_task_pairs.append((new_file, existing_file))
                     
                     skipped = len(existing_files) - len(candidate_files)
-                    log.info(f"  {new_file.get('filename')}: {len(candidate_files)} candidates (filtered {skipped} files)")
+                    log.info(f"[Task {task_id}] {new_file.get('filename')}: {len(candidate_files)} candidates")
                     
                 except Exception as e:
-                    log.error(f"Error counting candidates for {new_file.get('filename')}: {e}")
-                    # Fallback: count all existing files as candidates
+                    log.error(f"[Task {task_id}] Error counting candidates for {new_file.get('filename')}: {e}")
                     for existing_file in existing_files:
                         cross_task_pairs.append((new_file, existing_file))
-                    log.warning(f"  {new_file.get('filename')}: Fallback to {len(existing_files)} candidates")
         
-        log.info(f"Cross-task pairs (filtered candidates): {len(cross_task_pairs)}")
+        log.info(f"[Task {task_id}] Cross-task pairs: {len(cross_task_pairs)}")
         
-        # Calculate total
         total_pairs_count = len(intra_task_pairs) + len(cross_task_pairs)
         
-        log.info("=" * 70)
-        log.info(f"TOTAL CANDIDATE PAIRS TO ANALYZE: {total_pairs_count}")
-        log.info(f"  - Intra-task: {len(intra_task_pairs)}")
-        log.info(f"  - Cross-task: {len(cross_task_pairs)}")
-        log.info("=" * 70)
+        log.info(f"[Task {task_id}] TOTAL PAIRS TO ANALYZE: {total_pairs_count}")
         
-        # Store total_pairs in database
         update_plagiarism_task(
             task_id=task_id,
             status="processing",
@@ -268,16 +283,9 @@ def process_new_message(
             processed_pairs=0
         )
         
-        # PHASE 2: Process all pairs
-        log.info("")
-        log.info("=" * 70)
-        log.info("PHASE 2: Processing pairs with progress tracking...")
-        log.info("=" * 70)
-        
         processed_count = 0
         
         def process_pair(file_a, file_b, is_cross_task=False):
-            """Process a single pair of files using Redis-based similarity."""
             nonlocal processed_count
             
             file_a_id = file_a.get("id")
@@ -288,22 +296,22 @@ def process_new_message(
             file_b_path = file_b.get("path") or file_b.get("file_path")
 
             if not file_a_id or not file_b_id or not file_a_path or not file_b_path:
-                log.warning(f"Skipping pair due to missing file info: {file_a}, {file_b}")
+                log.warning(f"[Task {task_id}] Skipping pair due to missing file info")
                 return
             
             if not file_a_hash or not file_b_hash:
-                log.warning(f"Skipping pair due to missing file hash")
+                log.warning(f"[Task {task_id}] Skipping pair due to missing file hash")
                 return
 
             try:
                 task_type = "cross" if is_cross_task else "intra"
                 progress_pct = (processed_count / total_pairs_count * 100) if total_pairs_count > 0 else 0
-                log.info(f"[{task_type}] ({processed_count}/{total_pairs_count} - {progress_pct:.1f}%) "
+                log.info(f"[Task {task_id}] [{task_type}] ({processed_count}/{total_pairs_count} - {progress_pct:.1f}%) "
                         f"{file_a.get('filename')} vs {file_b.get('filename')}")
 
                 cached_result = cache.get_cached_similarity(file_a_hash, file_b_hash)
                 if cached_result:
-                    log.info(f"  ✓ Using cached similarity result")
+                    log.info(f"[Task {task_id}]   Using cached similarity result")
                     ast_similarity = cached_result['ast_similarity']
                     matches_data = cached_result['matches']
                 else:
@@ -320,7 +328,6 @@ def process_new_message(
                         ast_hashes_a = fp_result_a.get("ast_hashes", [])
                         tokens_a = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in fp_result_a.get("tokens", [])]
                         cache.cache_fingerprints(file_a_hash, fingerprints_a, ast_hashes_a, tokens_a)
-                        log.debug(f"  Computed and cached fingerprints for {file_a.get('filename')}")
                     
                     if not cache.has_ast_fingerprints(file_b_hash):
                         fp_result_b = run_cli_fingerprint(file_b_path, language)
@@ -335,10 +342,9 @@ def process_new_message(
                         ast_hashes_b = fp_result_b.get("ast_hashes", [])
                         tokens_b = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in fp_result_b.get("tokens", [])]
                         cache.cache_fingerprints(file_b_hash, fingerprints_b, ast_hashes_b, tokens_b)
-                        log.debug(f"  Computed and cached fingerprints for {file_b.get('filename')}")
 
                     ast_similarity = cache.calculate_ast_similarity(file_a_hash, file_b_hash)
-                    log.info(f"  AST similarity (Redis): {ast_similarity:.4f}")
+                    log.info(f"[Task {task_id}]   AST similarity (Redis): {ast_similarity:.4f}")
 
                     matches_data = []
                     if ast_similarity >= 0.15:
@@ -354,7 +360,6 @@ def process_new_message(
                             })
                     
                     cache.cache_similarity_result(file_a_hash, file_b_hash, ast_similarity, matches_data)
-                    log.debug(f"  Cached similarity result")
 
                 result_id = save_similarity_result(
                     task_id=task_id,
@@ -373,10 +378,10 @@ def process_new_message(
                         processed_pairs=processed_count
                     )
                 
-                log.info(f"  ✓ Saved result {result_id}: ast={ast_similarity:.4f}")
+                log.info(f"[Task {task_id}]   Saved result {result_id}: ast={ast_similarity:.4f}")
                 
             except Exception as e:
-                log.error(f"  ✗ Error comparing files {file_a_id} vs {file_b_id}: {e}")
+                log.error(f"[Task {task_id}]   Error comparing files {file_a_id} vs {file_b_id}: {e}")
                 import traceback
                 log.error(traceback.format_exc())
                 save_similarity_result(
@@ -387,85 +392,106 @@ def process_new_message(
                 )
                 processed_count += 1
 
-        # Process intra-task pairs
         if intra_task_pairs:
-            log.info(f"\nProcessing {len(intra_task_pairs)} intra-task pairs...")
+            log.info(f"[Task {task_id}] Processing {len(intra_task_pairs)} intra-task pairs...")
             for file_a, file_b in intra_task_pairs:
                 process_pair(file_a, file_b, is_cross_task=False)
         
-        # Process cross-task pairs
         if cross_task_pairs:
-            log.info(f"\nProcessing {len(cross_task_pairs)} cross-task pairs...")
+            log.info(f"[Task {task_id}] Processing {len(cross_task_pairs)} cross-task pairs...")
             for new_file, existing_file in cross_task_pairs:
                 process_pair(new_file, existing_file, is_cross_task=True)
         
-        # Update status to completed
         update_plagiarism_task(
             task_id=task_id,
             status="completed",
-            similarity=None,
+            similarity=0.0,
             matches={"total_pairs": total_pairs_count, "processed_pairs": processed_count},
             total_pairs=total_pairs_count,
             processed_pairs=processed_count
         )
         
-        log.info("")
-        log.info("=" * 70)
-        log.info(f"+++ Task {task_id} COMPLETED: {processed_count}/{total_pairs_count} pairs analyzed")
-        log.info("=" * 70)
+        log.info(f"[Task {task_id}] COMPLETED: {processed_count}/{total_pairs_count} pairs analyzed")
         
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+        if connection:
+            connection.add_callback_threadsafe(
+                functools.partial(ack_message, channel, delivery_tag)
+            )
         
     except Exception as e:
         log.error(f"Error processing message: {e}")
         import traceback
         log.error(traceback.format_exc())
-        # Update status to failed
-        try:
-            task_id
-        except NameError:
-            task_id = None
         if task_id:
             update_plagiarism_task(
                 task_id=task_id,
                 status="failed",
                 error=str(e)
             )
-        ch.basic_reject(delivery_tag=method.delivery_tag, requeue=False)
+        if connection:
+            connection.add_callback_threadsafe(
+                functools.partial(reject_message, channel, delivery_tag, False)
+            )
 
-    log.info("[X] Finished processing task")
+
+def on_message(
+    ch: "BlockingChannel",
+    method: "Basic.Deliver",
+    properties: "BasicProperties",
+    body: bytes,
+) -> None:
+    """
+    Callback for incoming RabbitMQ messages.
+    Submits the task to the thread pool for processing.
+    The main thread returns immediately to handle heartbeats.
+    """
+    log.info(f"Received message, submitting to thread pool...")
+    if executor:
+        executor.submit(
+            process_task,
+            body,
+            ch,
+            method.delivery_tag,
+        )
+    else:
+        log.error("Thread pool executor not initialized!")
 
 
 def consume_messages(ch: "BlockingChannel") -> None:
-    log.info("[X] Waiting for plagiarism tasks ...")
+    """
+    Start consuming messages from RabbitMQ.
+    The prefetch_count controls how many messages can be processed concurrently.
+    """
+    log.info("[X] Waiting for plagiarism tasks...")
+    ch.basic_qos(prefetch_count=settings.worker_concurrency)
     ch.basic_consume(
         queue=settings.rmq_queue_name,
-        on_message_callback=process_new_message,
+        on_message_callback=on_message,
     )
-    ch.basic_qos(prefetch_count=1)
     ch.start_consuming()
 
 
 if __name__ == "__main__":
     configure_logging(level=logging.INFO)
-    log = logging.getLogger(__name__)
 
-    # Connect to Redis cache
     log.info("Connecting to Redis cache...")
     redis_connected = connect_cache()
     if redis_connected:
-        log.info("✓ Redis cache connected and ready")
+        log.info("Redis cache connected and ready")
     else:
-        log.warning("⚠ Redis cache unavailable, running without caching")
+        log.warning("Redis cache unavailable, running without caching")
     
-    # Check inverted index stats
     try:
         stats = inverted_index.get_stats()
         log.info(f"Inverted index stats: {stats['indexed_files']} files indexed, "
                 f"{stats['unique_hashes']} unique hashes, "
                 f"threshold={stats['min_overlap_threshold']:.0%}")
     except Exception as e:
-        log.warning(f"⚠ Could not get inverted index stats: {e}")
+        log.warning(f"Could not get inverted index stats: {e}")
+
+    max_workers = getattr(settings, 'worker_concurrency', 4)
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    log.info(f"Thread pool executor started with {max_workers} workers")
 
     max_retries = 30
     retry_delay = 2
@@ -473,7 +499,8 @@ if __name__ == "__main__":
     for attempt in range(max_retries):
         try:
             log.info(f"Connecting to RabbitMQ (attempt {attempt + 1}/{max_retries})...")
-            with get_connection() as connection:
+            connection = get_connection()
+            with connection:
                 with connection.channel() as channel:
                     create_channel(channel=channel)
                     log.info("Successfully connected to RabbitMQ")
@@ -486,4 +513,5 @@ if __name__ == "__main__":
                 time.sleep(retry_delay)
             else:
                 log.error("Max retries reached. Exiting.")
+                executor.shutdown(wait=False)
                 raise

@@ -9,19 +9,28 @@ if TYPE_CHECKING:
 from config import settings
 
 
-connection_params = pika.ConnectionParameters(
-    host=settings.rmq_host,
-    port=settings.rmq_port,
-    credentials=pika.PlainCredentials(
-        username=settings.rmq_user,
-        password=settings.rmq_pass
-    ),
-)
+def get_connection_params() -> pika.ConnectionParameters:
+    """
+    Get RabbitMQ connection parameters with heartbeat configuration.
+    
+    Heartbeat is set to 600 seconds (10 minutes) to allow long-running tasks.
+    The main thread will handle heartbeats while worker threads process messages.
+    """
+    return pika.ConnectionParameters(
+        host=settings.rmq_host,
+        port=settings.rmq_port,
+        credentials=pika.PlainCredentials(
+            username=settings.rmq_user,
+            password=settings.rmq_pass
+        ),
+        heartbeat=600,
+        blocked_connection_timeout=300,
+    )
 
 
 def get_connection() -> pika.BlockingConnection:
     return pika.BlockingConnection(
-        parameters=connection_params,
+        parameters=get_connection_params(),
     )
 
 
