@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from config import settings
+from src.config import settings
 
 DATABASE_URL = (
     f"postgresql+asyncpg://{settings.db_user}:{settings.db_pass}@"

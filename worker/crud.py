@@ -9,7 +9,7 @@ from uuid import UUID
 
 from sqlalchemy import select, update
 
-from models import PlagiarismTask, SimilarityResult, File
+from src.models import PlagiarismTask, SimilarityResult, File
 from database import get_session
 
 

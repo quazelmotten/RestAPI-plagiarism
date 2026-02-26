@@ -3,7 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
-from config import settings
+from src.config import settings
 
 DATABASE_URL = (
     f"postgresql+psycopg2://{settings.db_user}:{settings.db_pass}@"

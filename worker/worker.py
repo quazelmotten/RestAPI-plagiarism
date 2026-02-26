@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from pika.spec import Basic, BasicProperties
     import pika
 
-from config import settings
+from src.config import settings
 from rabbit import get_connection, create_channel
 
 DEFAULT_LOG_FORMAT = "%(module)s:%(lineno)d %(levelname)-6s - %(message)s"

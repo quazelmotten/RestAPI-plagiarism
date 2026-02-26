@@ -8,7 +8,7 @@ from typing import List, Dict, Set, Optional, Any
 from collections import Counter
 
 from redis_client import get_redis
-from config import settings
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 

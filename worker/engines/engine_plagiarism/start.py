@@ -1,7 +1,6 @@
 from worker.rabbit import consume
 from worker.database import SessionLocal
-from worker.models import PlagiarismTask
-from worker.plagiarism.analyzer import analyze_plagiarism
+from src.plagiarism.analyzer import analyze_plagiarism
 
 def handle_message(message):
     db = SessionLocal()

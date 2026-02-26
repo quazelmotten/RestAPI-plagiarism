@@ -91,7 +91,8 @@ class Settings(BaseSettings):
     redis_port: int = Field(default=6379, validation_alias="REDIS_PORT")
     redis_db: int = Field(default=0, validation_alias="REDIS_DB")
     redis_password: Optional[str] = Field(default=None, validation_alias="REDIS_PASSWORD")
-    redis_fingerprint_ttl: int = Field(default=604800, validation_alias="REDIS_FINGERPRINT_TTL")  # 7 days
+    redis_fingerprint_ttl: int = Field(default=604800, validation_alias="REDIS_FINGERPRINT_TTL")
+    redis_ttl: int = Field(default=86400, validation_alias="REDIS_TTL")
     redis_use_ssl: bool = Field(default=False, validation_alias="REDIS_USE_SSL")
     
     # =============================================================================

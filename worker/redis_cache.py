@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any
 import redis
 from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
 
-from config import settings
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 

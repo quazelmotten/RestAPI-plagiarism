@@ -11,7 +11,7 @@ from alembic import context
 sys.path.append(os.path.join(sys.path[0], ""))
 
 from models import *
-from config import settings
+from src.config import settings
 from database import metadata, Base
 
 

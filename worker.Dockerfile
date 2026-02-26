@@ -15,7 +15,7 @@ COPY ./worker ./
 COPY ./src /app/src
 
 # Make src discoverable
-ENV PYTHONPATH=/app/src
+ENV PYTHONPATH=/app
 
 # Make CLI executable
 RUN chmod +x /app/src/plagiarism/cli.py

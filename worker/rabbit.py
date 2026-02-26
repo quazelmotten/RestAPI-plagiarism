@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from pika.spec import Basic, BasicProperties
 
 
-from config import settings
+from src.config import settings
 
 
 def get_connection_params() -> pika.ConnectionParameters:
