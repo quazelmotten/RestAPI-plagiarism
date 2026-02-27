@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
-from typing import List
+from typing import List, Optional
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,9 +9,39 @@ from rabbit import publish_message
 from s3_storage import s3_storage
 from sqlalchemy import select, and_, func
 
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'worker'))
+from redis_cache import cache as redis_cache
+
 router = APIRouter(prefix="/plagiarism", tags=["Plagiarism"])
 
 BUCKET_NAME = "plagiarism-files"
+
+
+def calculate_matches(file_a_hash: str, file_b_hash: str) -> List[dict]:
+    """Calculate matching regions on-demand using Redis cache."""
+    if not redis_cache.is_connected:
+        return []
+    
+    try:
+        raw_matches = redis_cache.find_matching_regions(file_a_hash, file_b_hash)
+        if not raw_matches:
+            return []
+        
+        merged_matches = redis_cache.merge_adjacent_matches(raw_matches)
+        
+        return [
+            {
+                "file_a_start_line": match["file1"]["start_line"],
+                "file_a_end_line": match["file1"]["end_line"],
+                "file_b_start_line": match["file2"]["start_line"],
+                "file_b_end_line": match["file2"]["end_line"]
+            }
+            for match in merged_matches
+        ]
+    except Exception:
+        return []
 
 @router.post("/check")
 async def check_plagiarism(
@@ -256,10 +286,10 @@ async def get_all_results(
                 SimilarityResult.file_a_id,
                 SimilarityResult.file_b_id,
                 SimilarityResult.ast_similarity,
-                SimilarityResult.matches,
                 SimilarityResult.created_at,
                 PlagiarismTask.id.label("task_id"),
                 FileModel.filename.label("file_a_filename"),
+                FileModel.file_hash.label("file_a_hash"),
             )
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
             .join(FileModel, SimilarityResult.file_a_id == FileModel.id)
@@ -268,18 +298,26 @@ async def get_all_results(
         
         results = results_result.all()
         
-        # Get file_b filenames in a separate query
+        # Get file_b info in a separate query
         file_b_ids = [row.file_b_id for row in results]
         files_result = await db.execute(
-            select(FileModel.id, FileModel.filename)
+            select(FileModel.id, FileModel.filename, FileModel.file_hash)
             .where(FileModel.id.in_(file_b_ids))
         )
-        file_map = {str(row.id): row.filename for row in files_result.all()}
+        file_b_map = {str(row.id): {"filename": row.filename, "file_hash": row.file_hash} for row in files_result.all()}
         
         formatted_results = []
         for result in results:
             task_id = str(result.task_id)
             task_progress = tasks_map.get(task_id, {})
+            
+            file_a_hash = result.file_a_hash
+            file_b_info = file_b_map.get(str(result.file_b_id), {})
+            file_b_hash = file_b_info.get("file_hash")
+            
+            matches = []
+            if file_a_hash and file_b_hash and result.ast_similarity and result.ast_similarity >= 0.15:
+                matches = calculate_matches(file_a_hash, file_b_hash)
             
             formatted_results.append({
                 "id": str(result.id),
@@ -289,10 +327,10 @@ async def get_all_results(
                 },
                 "file_b": {
                     "id": str(result.file_b_id),
-                    "filename": file_map.get(str(result.file_b_id), "Unknown")
+                    "filename": file_b_info.get("filename", "Unknown")
                 },
                 "ast_similarity": result.ast_similarity,
-                "matches": result.matches,
+                "matches": matches,
                 "created_at": str(result.created_at) if result.created_at else None,
                 "task_id": task_id,
                 "task_progress": task_progress
@@ -344,24 +382,33 @@ async def get_plagiarism_results(
             select(FileModel).where(FileModel.id.in_(file_ids))
         )
         all_files = files_result.scalars().all()
-        file_map = {str(f.id): f.filename for f in all_files}
+        file_map = {str(f.id): {"filename": f.filename, "file_hash": f.file_hash} for f in all_files}
     else:
         file_map = {}
     
     # Format results
     formatted_results = []
     for result in results:
+        file_a_info = file_map.get(str(result.file_a_id), {})
+        file_b_info = file_map.get(str(result.file_b_id), {})
+        
+        matches = []
+        file_a_hash = file_a_info.get("file_hash")
+        file_b_hash = file_b_info.get("file_hash")
+        if file_a_hash and file_b_hash and result.ast_similarity and result.ast_similarity >= 0.15:
+            matches = calculate_matches(file_a_hash, file_b_hash)
+        
         formatted_results.append({
             "file_a": {
                 "id": str(result.file_a_id),
-                "filename": file_map.get(str(result.file_a_id), "Unknown")
+                "filename": file_a_info.get("filename", "Unknown")
             },
             "file_b": {
                 "id": str(result.file_b_id),
-                "filename": file_map.get(str(result.file_b_id), "Unknown")
+                "filename": file_b_info.get("filename", "Unknown")
             },
             "ast_similarity": result.ast_similarity,
-            "matches": result.matches,
+            "matches": matches,
             "created_at": str(result.created_at) if result.created_at else None
         })
     

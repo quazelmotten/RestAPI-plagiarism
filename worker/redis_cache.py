@@ -93,12 +93,18 @@ class PlagiarismCache:
 
             token_key = self._get_token_key(file_hash)
             pipe.hset(f"{token_key}:count", "total", len(fingerprints))
+
+            positions_map: Dict[str, List[List[int]]] = {}
             for fp in fingerprints:
                 hash_val = str(fp['hash'])
-                pipe.hset(f"{token_key}:positions", hash_val, json.dumps({
-                    'start': fp['start'], 'end': fp['end']
-                }))
+                if hash_val not in positions_map:
+                    positions_map[hash_val] = []
+                positions_map[hash_val].append([fp['start'], fp['end']])
                 pipe.sadd(f"{token_key}:hashes", hash_val)
+
+            for hash_val, pos_list in positions_map.items():
+                pipe.hset(f"{token_key}:positions", hash_val, json.dumps(pos_list))
+
             pipe.expire(f"{token_key}:count", self.ttl)
             pipe.expire(f"{token_key}:positions", self.ttl)
             pipe.expire(f"{token_key}:hashes", self.ttl)
@@ -157,11 +163,12 @@ class PlagiarismCache:
                 pos_json = positions_raw.get(h)
                 if pos_json:
                     pos = json.loads(pos_json)
-                    fingerprints.append({
-                        'hash': int(h) if h.isdigit() else h,
-                        'start': pos['start'],
-                        'end': pos['end']
-                    })
+                    for p in pos:
+                        fingerprints.append({
+                            'hash': int(h) if h.isdigit() else h,
+                            'start': p[0],
+                            'end': p[1]
+                        })
             return fingerprints if fingerprints else None
         except RedisError:
             return None
@@ -187,8 +194,7 @@ class PlagiarismCache:
         if count_a == 0 or count_b == 0:
             return 0.0
 
-        intersection = self._redis.sinter(f"{key_a}:hashes", f"{key_b}:hashes")
-        intersection_size = len(intersection)
+        intersection_size = self._redis.sintercard(keyA, keyB)
         union_size = count_a + count_b - intersection_size
 
         if union_size == 0:
@@ -215,28 +221,29 @@ class PlagiarismCache:
         if not common_hashes:
             return []
 
-        positions_a = self._redis.hmget(f"{key_a}:positions", list(common_hashes))
-        positions_b = self._redis.hmget(f"{key_b}:positions", list(common_hashes))
+        positions_a_raw = self._redis.hmget(f"{key_a}:positions", list(common_hashes))
+        positions_b_raw = self._redis.hmget(f"{key_b}:positions", list(common_hashes))
 
         matches = []
-        for hash_val, pos_a_json, pos_b_json in zip(common_hashes, positions_a, positions_b):
+        for hash_val, pos_a_json, pos_b_json in zip(common_hashes, positions_a_raw, positions_b_raw):
             if pos_a_json and pos_b_json:
-                pos_a = json.loads(pos_a_json)
-                pos_b = json.loads(pos_b_json)
-                matches.append({
-                    'file1': {
-                        'start_line': pos_a['start'][0],
-                        'start_col': pos_a['start'][1],
-                        'end_line': pos_a['end'][0],
-                        'end_col': pos_a['end'][1],
-                    },
-                    'file2': {
-                        'start_line': pos_b['start'][0],
-                        'start_col': pos_b['start'][1],
-                        'end_line': pos_b['end'][0],
-                        'end_col': pos_b['end'][1],
-                    }
-                })
+                pos_a_list = json.loads(pos_a_json)
+                pos_b_list = json.loads(pos_b_json)
+                for pos_a, pos_b in zip(pos_a_list, pos_b_list):
+                    matches.append({
+                        'file1': {
+                            'start_line': pos_a[0][0],
+                            'start_col': pos_a[0][1],
+                            'end_line': pos_a[1][0],
+                            'end_col': pos_a[1][1],
+                        },
+                        'file2': {
+                            'start_line': pos_b[0][0],
+                            'start_col': pos_b[0][1],
+                            'end_line': pos_b[1][0],
+                            'end_col': pos_b[1][1],
+                        }
+                    })
 
         return matches
 
@@ -248,8 +255,7 @@ class PlagiarismCache:
         self,
         file_a_hash: str,
         file_b_hash: str,
-        ast_similarity: float,
-        matches: List[Dict[str, Any]]
+        ast_similarity: float
     ) -> bool:
         """Cache similarity calculation result."""
         if not self.is_connected:
@@ -259,7 +265,6 @@ class PlagiarismCache:
             key = self._get_similarity_key(file_a_hash, file_b_hash)
             data = {
                 'ast_similarity': ast_similarity,
-                'matches': json.dumps(matches),
             }
             self._redis.hset(key, mapping=data)
             self._redis.expire(key, self.ttl)

@@ -346,27 +346,13 @@ def process_task(
                     ast_similarity = cache.calculate_ast_similarity(file_a_hash, file_b_hash)
                     log.info(f"[Task {task_id}]   AST similarity (Redis): {ast_similarity:.4f}")
 
-                    matches_data = []
-                    if ast_similarity >= 0.15:
-                        raw_matches = cache.find_matching_regions(file_a_hash, file_b_hash)
-                        merged_matches = cache.merge_adjacent_matches(raw_matches)
-                        
-                        for match in merged_matches:
-                            matches_data.append({
-                                "file_a_start_line": match["file1"]["start_line"],
-                                "file_a_end_line": match["file1"]["end_line"],
-                                "file_b_start_line": match["file2"]["start_line"],
-                                "file_b_end_line": match["file2"]["end_line"]
-                            })
-                    
-                    cache.cache_similarity_result(file_a_hash, file_b_hash, ast_similarity, matches_data)
+                    cache.cache_similarity_result(file_a_hash, file_b_hash, ast_similarity)
 
                 result_id = save_similarity_result(
                     task_id=task_id,
                     file_a_id=file_a_id,
                     file_b_id=file_b_id,
-                    ast_similarity=ast_similarity,
-                    matches=matches_data
+                    ast_similarity=ast_similarity
                 )
 
                 processed_count += 1
