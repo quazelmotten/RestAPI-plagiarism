@@ -3,7 +3,9 @@ import tree_sitter_python as tspython
 import tree_sitter_cpp as tscpp
 
 from collections import defaultdict, Counter
+from functools import lru_cache
 import hashlib
+import xxhash
 import logging
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -27,22 +29,25 @@ def get_language(lang_code):
 # Utilities
 # -------------------------------
 
+@lru_cache(maxsize=10000)
 def stable_hash(s: str) -> int:
-    """Deterministic hash for cross-run stability."""
-    return int(hashlib.sha1(s.encode()).hexdigest()[:16], 16)
+    """Deterministic hash for cross-run stability using xxhash."""
+    return xxhash.xxh64(s.encode()).intdigest()
 
 # -------------------------------
 # Tokenization (for winnowing)
 # -------------------------------
 
-def tokenize_with_tree_sitter(file_path, lang_code='python'):
-    language = get_language(lang_code)
-    parser = Parser(language)
+def tokenize_with_tree_sitter(file_path, lang_code='python', tree=None):
+    if tree is None:
+        language = get_language(lang_code)
+        parser = Parser(language)
 
-    with open(file_path, 'r', encoding='utf-8') as f:
-        code = f.read()
+        with open(file_path, 'r', encoding='utf-8') as f:
+            code = f.read()
 
-    tree = parser.parse(code.encode('utf-8'))
+        tree = parser.parse(code.encode('utf-8'))
+    
     tokens = []
 
     def visit(node):
@@ -135,15 +140,29 @@ def hash_ast_subtrees(root, min_depth=3):
     return hashes
 
 
-def extract_ast_hashes(file_path, lang_code, min_depth=3):
+def extract_ast_hashes(file_path, lang_code, min_depth=3, tree=None):
+    if tree is None:
+        language = get_language(lang_code)
+        parser = Parser(language)
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            code = f.read()
+
+        tree = parser.parse(code.encode('utf-8'))
+    
+    return hash_ast_subtrees(tree.root_node, min_depth)
+
+
+def parse_file(file_path, lang_code='python'):
+    """Parse a file once and return the tree and code."""
     language = get_language(lang_code)
     parser = Parser(language)
-
+    
     with open(file_path, 'r', encoding='utf-8') as f:
         code = f.read()
-
+    
     tree = parser.parse(code.encode('utf-8'))
-    return hash_ast_subtrees(tree.root_node, min_depth)
+    return code, tree
 
 def ast_similarity(hashes_a, hashes_b):
     ca, cb = Counter(hashes_a), Counter(hashes_b)
@@ -207,9 +226,13 @@ def analyze_plagiarism(
     language='python',
     ast_threshold=0.30,
 ):
+    # Parse each file once and reuse the tree
+    _, tree1 = parse_file(file1, language)
+    _, tree2 = parse_file(file2, language)
+
     # --- token fingerprints for match visualization ---
-    tokens1 = tokenize_with_tree_sitter(file1, language)
-    tokens2 = tokenize_with_tree_sitter(file2, language)
+    tokens1 = tokenize_with_tree_sitter(file1, language, tree=tree1)
+    tokens2 = tokenize_with_tree_sitter(file2, language, tree=tree2)
 
     fps1 = winnow_fingerprints(compute_fingerprints(tokens1))
     fps2 = winnow_fingerprints(compute_fingerprints(tokens2))
@@ -218,8 +241,8 @@ def analyze_plagiarism(
     index2 = index_fingerprints(fps2)
 
     # --- AST decision ---
-    ast1 = extract_ast_hashes(file1, language, min_depth=3)
-    ast2 = extract_ast_hashes(file2, language, min_depth=3)
+    ast1 = extract_ast_hashes(file1, language, min_depth=3, tree=tree1)
+    ast2 = extract_ast_hashes(file2, language, min_depth=3, tree=tree2)
 
     ast_sim = ast_similarity(ast1, ast2)
     if ast_sim < ast_threshold:
@@ -280,15 +303,19 @@ def analyze_plagiarism_cached(
 
     # If not in cache, compute from file
     try:
+        tree1 = None
+        if tokens1 is None or fps1 is None or ast1 is None:
+            _, tree1 = parse_file(file1_path, language)
+        
         if tokens1 is None:
-            tokens1 = tokenize_with_tree_sitter(file1_path, language)
+            tokens1 = tokenize_with_tree_sitter(file1_path, language, tree=tree1)
             logger.info(f"File1 tokenized: {len(tokens1)} tokens")
         if fps1 is None:
             fps1 = winnow_fingerprints(compute_fingerprints(tokens1))
             index1 = index_fingerprints(fps1)
             logger.info(f"File1 fingerprints: {len(fps1)} fingerprints")
         if ast1 is None:
-            ast1 = extract_ast_hashes(file1_path, language, min_depth=3)
+            ast1 = extract_ast_hashes(file1_path, language, min_depth=3, tree=tree1)
             logger.info(f"File1 AST hashes: {len(ast1)} hashes")
     except Exception as e:
         logger.error(f"Error processing file1 ({file1_path}): {e}")
@@ -319,15 +346,19 @@ def analyze_plagiarism_cached(
 
     # If not in cache, compute from file
     try:
+        tree2 = None
+        if tokens2 is None or fps2 is None or ast2 is None:
+            _, tree2 = parse_file(file2_path, language)
+        
         if tokens2 is None:
-            tokens2 = tokenize_with_tree_sitter(file2_path, language)
+            tokens2 = tokenize_with_tree_sitter(file2_path, language, tree=tree2)
             logger.info(f"File2 tokenized: {len(tokens2)} tokens")
         if fps2 is None:
             fps2 = winnow_fingerprints(compute_fingerprints(tokens2))
             index2 = index_fingerprints(fps2)
             logger.info(f"File2 fingerprints: {len(fps2)} fingerprints")
         if ast2 is None:
-            ast2 = extract_ast_hashes(file2_path, language, min_depth=3)
+            ast2 = extract_ast_hashes(file2_path, language, min_depth=3, tree=tree2)
             logger.info(f"File2 AST hashes: {len(ast2)} hashes")
     except Exception as e:
         logger.error(f"Error processing file2 ({file2_path}): {e}")
