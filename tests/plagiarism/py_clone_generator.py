@@ -1,0 +1,553 @@
+import os
+import re
+import random
+import argparse
+from pathlib import Path
+from typing import List, Dict, Tuple, Optional
+import tree_sitter_python as tspython
+from tree_sitter import Language, Parser
+
+PY_LANGUAGE = Language(tspython.language())
+
+
+class CloneGenerator:
+    def __init__(self):
+        self.parser = Parser()
+        self.parser.language = PY_LANGUAGE
+        self.rng = random.Random(42)
+        
+    def parse(self, code: str):
+        return self.parser.parse(code.encode('utf-8'))
+    
+    def generate_type1(self, source_code: str, clone_num: int = 1) -> List[str]:
+        clones = []
+        for _ in range(clone_num):
+            result = source_code
+            
+            # Only lexical-safe transformations
+            result = self._normalize_whitespace(result)
+            result = self._random_blank_lines(result)
+            result = self._inject_comments(result)
+            
+            clones.append(result)
+            
+        return clones
+    
+    def _normalize_whitespace(self, code: str) -> str:
+        lines = code.splitlines()
+        cleaned = [line.rstrip() for line in lines]
+        return "\n".join(cleaned) + "\n"
+
+    def _random_blank_lines(self, code: str) -> str:
+        lines = code.splitlines()
+        result = []
+        
+        for line in lines:
+            result.append(line)
+            
+            # Add blank line occasionally
+            if line.strip() and random.random() < 0.15:
+                result.append("")
+    
+        return "\n".join(result)
+
+    def _inject_comments(self, code: str) -> str:
+        lines = code.splitlines()
+        result = []
+        
+        for line in lines:
+            result.append(line)
+            
+            stripped = line.strip()
+            
+            # Only add comments after complete statements
+            if stripped and not stripped.endswith(":"):
+                if random.random() < 0.1:
+                    indent = len(line) - len(line.lstrip())
+                    comment = "# " + "".join(
+                        self.rng.choices("abcdefghijklmnopqrstuvwxyz", k=6)
+                    )
+                    result.append(" " * indent + comment)
+        
+        return "\n".join(result)
+
+    def _node_hash(self, node):
+        import hashlib
+        m = hashlib.sha256()
+        m.update(node.type.encode())
+
+        for child in node.children:
+            m.update(self._node_hash(child))
+
+        return m.digest()
+
+    def _ast_equal(self, code1: str, code2: str) -> bool:   
+        tree1 = self.parse(code1)
+        tree2 = self.parse(code2)
+        
+        return self._node_hash(tree1.root_node) == self._node_hash(tree2.root_node)
+    
+    def _add_random_comments(self, code: str) -> str:
+        lines = code.split('\n')
+        result = []
+        for line in lines:
+            if line.strip() and self.rng.random() < 0.1:
+                indent = len(line) - len(line.lstrip())
+                comment = '# ' + ''.join(random.choices('abcdefghijklmnopqrstuvwxyz', k=5))
+                result.append(' ' * indent + comment)
+            result.append(line)
+        return '\n'.join(result)
+    
+    def _reorder_imports(self, code: str) -> str:
+        lines = code.split('\n')
+        import_lines = []
+        other_lines = []
+        
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('import ') or stripped.startswith('from '):
+                import_lines.append(line)
+            else:
+                other_lines.append(line)
+        
+        self.rng.shuffle(import_lines)
+        
+        final_lines = import_lines + other_lines
+        
+        last_import_idx = 0
+        for i, line in enumerate(final_lines):
+            stripped = line.strip()
+            if stripped.startswith('import ') or stripped.startswith('from '):
+                last_import_idx = i
+        
+        for i in range(last_import_idx + 1):
+            if not final_lines[i].strip():
+                last_import_idx = i
+                break
+        
+        return '\n'.join(final_lines[:last_import_idx + 1] + [''] + final_lines[last_import_idx + 1:])
+    
+    def _change_indentation(self, code: str) -> str:
+        lines = code.split('\n')
+        indent_char = '    '
+        if self.rng.random() < 0.5:
+            indent_char = '\t'
+        
+        result = []
+        for line in lines:
+            if line.strip():
+                current_indent = len(line) - len(line.lstrip())
+                new_indent = current_indent + random.choice([-1, 0, 1, 2]) * len(indent_char)
+                new_indent = max(0, new_indent)
+                result.append(indent_char * (new_indent // max(1, len(indent_char))) + line.lstrip())
+            else:
+                result.append(line)
+        return '\n'.join(result)
+    
+    def _add_empty_lines(self, code: str) -> str:
+        lines = code.split('\n')
+        result = []
+        for line in lines:
+            result.append(line)
+            if line.strip() and self.rng.random() < 0.15:
+                result.append('')
+        return '\n'.join(result)
+    
+    def generate_type2(self, source_code: str, clone_num: int = 1) -> List[str]:
+        clones = []
+        tree = self.parse(source_code)
+        
+        identifiers = self._extract_identifiers(tree.root_node, source_code)
+        if not identifiers:
+            return [source_code] * clone_num
+        
+        for _ in range(clone_num):
+            rename_map = self._create_rename_map(identifiers)
+            clone = self._apply_rename(source_code, rename_map)
+            clones.append(clone)
+        
+        return clones
+    
+    def _extract_identifiers(self, node, source_code: str) -> List[Tuple[str, Tuple[int, int]]]:
+        identifiers = []
+        
+        def visit(n):
+            if n.type == 'identifier':
+                text = source_code[n.start_byte:n.end_byte]
+                if not text.startswith('__') and not text.endswith('__'):
+                    identifiers.append((text, (n.start_byte, n.end_byte)))
+            for child in n.children:
+                visit(child)
+        
+        visit(node)
+        return identifiers
+    
+    def _create_rename_map(self, identifiers: List[Tuple[str, Tuple[int, int]]]) -> Dict[str, str]:
+        unique_ids = list(set([id[0] for id in identifiers]))
+        self.rng.shuffle(unique_ids)
+        
+        new_names = []
+        for name in unique_ids:
+            if len(name) <= 2:
+                new_name = ''.join(self.rng.choices('abcdefghijklmnopqrstuvwxyz', k=3))
+            else:
+                prefix = self.rng.choice(['get_', 'set_', 'calc_', 'data_', 'val_', 'temp_', 'new_'])
+                suffix = ''.join(self.rng.choices('abcdefghijklmnopqrstuvwxyz', k=max(0, len(name) - 2)))
+                new_name = prefix + suffix if self.rng.random() < 0.5 else name[:1] + suffix
+            new_names.append(new_name)
+        
+        return dict(zip(unique_ids, new_names))
+    
+    def _apply_rename(self, code: str, rename_map: Dict[str, str]) -> str:
+        result = code
+        for old_name, new_name in rename_map.items():
+            # Use a lambda to safely insert the literal string
+            result = re.sub(
+                r'\b' + re.escape(old_name) + r'\b',
+                lambda m, s=new_name: s,
+                result
+            )
+        return result
+    
+    def generate_type3(self, source_code: str, clone_num: int = 1) -> List[str]:
+        clones = []
+        
+        for _ in range(clone_num):
+            result = source_code
+            
+            transformations = [
+                self._remove_dead_code,
+                self._add_stub_functions,
+                self._reorder_functions,
+                self._inline_variables,
+                self._add_prints,
+            ]
+            
+            for trans in transformations:
+                if self.rng.random() < 0.4:
+                    result = trans(result)
+            
+            clones.append(result)
+        
+        return clones
+    
+    def _remove_dead_code(self, code: str) -> str:
+        lines = code.split('\n')
+        result = []
+        skip_until = -1
+        
+        for i, line in enumerate(lines):
+            if i < skip_until:
+                continue
+            
+            stripped = line.strip()
+            
+            if stripped.startswith('if __name__') and i + 1 < len(lines):
+                continue
+            
+            if stripped.startswith('return ') and self.rng.random() < 0.3:
+                continue
+            
+            result.append(line)
+        
+        return '\n'.join(result)
+    
+    def _add_stub_functions(self, code: str) -> str:
+        stub = '''
+def _unused_stub():
+    pass
+
+'''
+        lines = code.split('\n')
+        
+        if lines and lines[0].strip().startswith('#'):
+            return stub + code
+        
+        return stub + code
+    
+    def _reorder_functions(self, code: str) -> str:
+        tree = self.parse(code)
+        
+        functions = []
+        current_func = []
+        current_name = None
+        
+        lines = code.split('\n')
+        
+        func_pattern = re.compile(r'^def (\w+)\s*\(')
+        
+        func_lines = {}
+        func_order = []
+        current_func_name = None
+        current_lines = []
+        
+        for line in lines:
+            match = func_pattern.match(line)
+            if match:
+                if current_func_name:
+                    func_lines[current_func_name] = '\n'.join(current_lines)
+                current_func_name = match.group(1)
+                func_order.append(current_func_name)
+                current_lines = [line]
+            elif current_func_name:
+                current_lines.append(line)
+        
+        if current_func_name:
+            func_lines[current_func_name] = '\n'.join(current_lines)
+        
+        if len(func_order) > 1:
+            self.rng.shuffle(func_order)
+            new_code = '\n\n'.join(func_lines[name] for name in func_order if name in func_lines)
+            return new_code
+        
+        return code
+    
+    def _inline_variables(self, code: str) -> str:
+        lines = code.split('\n')
+        result = []
+        
+        for line in lines:
+            if '=' in line and '==' not in line and '!=' not in line:
+                if self.rng.random() < 0.2:
+                    continue
+            result.append(line)
+        
+        return '\n'.join(result)
+    
+    def _add_prints(self, code: str) -> str:
+        lines = code.split('\n')
+        result = []
+        
+        for line in lines:
+            result.append(line)
+            if line.strip() and not line.strip().startswith('#'):
+                if self.rng.random() < 0.05:
+                    indent = len(line) - len(line.lstrip())
+                    result.append(' ' * indent + 'print("debug")')
+        
+        return '\n'.join(result)
+    
+    def generate_type4(self, source_code: str, clone_num: int = 1) -> List[str]:
+        clones = []
+        for _ in range(clone_num):
+            code = source_code
+            code = self._convert_for_to_while(code)
+            code = self._convert_list_comprehension(code)
+            code = self._use_map_filter(code)
+            code = self._change_string_formatting(code)
+
+            clones.append(code)
+        return clones
+
+    def _convert_for_to_while(self, code: str) -> str:
+        """
+        Convert simple for-loops into equivalent while-loops using iter().
+        """
+        pattern = re.compile(
+            r'^([ \t]*)for\s+(\w+)\s+in\s+([^\n:]+):', re.MULTILINE
+        )
+
+        def replacer(match):
+            indent, var, iterable = match.groups()
+            indent_next = indent + "    "
+            return (
+                f"{indent}{var}_it = iter({iterable})\n"
+                f"{indent}while True:\n"
+                f"{indent_next}try:\n"
+                f"{indent_next}    {var} = next({var}_it)\n"
+                f"{indent_next}except StopIteration:\n"
+                f"{indent_next}    break"
+            )
+
+        return pattern.sub(replacer, code)
+
+    def _convert_list_comprehension(self, code: str) -> str:
+        """
+        Converts list comprehensions with optional if condition into list(map(...)) or list(filter(...)).
+        """
+        pattern = re.compile(
+            r'\[([^\[\]]+?)\s+for\s+(\w+)\s+in\s+([^\[\]]+?)(?:\s+if\s+([^\[\]]+?))?\]'
+        )
+
+        def replacer(match):
+            expr, var, iterable, cond = match.groups()
+            if cond:
+                return f"list({var} for {var} in {iterable} if {cond})"
+            else:
+                return f"list(map(lambda {var}: {expr}, {iterable}))"
+
+        return pattern.sub(replacer, code)
+
+
+    def _use_map_filter(self, code: str) -> str:
+        """
+        Converts simple for-loops that build lists into map() usage.
+        Only handles very simple single-expression loops.
+        """
+        pattern = re.compile(
+            r'\[\s*(\w+)\s+for\s+(\w+)\s+in\s+(\w+)\s*\]'
+        )
+
+        def replacer(match):
+            expr, var, iterable = match.groups()
+            return f"list(map(lambda {var}: {expr}, {iterable}))"
+
+        return pattern.sub(replacer, code)
+
+
+    def _change_string_formatting(self, code: str) -> str:
+        """
+        Converts f-strings to str.format(), preserving content.
+        """
+        fstring = re.compile(r'f(["\'])(.*?)\1')
+
+        def f_to_format(match):
+            content = match.group(2)
+            # Replace {var} inside content with {} for str.format()
+            placeholders = re.findall(r'{(.*?)}', content)
+            fmt_str = re.sub(r'{.*?}', '{}', content)
+            if placeholders:
+                return '"{}".format({})'.format(fmt_str, ', '.join(placeholders))
+            else:
+                return '"{}"'.format(content)
+
+        return fstring.sub(f_to_format, code)
+
+    def _convert_while_to_for(self, code: str) -> str:
+        # Matches simple while loops like:
+        # i = 0
+        # while i < N:
+        #     ...
+        #     i += 1
+        pattern = re.compile(
+            r'(\w+)\s*=\s*0\s*\nwhile\s+\1\s*<\s*(\d+)\s*:(.*?)(\n\s*\1\s*\+=\s*1)',
+            re.DOTALL
+        )
+        
+        def replacer(match):
+            var = match.group(1)
+            end = match.group(2)
+            body = match.group(3)
+            return f'for {var} in range({end}):{body}'
+        
+        return pattern.sub(replacer, code)
+
+    def _convert_listcomp_to_loop(self, code: str) -> str:
+        pattern = re.compile(r'\[(.*?)\s+for\s+(\w+)\s+in\s+(.*?)\]')
+        
+        def replacer(match):
+            expr = match.group(1).strip()
+            var = match.group(2)
+            iterable = match.group(3).strip()
+            loop_code = f"{var}_list = []\nfor {var} in {iterable}:\n    {var}_list.append({expr})\n"
+            return f"{var}_list"
+        
+        return pattern.sub(replacer, code)
+
+    def _shuffle_commutative_ops(self, code: str) -> str:
+        pattern = re.compile(r'(\b\w+\b)\s*([\+\*])\s*(\b\w+\b)')
+        
+        def replacer(match):
+            a, op, b = match.groups()
+            if self.rng.random() < 0.5:
+                return f"{b} {op} {a}"
+            return match.group(0)
+        
+        return pattern.sub(replacer, code)
+
+
+def generate_dataset(
+    source_dir: str,
+    output_dir: str,
+    n: int = 1,
+    file_range: Tuple[int, int] = (0, 1000),
+    types: List[int] = [1, 2, 3, 4]
+):
+    generator = CloneGenerator()
+    
+    source_path = Path(source_dir)
+    output_path = Path(output_dir)
+    
+    for type_num in types:
+        type_dir = output_path / f'type{type_num}'
+        type_dir.mkdir(parents=True, exist_ok=True)
+    
+    start, end = file_range
+    files_generated = 0
+    
+    files = sorted(source_path.glob("*.py"))
+    files = files[start:end]
+
+    for file_path in files:
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            source_code = f.read()
+        
+        match = re.search(r'file_(\d+)\.py', file_path.name)
+        if not match:
+            continue
+        file_idx = match.group(1)
+        
+        for type_num in types:
+            type_dir = output_path / f'type{type_num}'
+            
+            if type_num == 1:
+                clones = generator.generate_type1(source_code, n)
+            elif type_num == 2:
+                clones = generator.generate_type2(source_code, n)
+            elif type_num == 3:
+                clones = generator.generate_type3(source_code, n)
+            elif type_num == 4:
+                clones = generator.generate_type4(source_code, n)
+            else:
+                continue
+            
+            for j, clone in enumerate(clones):
+                clone_name = f'file_{file_idx}_type{type_num}_{j+1}.py'
+                clone_path = type_dir / clone_name
+                
+                with open(clone_path, 'w', encoding='utf-8') as f:
+                    f.write(clone)
+        
+        files_generated += 1
+        
+        if files_generated % 50 == 0:
+            print(f'Processed {files_generated} files...')
+    
+    print(f'Generated clones for {files_generated} files')
+    print(f'Output directory: {output_dir}')
+    for type_num in types:
+        type_dir = output_path / f'type{type_num}'
+        count = len(list(type_dir.glob('*.py')))
+        print(f'  Type {type_num}: {count} clones')
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Generate synthetic code clones for plagiarism testing')
+    parser.add_argument('--source', default=None, help='Source directory with original files')
+    parser.add_argument('--output', default=None, help='Output directory for clones')
+    parser.add_argument('--n', type=int, default=1, help='Number of clones per type per file')
+    parser.add_argument('--start', type=int, default=0, help='Starting file index')
+    parser.add_argument('--end', type=int, default=100, help='Ending file index')
+    parser.add_argument('--types', type=int, nargs='+', default=[1, 2, 3, 4], 
+                        help='Clone types to generate (1-4)')
+    
+    args = parser.parse_args()
+    
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent.parent
+    
+    source_dir = args.source if args.source else str(project_root / "dataset")
+    output_dir = args.output if args.output else str(project_root / "tests" / "plagiarism")
+    
+    generate_dataset(
+        source_dir=source_dir,
+        output_dir=output_dir,
+        n=args.n,
+        file_range=(args.start, args.end),
+        types=args.types
+    )
+
+
+if __name__ == '__main__':
+    main()

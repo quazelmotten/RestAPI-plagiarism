@@ -68,3 +68,7 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Datasets and synthetic clones
+dataset/
+tests/plagiarism/type*
