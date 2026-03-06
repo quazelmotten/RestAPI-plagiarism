@@ -9,7 +9,7 @@ from itertools import combinations
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
-from crud import update_plagiarism_task, save_similarity_result, get_all_files
+from crud import update_plagiarism_task, save_similarity_result, get_all_files, get_max_similarity
 
 from redis_cache import cache, connect_cache
 from inverted_index import inverted_index
@@ -176,6 +176,24 @@ def process_task(
         log.info(f"[Task {task_id}] Found {len(existing_files)} existing files from other tasks")
         
         log.info(f"[Task {task_id}] Indexing fingerprints for new files...")
+        
+        # First, ensure existing files are in the inverted index
+        if existing_files:
+            log.info(f"[Task {task_id}] Checking/adding existing files to inverted index...")
+            for file_info in existing_files:
+                file_hash = file_info.get('hash') or file_info.get('file_hash')
+                if not file_hash:
+                    continue
+                try:
+                    if not inverted_index.get_file_fingerprints(file_hash, language):
+                        # Need to get fingerprints from cache or regenerate
+                        fingerprints = cache.get_fingerprints(file_hash)
+                        if fingerprints:
+                            inverted_index.add_file_fingerprints(file_hash, fingerprints, language)
+                            log.debug(f"[Task {task_id}] Added existing file {file_info.get('filename')} to inverted index")
+                except Exception as e:
+                    log.warning(f"[Task {task_id}] Could not add existing file to index: {e}")
+        
         for file_info in files:
             file_hash = file_info.get('hash') or file_info.get('file_hash')
             file_path = file_info.get('path') or file_info.get('file_path')
@@ -249,6 +267,8 @@ def process_task(
                         cache.cache_fingerprints(new_file_hash, fingerprints, ast_hashes, tokens)
                     
                     candidate_hashes = inverted_index.find_candidate_files(fingerprints, language)
+                    
+                    log.info(f"[Task {task_id}] {new_file.get('filename')}: fingerprints={len(fingerprints)}, candidate_hashes={len(candidate_hashes) if candidate_hashes else 0}, sample_fp_hashes={[str(fp['hash']) for fp in fingerprints[:3]]}")
                     
                     if not candidate_hashes:
                         log.info(f"[Task {task_id}] {new_file.get('filename')}: 0 candidates")
@@ -405,7 +425,7 @@ def process_task(
         update_plagiarism_task(
             task_id=task_id,
             status="completed",
-            similarity=0.0,
+            similarity=get_max_similarity(task_id),
             matches={"total_pairs": total_pairs_count, "processed_pairs": processed_count},
             total_pairs=total_pairs_count,
             processed_pairs=processed_count

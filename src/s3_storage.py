@@ -14,7 +14,9 @@ from datetime import datetime
 class S3Storage:
     """Simple S3-like storage implementation using local filesystem."""
     
-    def __init__(self, base_path: str = "/app/s3_storage"):
+    def __init__(self, base_path: str = None):
+        if base_path is None:
+            base_path = os.environ.get('STORAGE_LOCAL_PATH', '/app/s3_storage')
         self.base_path = Path(base_path)
         self.base_path.mkdir(parents=True, exist_ok=True)
     

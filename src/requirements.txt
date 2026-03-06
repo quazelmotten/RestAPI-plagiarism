@@ -119,3 +119,4 @@ tree-sitter
 tree-sitter-python
 tree-sitter-cpp
 redis==5.0.1
+xxhash

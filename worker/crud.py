@@ -133,3 +133,17 @@ def save_similarity_result(
         raise
     finally:
         session.close()
+
+
+def get_max_similarity(task_id: str) -> float:
+    """Get the maximum similarity score for a task."""
+    from sqlalchemy import func
+    session = next(get_session())
+    try:
+        result = session.execute(
+            select(func.max(SimilarityResult.ast_similarity))
+            .where(SimilarityResult.task_id == task_id)
+        ).scalar()
+        return result if result is not None else 0.0
+    finally:
+        session.close()

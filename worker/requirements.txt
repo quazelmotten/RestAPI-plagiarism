@@ -11,3 +11,4 @@ redis==5.0.1
 tree-sitter
 tree-sitter-python
 tree-sitter-cpp
+xxhash

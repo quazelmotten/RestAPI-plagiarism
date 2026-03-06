@@ -4,8 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from plagiarism.router import router as router_plagiarism
-from auth import router as router_auth
+from api.plagiarism.router import router as router_plagiarism
+from api.auth.router import router as router_auth
 from exceptions.error_handler import add_exception_handler
 from startup.create_exchange import create_queues_and_exchanges
 from config import settings
@@ -79,7 +79,7 @@ async def root():
 async def serve_react(full_path: str):
     """Serve the React SPA for all non-API routes"""
     # Don't serve React app for API routes or static assets
-    if full_path.startswith("api/") or full_path.startswith("plagiarism/") or full_path.startswith("assets/") or full_path.startswith("auth/") or full_path.startswith("docs") or full_path.startswith("openapi"):
+    if full_path.startswith("api/") or full_path.startswith("assets/") or full_path.startswith("auth/") or full_path.startswith("docs") or full_path.startswith("openapi"):
         return {"detail": "Not Found"}
     
     index_path = static_path / "index.html"
