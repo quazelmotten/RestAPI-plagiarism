@@ -236,8 +236,46 @@ def process_task(
         intra_task_pairs: List[Tuple[dict, dict]] = []
         cross_task_pairs: List[Tuple[dict, dict]] = []
         
-        for file_a, file_b in combinations(files, 2):
-            intra_task_pairs.append((file_a, file_b))
+        log.info(f"[Task {task_id}] Generating intra-task pairs using inverted index...")
+        for file_a in files:
+            file_a_hash = file_a.get('hash') or file_a.get('file_hash')
+            file_a_path = file_a.get('path') or file_a.get('file_path')
+            
+            if not file_a_hash or not file_a_path:
+                continue
+            
+            try:
+                fingerprints = cache.get_fingerprints(file_a_hash)
+                if fingerprints is None:
+                    fp_result = run_cli_fingerprint(file_a_path, language)
+                    fingerprints = [
+                        {
+                            "hash": fp["hash"],
+                            "start": tuple(fp["start"]),
+                            "end": tuple(fp["end"])
+                        }
+                        for fp in fp_result.get("fingerprints", [])
+                    ]
+                    ast_hashes = fp_result.get("ast_hashes", [])
+                    tokens_serializable = fp_result.get("tokens", [])
+                    tokens = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in tokens_serializable]
+                    cache.cache_fingerprints(file_a_hash, fingerprints, ast_hashes, tokens)
+                
+                candidate_hashes = inverted_index.find_candidate_files(fingerprints, language)
+                
+                if not candidate_hashes:
+                    continue
+                
+                intra_candidates = [
+                    f for f in files 
+                    if f != file_a and ((f.get('hash') or f.get('file_hash')) in candidate_hashes)
+                ]
+                
+                for file_b in intra_candidates:
+                    intra_task_pairs.append((file_a, file_b))
+                
+            except Exception as e:
+                log.warning(f"[Task {task_id}] Error finding intra-task candidates for {file_a.get('filename')}: {e}")
         
         log.info(f"[Task {task_id}] Intra-task pairs: {len(intra_task_pairs)}")
         
