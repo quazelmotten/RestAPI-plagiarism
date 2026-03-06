@@ -96,6 +96,7 @@ API_WORKERS=4
 SECRET_KEY=${SECRET_KEY}
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 CORS_ORIGINS=http://localhost:3000
+SUBPATH=plagitype
 
 # =============================================================================
 # PLAGIARISM DETECTION SETTINGS

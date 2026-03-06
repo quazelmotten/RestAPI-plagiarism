@@ -1,15 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
+const SUBPATH = process.env.VITE_SUBPATH !== undefined ? process.env.VITE_SUBPATH : 'plagitype'
+
 export default defineConfig({
   plugins: [react()],
+  base: SUBPATH ? `/${SUBPATH}/` : '/',
   server: {
     proxy: {
-      '/plagiarism': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
+      ...(SUBPATH ? { [`/${SUBPATH}`]: { target: 'http://localhost:8000', changeOrigin: true } } : {}),
       '/auth': {
         target: 'http://localhost:8000',
         changeOrigin: true,

@@ -5,6 +5,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import PrivateRoute from './components/PrivateRoute';
+import { getBasePath } from './utils/subpath';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,11 +32,13 @@ const theme = extendTheme({
   },
 });
 
+const BASE = getBasePath();
+
 function App() {
   return (
     <ChakraProvider theme={theme}>
       <QueryClientProvider client={queryClient}>
-        <Router>
+        <Router basename={BASE}>
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<Login />} />

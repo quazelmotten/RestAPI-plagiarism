@@ -70,6 +70,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      SUBPATH: ${SUBPATH:-plagitype}
       
       # Plagiarism Settings
       DEFAULT_PLAGIARISM_THRESHOLD: ${DEFAULT_PLAGIARISM_THRESHOLD:-0.75}

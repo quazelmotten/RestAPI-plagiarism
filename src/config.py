@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     secret_key: str = Field(validation_alias="SECRET_KEY")
     access_token_expire_minutes: int = Field(default=30, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     cors_origins: str = Field(default="http://localhost:3000", validation_alias="CORS_ORIGINS")
+    subpath: str = Field(default="plagitype", validation_alias="SUBPATH")
     
     # =============================================================================
     # PLAGIARISM SETTINGS
@@ -198,6 +199,13 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         """Check if running in development."""
         return self.environment == "development"
+
+    @property
+    def subpath_normalized(self) -> str:
+        """Return subpath with leading slash, empty string if empty/subpath disabled."""
+        if not self.subpath:
+            return ""
+        return f"/{self.subpath.strip('/')}"
 
 
 @lru_cache()

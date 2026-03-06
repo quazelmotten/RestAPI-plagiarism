@@ -67,7 +67,6 @@ const Submissions: React.FC = () => {
   };
 
   const handleViewComparison = (submissionId: string) => {
-    // Navigate to results page and filter for this submission
     navigate(`/dashboard/results?filter=${submissionId}`);
   };
 

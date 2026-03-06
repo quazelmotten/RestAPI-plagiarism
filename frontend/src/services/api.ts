@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const SUBPATH = import.meta.env.VITE_SUBPATH !== undefined ? import.meta.env.VITE_SUBPATH : 'plagitype';
+const API_URL = import.meta.env.VITE_API_URL || (SUBPATH ? `http://localhost:8000/${SUBPATH}` : 'http://localhost:8000');
 
 const api = axios.create({
   baseURL: API_URL,
@@ -27,7 +28,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      window.location.href = SUBPATH ? `/${SUBPATH}/login` : '/login';
     }
     return Promise.reject(error);
   }
