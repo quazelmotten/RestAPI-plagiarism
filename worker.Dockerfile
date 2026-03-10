@@ -14,10 +14,11 @@ COPY ./worker ./
 # Copy src code to /app/src (NOT inside worker)
 COPY ./src /app/src
 
-# Make src discoverable
-ENV PYTHONPATH=/app/src
+# Copy cli code for analyzer
+COPY ./cli /app/cli
 
-# Make CLI executable
-RUN chmod +x /app/src/plagiarism/cli.py
+# Make src discoverable
+ENV PYTHONPATH=/app/src:/app
+
 
 CMD ["python3", "worker.py"]

@@ -1,0 +1,689 @@
+from tree_sitter import Language, Parser
+import tree_sitter_python as tspython
+import tree_sitter_cpp as tscpp
+
+from collections import defaultdict, Counter
+from functools import lru_cache
+import hashlib
+import xxhash
+import logging
+from typing import Optional, List, Dict, Any, Tuple
+
+# -------------------------------
+# Fragment and PairedOccurrence Classes (Dolos-style)
+# -------------------------------
+
+class PairedOccurrence:
+    """Represents a single matching k-gram between two files."""
+    def __init__(self, left_idx: int, right_idx: int, left_start, left_end, right_start, right_end, fingerprint_hash: int):
+        self.left_index = left_idx
+        self.right_index = right_idx
+        self.left_start = left_start  # (line, col)
+        self.left_end = left_end
+        self.right_start = right_start
+        self.right_end = right_end
+        self.fingerprint_hash = fingerprint_hash
+
+
+class Fragment:
+    """A fragment is a collection of consecutive matching k-grams."""
+    def __init__(self, initial: PairedOccurrence):
+        self.pairs = [initial]
+        self.left_kgram_range = (initial.left_index, initial.left_index)
+        self.right_kgram_range = (initial.right_index, initial.right_index)
+        self.left_selection = {
+            'start_line': initial.left_start[0],
+            'start_col': initial.left_start[1],
+            'end_line': initial.left_end[0],
+            'end_col': initial.left_end[1],
+        }
+        self.right_selection = {
+            'start_line': initial.right_start[0],
+            'start_col': initial.right_start[1],
+            'end_line': initial.right_end[0],
+            'end_col': initial.right_end[1],
+        }
+
+    def can_extend(self, other: PairedOccurrence) -> bool:
+        return (self.left_kgram_range[1] == other.left_index and 
+                self.right_kgram_range[1] == other.right_index)
+
+    def extend_with(self, other: PairedOccurrence):
+        self.pairs.append(other)
+        self.left_kgram_range = (self.left_kgram_range[0], other.left_index)
+        self.right_kgram_range = (self.right_kgram_range[0], other.right_index)
+        
+        # Extend selection ranges
+        self.left_selection['end_line'] = max(self.left_selection['end_line'], other.left_end[0])
+        self.left_selection['end_col'] = max(self.left_selection['end_col'], other.left_end[1])
+        
+        self.right_selection['end_line'] = max(self.right_selection['end_line'], other.right_end[0])
+        self.right_selection['end_col'] = max(self.right_selection['end_col'], other.right_end[1])
+
+    @property
+    def left_kgrams(self):
+        return self.left_kgram_range
+
+    @property
+    def right_kgrams(self):
+        return self.right_kgram_range
+
+# -------------------------------
+# Tree-sitter language setup
+# -------------------------------
+
+logger = logging.getLogger(__name__)
+
+LANGUAGE_MAP = {
+    'python': Language(tspython.language()),
+    'cpp': Language(tscpp.language()),
+}
+
+def get_language(lang_code):
+    if lang_code not in LANGUAGE_MAP:
+        raise ValueError(f"Unsupported language: {lang_code}")
+    return LANGUAGE_MAP[lang_code]
+
+# -------------------------------
+# Utilities
+# -------------------------------
+
+@lru_cache(maxsize=10000)
+def stable_hash(s: str) -> int:
+    """Deterministic hash for cross-run stability using xxhash."""
+    return xxhash.xxh64(s.encode()).intdigest()
+
+# -------------------------------
+# Tokenization (for winnowing)
+# -------------------------------
+
+def tokenize_with_tree_sitter(file_path, lang_code='python', tree=None):
+    if tree is None:
+        language = get_language(lang_code)
+        parser = Parser(language)
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            code = f.read()
+
+        tree = parser.parse(code.encode('utf-8'))
+    
+    tokens = []
+
+    def visit(node):
+        if not node.children:
+            tokens.append((node.type, node.start_point, node.end_point))
+        else:
+            for child in node.children:
+                visit(child)
+
+    visit(tree.root_node)
+    return tokens
+
+# -------------------------------
+# Token Winnowing (filter stage)
+# -------------------------------
+
+def compute_fingerprints(tokens, k=6, base=257, mod=10**9 + 7):
+    if len(tokens) < k:
+        return []
+
+    hashes = []
+    power = pow(base, k - 1, mod)
+    h = 0
+
+    for i in range(k):
+        h = (h * base + stable_hash(tokens[i][0])) % mod
+
+    hashes.append({
+        'hash': h,
+        'start': tokens[0][1],
+        'end': tokens[k - 1][2],
+        'kgram_idx': 0  # Track k-gram index
+    })
+
+    for i in range(k, len(tokens)):
+        h = (h - stable_hash(tokens[i - k][0]) * power) % mod
+        h = (h * base + stable_hash(tokens[i][0])) % mod
+        hashes.append({
+            'hash': h,
+            'start': tokens[i - k + 1][1],
+            'end': tokens[i][2],
+            'kgram_idx': i - k + 1  # Track k-gram index
+        })
+
+    return hashes
+
+def winnow_fingerprints(fingerprints, window_size=5):
+    """
+    Winnow fingerprints while preserving k-gram indices.
+    Returns list of fingerprints with their original k-gram indices.
+    """
+    winnowed = []
+    for i in range(len(fingerprints) - window_size + 1):
+        window = fingerprints[i:i + window_size]
+        # Find the minimum hash in the window
+        min_fp = min(window, key=lambda x: x['hash'])
+        # Keep track of original k-gram index
+        if not winnowed or min_fp['hash'] != winnowed[-1]['hash']:
+            winnowed.append(min_fp.copy())  # Copy to avoid reference issues
+    return winnowed
+
+def index_fingerprints(fingerprints):
+    index = defaultdict(list)
+    for fp in fingerprints:
+        index[fp['hash']].append(fp)
+    return index
+
+
+
+# -------------------------------
+# AST Subtree Hashing (decision stage)
+# -------------------------------
+
+def hash_ast_subtrees(root, min_depth=3):
+    """
+    Hash AST subtrees with depth >= min_depth.
+    Depth is measured as max distance to a leaf.
+    """
+    hashes = []
+
+    def visit(node):
+        if not node.children:
+            return 1, ""
+
+        child_results = [visit(c) for c in node.children]
+        child_depths, child_hashes = zip(*child_results)
+
+        depth = 1 + max(child_depths)
+        rep = node.type + "(" + ",".join(child_hashes) + ")"
+
+        h = stable_hash(rep)
+        if depth >= min_depth:
+            hashes.append(h)
+
+        return depth, str(h)
+
+    visit(root)
+    return hashes
+
+
+def extract_ast_hashes(file_path, lang_code, min_depth=3, tree=None):
+    if tree is None:
+        language = get_language(lang_code)
+        parser = Parser(language)
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            code = f.read()
+
+        tree = parser.parse(code.encode('utf-8'))
+    
+    return hash_ast_subtrees(tree.root_node, min_depth)
+
+
+def parse_file(file_path, lang_code='python'):
+    """Parse a file once and return the tree and code."""
+    language = get_language(lang_code)
+    parser = Parser(language)
+    
+    with open(file_path, 'r', encoding='utf-8') as f:
+        code = f.read()
+    
+    tree = parser.parse(code.encode('utf-8'))
+    return code, tree
+
+def ast_similarity(hashes_a, hashes_b):
+    ca, cb = Counter(hashes_a), Counter(hashes_b)
+    intersection = sum((ca & cb).values())
+    union = sum((ca | cb).values())
+    return intersection / union if union else 0.0
+
+# -------------------------------
+# Match visualization (token-based)
+# -------------------------------
+
+def find_paired_occurrences(index_a, index_b):
+    """
+    Find all paired occurrences of matching fingerprints between two files.
+    Returns list of PairedOccurrence objects with k-gram indices.
+    """
+    occurrences = []
+    for h in set(index_a) & set(index_b):
+        for a, b in zip(index_a[h], index_b[h]):
+            # We need to track k-gram indices, not just positions
+            # For now, we'll use a placeholder - actual implementation needs
+            # fingerprint indices stored in the index
+            occ = PairedOccurrence(
+                left_idx=a.get('kgram_idx', 0),
+                right_idx=b.get('kgram_idx', 0),
+                left_start=a['start'],
+                left_end=a['end'],
+                right_start=b['start'],
+                right_end=b['end'],
+                fingerprint_hash=h
+            )
+            occurrences.append(occ)
+    return occurrences
+
+
+def build_fragments(occurrences: List[PairedOccurrence], minimum_occurrences=1):
+    """
+    Build fragments by chaining consecutive matching k-grams.
+    This is the Dolos-style fragment building algorithm.
+    """
+    if not occurrences:
+        return []
+
+    # Sort occurrences by left k-gram index, then right
+    occurrences.sort(key=lambda x: (x.left_index, x.right_index))
+
+    # Use maps to track fragment starts and ends (Dolos algorithm)
+    # Key format: "left_idx|right_idx"
+    # Key represents the position where a NEW k-gram would start
+    fragment_start = {}
+    fragment_end = {}
+
+    for i, occ in enumerate(occurrences):
+        start_key = f"{occ.left_index}|{occ.right_index}"
+        # End key is the position AFTER this kgram (where next kgram would start)
+        end_key = f"{occ.left_index + 1}|{occ.right_index + 1}"
+
+        # Check if we can extend an existing fragment
+        fragment = fragment_end.get(start_key)
+        if fragment:
+            # Extend fragment at starting position
+            del fragment_end[start_key]
+            fragment.extend_with(occ)
+            # Update end position to the position AFTER the new last kgram
+            new_end_key = f"{fragment.left_kgram_range[1] + 1}|{fragment.right_kgram_range[1] + 1}"
+            fragment_end[new_end_key] = fragment
+        else:
+            # Create a new fragment
+            fragment = Fragment(occ)
+            fragment_start[start_key] = fragment
+            fragment_end[end_key] = fragment
+
+        # Check if there's a fragment directly after us we can extend
+        next_fragment = fragment_start.get(end_key)
+        if next_fragment:
+            # Remove next fragment's start position
+            del fragment_start[end_key]
+
+            # Extend ourselves with the next fragment
+            for pair in next_fragment.pairs:
+                fragment.extend_with(pair)
+
+            # Overwrite the end position to after the merged fragment
+            new_end_key = f"{fragment.left_kgram_range[1] + 1}|{fragment.right_kgram_range[1] + 1}"
+            fragment_end[new_end_key] = fragment
+
+    # Squash (remove contained fragments)
+    fragments = squash_fragments(list(fragment_start.values()))
+
+    # Filter by minimum occurrences
+    fragments = [f for f in fragments if len(f.pairs) >= minimum_occurrences]
+
+    # Sort by left k-gram start
+    fragments.sort(key=lambda f: f.left_kgram_range[0])
+
+    return fragments
+
+
+def squash_fragments(fragments: List[Fragment]):
+    """
+    Remove fragments that are contained within larger fragments.
+    Similar to Dolos's squash() method.
+    """
+    if not fragments:
+        return []
+
+    # Sort by start of left k-gram range
+    sorted_by_start = sorted(fragments, key=lambda f: f.left_kgram_range[0])
+    sorted_by_end = sorted(fragments, key=lambda f: f.left_kgram_range[1])
+
+    seen = set()
+    result = []
+    j = 0
+
+    for started in sorted_by_start:
+        if id(started) in seen:
+            continue
+
+        # Walk through fragments sorted by end
+        while j < len(sorted_by_end) and sorted_by_end[j].left_kgram_range[1] <= started.left_kgram_range[1]:
+            candidate = sorted_by_end[j]
+            if id(candidate) not in seen:
+                # Check if candidate is the same as started (skip self-comparison)
+                if candidate is started:
+                    result.append(candidate)
+                    seen.add(id(candidate))
+                # Check if candidate is contained within started
+                elif (started.left_kgram_range[0] <= candidate.left_kgram_range[0] and
+                    started.left_kgram_range[1] >= candidate.left_kgram_range[1] and
+                    started.right_kgram_range[0] <= candidate.right_kgram_range[0] and
+                    started.right_kgram_range[1] >= candidate.right_kgram_range[1]):
+                    # Contained - mark as seen (will be removed)
+                    seen.add(id(candidate))
+                else:
+                    # Not contained - keep it
+                    result.append(candidate)
+                    seen.add(id(candidate))
+            j += 1
+
+    return result
+
+
+def longest_common_substring(occurrences: List[PairedOccurrence]) -> int:
+    """
+    Find the longest chain of consecutive matching k-grams.
+    Uses dynamic programming approach similar to Dolos.
+    """
+    if not occurrences:
+        return 0
+
+    # Sort and build k-gram index arrays
+    sorted_occ = sorted(occurrences, key=lambda x: (x.left_index, x.right_index))
+    
+    left_indices = [occ.left_index for occ in sorted_occ]
+    right_indices = [occ.right_index for occ in sorted_occ]
+
+    # Find longest common subsequence of consecutive indices
+    # For LCS (consecutive), we use dynamic programming
+    n = len(left_indices)
+    if n == 0:
+        return 0
+
+    # Build index mappings
+    left_to_right = {}
+    for occ in sorted_occ:
+        if occ.left_index not in left_to_right:
+            left_to_right[occ.left_index] = []
+        left_to_right[occ.left_index].append(occ.right_index)
+
+    longest = 0
+    dp = {}
+
+    for left_idx in left_indices:
+        for right_idx in left_to_right.get(left_idx, []):
+            # Find previous matching position
+            prev_key = (left_idx - 1, right_idx - 1)
+            dp_val = dp.get(prev_key, 0) + 1
+            dp[(left_idx, right_idx)] = dp_val
+            longest = max(longest, dp_val)
+
+    return longest
+
+
+def compute_similarity_metrics(occurrences: List[PairedOccurrence], total_left: int, total_right: int):
+    """
+    Compute proper similarity metrics based on k-gram coverage.
+    """
+    left_covered = len(set(occ.left_index for occ in occurrences))
+    right_covered = len(set(occ.right_index for occ in occurrences))
+
+    left_ignored = 0  # Could track ignored k-grams similarly to Dolos
+    right_ignored = 0
+
+    denominator = total_left + total_right - left_ignored - right_ignored
+    if denominator > 0:
+        similarity = (left_covered + right_covered) / denominator
+    else:
+        similarity = 0.0
+
+    return {
+        'left_covered': left_covered,
+        'right_covered': right_covered,
+        'left_total': total_left,
+        'right_total': total_right,
+        'similarity': similarity,
+        'longest_fragment': longest_common_substring(occurrences),
+    }
+
+
+def analyze_plagiarism(
+    file1,
+    file2,
+    language='python',
+    ast_threshold=0.30,
+):
+    # Parse each file once and reuse the tree
+    _, tree1 = parse_file(file1, language)
+    _, tree2 = parse_file(file2, language)
+
+    # --- token fingerprints for match visualization ---
+    tokens1 = tokenize_with_tree_sitter(file1, language, tree=tree1)
+    tokens2 = tokenize_with_tree_sitter(file2, language, tree=tree2)
+
+    fps1 = winnow_fingerprints(compute_fingerprints(tokens1))
+    fps2 = winnow_fingerprints(compute_fingerprints(tokens2))
+
+    index1 = index_fingerprints(fps1)
+    index2 = index_fingerprints(fps2)
+
+    # --- AST decision ---
+    ast1 = extract_ast_hashes(file1, language, min_depth=3, tree=tree1)
+    ast2 = extract_ast_hashes(file2, language, min_depth=3, tree=tree2)
+
+    ast_sim = ast_similarity(ast1, ast2)
+
+    # --- Find paired occurrences using k-gram indices ---
+    occurrences = find_paired_occurrences(index1, index2)
+
+    # --- Build fragments using Dolos-style algorithm ---
+    fragments = build_fragments(occurrences, minimum_occurrences=1)
+
+    # --- Compute proper similarity metrics ---
+    # Use winnowed fingerprint count (not raw k-grams) for proper similarity calculation
+    total_left = len(fps1)
+    total_right = len(fps2)
+    metrics = compute_similarity_metrics(occurrences, total_left, total_right)
+
+    # Use k-gram similarity as the decision metric (like Dolos)
+    if metrics['similarity'] < ast_threshold:
+        return metrics['similarity'], [], metrics
+
+    # Convert fragments to match format
+    matches = []
+    for frag in fragments:
+        matches.append({
+            'file1': frag.left_selection,
+            'file2': frag.right_selection,
+            'kgram_count': len(frag.pairs)
+        })
+
+    return metrics['similarity'], matches, metrics
+
+
+# -------------------------------
+# Cached Analysis with Redis
+# -------------------------------
+
+def analyze_plagiarism_cached(
+    file1_path: str,
+    file2_path: str,
+    file1_hash: str,
+    file2_hash: str,
+    cache=None,
+    language: str = 'python',
+    ast_threshold: float = 0.30,
+) -> Tuple[float, List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Analyze plagiarism with Redis caching support.
+
+    Args:
+        file1_path: Path to first file
+        file2_path: Path to second file
+        file1_hash: SHA1 hash of first file content
+        file2_hash: SHA1 hash of second file content
+        cache: Redis cache instance (optional)
+        language: Programming language
+        ast_threshold: Minimum AST similarity to return matches
+
+    Returns:
+        Tuple of (ast_similarity, matches)
+    """
+    # Try to get cached data for file1
+    tokens1 = None
+    fps1 = None
+    index1 = None
+    ast1 = None
+
+    if cache and cache.is_connected:
+        # Try to get cached fingerprints and AST hashes
+        fps1 = cache.get_fingerprints(file1_hash)
+        ast1 = cache.get_ast_hashes(file1_hash)
+        tokens1 = cache.get_tokens(file1_hash)
+
+        if fps1 is not None:
+            logger.debug(f"Cache hit for file1 fingerprints: {file1_hash[:16]}...")
+            index1 = index_fingerprints(fps1)
+        if ast1 is None or tokens1 is None or fps1 is None:
+            logger.debug(f"Cache miss for file1, computing from scratch: {file1_hash[:16]}...")
+
+    # If not in cache, compute from file
+    try:
+        tree1 = None
+        if tokens1 is None or fps1 is None or ast1 is None:
+            _, tree1 = parse_file(file1_path, language)
+        
+        if tokens1 is None:
+            tokens1 = tokenize_with_tree_sitter(file1_path, language, tree=tree1)
+            logger.info(f"File1 tokenized: {len(tokens1)} tokens")
+        if fps1 is None:
+            fps1 = winnow_fingerprints(compute_fingerprints(tokens1))
+            index1 = index_fingerprints(fps1)
+            logger.info(f"File1 fingerprints: {len(fps1)} fingerprints")
+        if ast1 is None:
+            ast1 = extract_ast_hashes(file1_path, language, min_depth=3, tree=tree1)
+            logger.info(f"File1 AST hashes: {len(ast1)} hashes")
+    except Exception as e:
+        logger.error(f"Error processing file1 ({file1_path}): {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise
+
+    # Cache file1 data if we computed it and cache is available
+    if cache and cache.is_connected:
+        cache.cache_fingerprints(file1_hash, fps1, ast1, tokens1)
+
+    # Try to get cached data for file2
+    tokens2 = None
+    fps2 = None
+    index2 = None
+    ast2 = None
+
+    if cache and cache.is_connected:
+        fps2 = cache.get_fingerprints(file2_hash)
+        ast2 = cache.get_ast_hashes(file2_hash)
+        tokens2 = cache.get_tokens(file2_hash)
+
+        if fps2 is not None:
+            logger.debug(f"Cache hit for file2 fingerprints: {file2_hash[:16]}...")
+            index2 = index_fingerprints(fps2)
+        if ast2 is None or tokens2 is None or fps2 is None:
+            logger.debug(f"Cache miss for file2, computing from scratch: {file2_hash[:16]}...")
+
+    # If not in cache, compute from file
+    try:
+        tree2 = None
+        if tokens2 is None or fps2 is None or ast2 is None:
+            _, tree2 = parse_file(file2_path, language)
+        
+        if tokens2 is None:
+            tokens2 = tokenize_with_tree_sitter(file2_path, language, tree=tree2)
+            logger.info(f"File2 tokenized: {len(tokens2)} tokens")
+        if fps2 is None:
+            fps2 = winnow_fingerprints(compute_fingerprints(tokens2))
+            index2 = index_fingerprints(fps2)
+            logger.info(f"File2 fingerprints: {len(fps2)} fingerprints")
+        if ast2 is None:
+            ast2 = extract_ast_hashes(file2_path, language, min_depth=3, tree=tree2)
+            logger.info(f"File2 AST hashes: {len(ast2)} hashes")
+    except Exception as e:
+        logger.error(f"Error processing file2 ({file2_path}): {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise
+
+    # Cache file2 data if we computed it and cache is available
+    if cache and cache.is_connected:
+        cache.cache_fingerprints(file2_hash, fps2, ast2, tokens2)
+
+    # --- AST similarity check ---
+    logger.info(f"AST analysis: file1={file1_path}, file2={file2_path}")
+    logger.info(f"AST hashes count: file1={len(ast1) if ast1 else 0}, file2={len(ast2) if ast2 else 0}")
+    
+    if ast1 and ast2:
+        logger.info(f"AST hash samples: file1={ast1[:3] if len(ast1) >= 3 else ast1}, file2={ast2[:3] if len(ast2) >= 3 else ast2}")
+    
+    # --- Find paired occurrences using k-gram indices ---
+    occurrences = find_paired_occurrences(index1, index2)
+
+    # --- Build fragments using Dolos-style algorithm ---
+    fragments = build_fragments(occurrences, minimum_occurrences=1)
+
+    # --- Compute proper similarity metrics ---
+    # Note: total counts need actual token counts from files
+    total_left = len(fps1) if fps1 else 0
+    total_right = len(fps2) if fps2 else 0
+    metrics = compute_similarity_metrics(occurrences, total_left, total_right)
+
+    logger.info(f"K-gram similarity calculated: {metrics['similarity']:.4f}")
+    logger.info(f"Longest fragment: {metrics['longest_fragment']}")
+
+    # Use k-gram similarity as the decision metric (like Dolos)
+    if metrics['similarity'] < ast_threshold:
+        logger.info(f"K-gram similarity {metrics['similarity']:.4f} below threshold {ast_threshold}, returning without matches")
+        return metrics['similarity'], [], metrics
+
+    # Convert fragments to match format
+    matches = []
+    for frag in fragments:
+        matches.append({
+            'file1': frag.left_selection,
+            'file2': frag.right_selection,
+            'kgram_count': len(frag.pairs)
+        })
+
+    logger.info(f"Plagiarism analysis complete: similarity={metrics['similarity']:.4f}, matches={len(matches)}, longest_fragment={metrics['longest_fragment']}")
+    return metrics['similarity'], matches, metrics
+
+
+class Analyzer:
+    def Start(self, file1: str, file2: str, language: str) -> dict:
+        similarity, matches, metrics = analyze_plagiarism(
+            file1,
+            file2,
+            language=language,
+            ast_threshold=0.0
+        )
+        
+        matches_serializable = []
+        for match in matches:
+            matches_serializable.append({
+                "file1": {
+                    "start_line": match["file1"]["start_line"],
+                    "start_col": match["file1"]["start_col"],
+                    "end_line": match["file1"]["end_line"],
+                    "end_col": match["file1"]["end_col"],
+                },
+                "file2": {
+                    "start_line": match["file2"]["start_line"],
+                    "start_col": match["file2"]["start_col"],
+                    "end_line": match["file2"]["end_line"],
+                    "end_col": match["file2"]["end_col"],
+                }
+            })
+        
+        return {
+            "similarity": round(similarity * 100, 2),
+            "similarity_ratio": similarity,
+            "matches": matches_serializable,
+            "file1": file1,
+            "file2": file2,
+            "language": language,
+            "longest_fragment": metrics.get('longest_fragment', 0),
+            "left_covered": metrics.get('left_covered', 0),
+            "right_covered": metrics.get('right_covered', 0),
+            "left_total": metrics.get('left_total', 0),
+            "right_total": metrics.get('right_total', 0),
+        }

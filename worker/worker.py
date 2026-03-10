@@ -1,13 +1,18 @@
 import functools
 import json
 import logging
+import os
 import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from itertools import combinations
-from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
+
+worker_dir = os.path.dirname(os.path.abspath(__file__))
+src_dir = os.path.dirname(worker_dir)
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
 from crud import update_plagiarism_task, save_similarity_result, get_all_files, get_max_similarity
 
@@ -22,69 +27,82 @@ if TYPE_CHECKING:
 
 from config import settings
 from rabbit import get_connection, create_channel
+from utils import create_engines_params
 
 DEFAULT_LOG_FORMAT = "%(module)s:%(lineno)d %(levelname)-6s - %(message)s"
-
-CLI_PATH = Path(__file__).parent.parent / "src" / "plagiarism" / "cli.py"
 
 connection: Optional["pika.BlockingConnection"] = None
 executor: Optional[ThreadPoolExecutor] = None
 log = logging.getLogger(__name__)
 
 
-def run_cli_analyze(file1_path: str, file2_path: str, language: str = "python") -> Dict:
+def run_cli_analyze(file1_path: str, file2_path: str, language: str) -> Dict:
     """
-    Run plagiarism analysis via CLI subprocess.
-    DEPRECATED: Use Redis-based similarity calculation instead.
-    Kept for backwards compatibility and debugging.
-    Returns parsed JSON result.
+    Run plagiarism analysis using the new analyzer (Dolos-style fragment building).
+    Returns parsed JSON result with similarity and matches.
     """
-    cmd = [
-        sys.executable,
-        str(CLI_PATH),
-        "analyze",
-        file1_path,
-        file2_path,
-        "--language", language
-    ]
+    from cli.analyzer import Analyzer
     
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=300
-    )
-    
-    if result.returncode != 0:
-        raise RuntimeError(f"CLI error: {result.stderr}")
-    
-    return json.loads(result.stdout)
+    analyzer = Analyzer()
+    result = analyzer.Start(file1_path, file2_path, language)
+    return result
 
 
-def run_cli_fingerprint(file_path: str, language: str = "python") -> Dict:
+def transform_matches_to_legacy_format(matches: List[Dict]) -> List[Dict]:
     """
-    Run fingerprint extraction via CLI subprocess.
+    Transform matches from new analyzer format to legacy DB format.
+    New format: [{file1: {start_line, start_col, end_line, end_col}, file2: {...}}]
+    Legacy format: [{file_a_start_line, file_a_end_line, file_b_start_line, file_b_end_line}]
+    """
+    legacy_matches = []
+    for match in matches:
+        legacy_matches.append({
+            "file_a_start_line": match["file1"]["start_line"],
+            "file_a_end_line": match["file1"]["end_line"],
+            "file_b_start_line": match["file2"]["start_line"],
+            "file_b_end_line": match["file2"]["end_line"]
+        })
+    return legacy_matches
+
+
+def run_cli_fingerprint(file_path: str, language: str) -> Dict:
+    """
+    Run fingerprint extraction.
     Returns parsed JSON result with fingerprints and ast_hashes.
     """
-    cmd = [
-        sys.executable,
-        str(CLI_PATH),
-        "fingerprint",
-        file_path,
-        "--language", language
-    ]
-    
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=120
+    from cli.analyzer import (
+        tokenize_with_tree_sitter,
+        winnow_fingerprints,
+        compute_fingerprints,
+        extract_ast_hashes,
     )
     
-    if result.returncode != 0:
-        raise RuntimeError(f"CLI error: {result.stderr}")
+    tokens = tokenize_with_tree_sitter(file_path, language)
+    fingerprints = winnow_fingerprints(compute_fingerprints(tokens))
+    ast_hashes = extract_ast_hashes(file_path, language, min_depth=3)
     
-    return json.loads(result.stdout)
+    fingerprints_serializable = []
+    for fp in fingerprints:
+        fingerprints_serializable.append({
+            "hash": fp["hash"],
+            "start": list(fp["start"]),
+            "end": list(fp["end"]),
+        })
+    
+    tokens_serializable = [
+        {"type": t[0], "start": list(t[1]), "end": list(t[2])}
+        for t in tokens
+    ]
+    
+    return {
+        "file": file_path,
+        "language": language,
+        "fingerprints": fingerprints_serializable,
+        "ast_hashes": ast_hashes,
+        "tokens": tokens_serializable,
+        "token_count": len(tokens),
+        "fingerprint_count": len(fingerprints),
+    }
 
 
 def configure_logging(
@@ -401,23 +419,23 @@ def process_task(
                         tokens_b = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in fp_result_b.get("tokens", [])]
                         cache.cache_fingerprints(file_b_hash, fingerprints_b, ast_hashes_b, tokens_b)
 
-                    ast_similarity = cache.calculate_ast_similarity(file_a_hash, file_b_hash)
-                    log.info(f"[Task {task_id}]   AST similarity (Redis): {ast_similarity:.4f}")
+                    cached_result = cache.get_cached_similarity(file_a_hash, file_b_hash)
+                    if cached_result:
+                        log.info(f"[Task {task_id}]   Using cached similarity result")
+                        ast_similarity = cached_result['ast_similarity']
+                        matches_data = cached_result['matches']
+                    else:
+                        analyze_result = run_cli_analyze(file_a_path, file_b_path, language)
+                        ast_similarity = analyze_result.get('similarity_ratio', 0)
+                        log.info(f"[Task {task_id}]   Analyzer similarity: {ast_similarity:.4f}")
 
-                    matches_data = []
-                    if ast_similarity >= 0.15:
-                        raw_matches = cache.find_matching_regions(file_a_hash, file_b_hash)
-                        merged_matches = cache.merge_adjacent_matches(raw_matches)
-                        
-                        for match in merged_matches:
-                            matches_data.append({
-                                "file_a_start_line": match["file1"]["start_line"],
-                                "file_a_end_line": match["file1"]["end_line"],
-                                "file_b_start_line": match["file2"]["start_line"],
-                                "file_b_end_line": match["file2"]["end_line"]
-                            })
-                    
-                    cache.cache_similarity_result(file_a_hash, file_b_hash, ast_similarity, matches_data)
+                        matches_data = []
+                        if ast_similarity >= 0.15:
+                            raw_matches = analyze_result.get('matches', [])
+                            matches_data = transform_matches_to_legacy_format(raw_matches)
+                            log.info(f"[Task {task_id}]   Found {len(matches_data)} matching fragments")
+
+                        cache.cache_similarity_result(file_a_hash, file_b_hash, ast_similarity, matches_data)
 
                 result_id = save_similarity_result(
                     task_id=task_id,
