@@ -33,6 +33,8 @@ interface Task {
     completed: number;
     total: number;
   };
+  files_count?: number;
+  high_similarity_count?: number;
 }
 
 interface ActivityItem {
@@ -103,20 +105,8 @@ const Overview: React.FC = () => {
         return;
       }
       
-      // Fetch detailed results for each task
-      const tasksWithDetails = await Promise.all(
-        response.data.map(async (task: Task) => {
-          try {
-            const detailsResponse = await api.get(`/plagiarism/${task.task_id}/results`);
-            return detailsResponse.data;
-          } catch (err) {
-            console.error('Failed to fetch details for task', task.task_id, err);
-            return null;
-          }
-        })
-      );
-      
-      setTasks(tasksWithDetails.filter(Boolean));
+      // Backend now includes files_count and high_similarity_count in TaskListResponse
+      setTasks(response.data);
     } catch (err) {
       console.error('Failed to fetch tasks:', err);
     } finally {
@@ -124,13 +114,11 @@ const Overview: React.FC = () => {
     }
   };
   
-  // Calculate statistics
+  // Calculate statistics using aggregated counts from backend
   const totalSubmissions = tasks.length;
   const pendingChecks = tasks.filter(t => t.status === 'pending' || t.status === 'processing').length;
-  const highSimilarity = tasks.reduce((count, task) => {
-    return count + (task.results?.filter(r => (r.ast_similarity || 0) >= 0.8).length || 0);
-  }, 0);
-  const totalFiles = tasks.reduce((sum, task) => sum + (task.files?.length || 0), 0);
+  const highSimilarity = tasks.reduce((sum, task) => sum + (task.high_similarity_count || 0), 0);
+  const totalFiles = tasks.reduce((sum, task) => sum + (task.files_count || 0), 0);
   
   // Get recent activity (last 7 days or max 25 entries)
   const getRecentActivity = (): ActivityItem[] => {
@@ -142,7 +130,7 @@ const Overview: React.FC = () => {
       .map(task => ({
         id: task.task_id,
         timestamp: new Date(task.created_at!),
-        filesCount: task.files?.length || 0,
+        filesCount: task.files_count || 0,
         pairsCount: task.total_pairs || 0,
         status: task.status,
       }))

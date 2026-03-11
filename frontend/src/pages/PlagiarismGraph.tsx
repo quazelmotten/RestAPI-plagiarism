@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import cytoscape from 'cytoscape';
 import coseBilkent from 'cytoscape-cose-bilkent';
 import {
@@ -55,53 +55,34 @@ const PlagiarismGraph: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [similarityThreshold, setSimilarityThreshold] = useState(0.75);
   const [, setCy] = useState<cytoscape.Core | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<Array<{task_id: string; status: string; total_pairs: number}>>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTaskDetails, setSelectedTaskDetails] = useState<Task | null>(null);
   const [hasSetInitialTask, setHasSetInitialTask] = useState(false);
 
-  // Fetch tasks and their results from API
+  // Fetch tasks list only (no results)
   const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.get('/plagiarism/tasks');
-      
-      // Validate response is an array
       if (!Array.isArray(response.data)) {
         console.error('Expected array from /plagiarism/tasks, got:', typeof response.data, response.data);
         setError('Invalid data format received from server');
         setTasks([]);
         return;
       }
-      
-      const taskList = response.data as Array<{ task_id: string; status: string }>;
-      
-      // Fetch detailed results for each task
-      const tasksWithDetails = await Promise.all(
-        taskList.map(async (task) => {
-          try {
-            const detailsResponse = await api.get(`/plagiarism/${task.task_id}/results`);
-            return detailsResponse.data as Task;
-          } catch (err) {
-            console.error('Failed to fetch details for task %s', task.task_id, err);
-            return null;
-          }
-        })
-      );
-      
-      const validTasks = tasksWithDetails.filter((t): t is Task => t !== null);
-      setTasks(validTasks);
-      
+      const taskList = response.data as Array<{task_id: string; status: string; total_pairs: number}>;
+      setTasks(taskList);
       // Select the first completed task with results by default (only once)
       if (!hasSetInitialTask) {
-        const completedTask = validTasks.find((t) => 
-          t.status === 'completed' && t.results && t.results.length > 0
-        );
+        const completedTask = taskList.find((t) => t.status === 'completed' && t.total_pairs > 0);
         if (completedTask) {
           setSelectedTaskId(completedTask.task_id);
-        } else if (validTasks.length > 0) {
-          setSelectedTaskId(validTasks[0].task_id);
+        } else if (taskList.length > 0) {
+          setSelectedTaskId(taskList[0].task_id);
         }
         setHasSetInitialTask(true);
       }
@@ -117,8 +98,32 @@ const PlagiarismGraph: React.FC = () => {
     fetchTasks();
   }, [fetchTasks]);
 
+  // Fetch details for selected task
+  useEffect(() => {
+    if (selectedTaskId) {
+      fetchTaskDetails();
+    } else {
+      setSelectedTaskDetails(null);
+    }
+  }, [selectedTaskId]);
+
+  const fetchTaskDetails = async () => {
+    try {
+      setLoadingDetails(true);
+      const response = await api.get(`/plagiarism/${selectedTaskId}/results`, {
+        params: { limit: 500 } // load up to 500 highest similarity results for graph
+      });
+      setSelectedTaskDetails(response.data as Task);
+    } catch (err) {
+      console.error('Failed to fetch task details:', err);
+      setSelectedTaskDetails(null);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
   // Get selected task data
-  const selectedTask = tasks.find(t => t.task_id === selectedTaskId);
+  const selectedTask = selectedTaskDetails;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -139,7 +144,6 @@ const PlagiarismGraph: React.FC = () => {
     // Build edges from similarity results, filtering out edges with non-existent targets
     const edges: cytoscape.ElementDefinition[] = selectedTask.results
       .filter((result) => {
-        // Only include edges where both source and target exist in the files list
         const sourceExists = validFileIds.has(result.file_a.id);
         const targetExists = validFileIds.has(result.file_b.id);
         const meetsThreshold = (result.ast_similarity || 0) >= similarityThreshold;
@@ -181,8 +185,7 @@ const PlagiarismGraph: React.FC = () => {
             'line-color': '#718096',
             'target-arrow-color': '#718096',
             'curve-style': 'bezier',
-            'label': (ele: cytoscape.EdgeSingular) => 
-              `${(ele.data('similarity') * 100).toFixed(0)}%`,
+            'label': (ele: cytoscape.EdgeSingular) => `${(ele.data('similarity') * 100).toFixed(0)}%`,
             'font-size': '12px',
             'text-background-color': '#fff',
             'text-background-opacity': 0.8,
@@ -293,37 +296,48 @@ const PlagiarismGraph: React.FC = () => {
                       ))}
                     </Select>
                   </HStack>
-                  <Badge colorScheme={selectedTask?.status === 'completed' ? 'green' : 'yellow'}>
-                    {selectedTask?.status}
-                  </Badge>
+                  {selectedTask && (
+                    <Badge colorScheme={selectedTask.status === 'completed' ? 'green' : 'yellow'}>
+                      {selectedTask.status}
+                    </Badge>
+                  )}
                 </HStack>
 
-                <Box borderTop="1px" borderColor="gray.200" pt={4}>
-                  <HStack justify="space-between" mb={2}>
-                    <Text fontWeight="semibold">Similarity Threshold</Text>
-                    <Badge colorScheme="blue">{(similarityThreshold * 100).toFixed(0)}%</Badge>
-                  </HStack>
-                  <Slider
-                    value={similarityThreshold}
-                    onChange={setSimilarityThreshold}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                  >
-                    <SliderTrack>
-                      <SliderFilledTrack />
-                    </SliderTrack>
-                    <SliderThumb />
-                  </Slider>
-                  <HStack justify="space-between" mt={2}>
-                    <Text fontSize="sm" color="gray.500">
-                      Only show connections with similarity score above the threshold
-                    </Text>
-                    <Text fontSize="sm" color="gray.500">
-                      Showing {filteredEdgesCount} of {selectedTask?.total_pairs || 0} connections
-                    </Text>
-                  </HStack>
-                </Box>
+                {loadingDetails && (
+                  <Box textAlign="center" py={2}>
+                    <Spinner size="sm" />
+                    <Text fontSize="sm" ml={2}>Loading results...</Text>
+                  </Box>
+                )}
+
+                {!loadingDetails && selectedTaskDetails && (
+                  <Box borderTop="1px" borderColor="gray.200" pt={4}>
+                    <HStack justify="space-between" mb={2}>
+                      <Text fontWeight="semibold">Similarity Threshold</Text>
+                      <Badge colorScheme="blue">{(similarityThreshold * 100).toFixed(0)}%</Badge>
+                    </HStack>
+                    <Slider
+                      value={similarityThreshold}
+                      onChange={setSimilarityThreshold}
+                      min={0}
+                      max={1}
+                      step={0.05}
+                    >
+                      <SliderTrack>
+                        <SliderFilledTrack />
+                      </SliderTrack>
+                      <SliderThumb />
+                    </Slider>
+                    <HStack justify="space-between" mt={2}>
+                      <Text fontSize="sm" color="gray.500">
+                        Only show connections with similarity score above the threshold
+                      </Text>
+                      <Text fontSize="sm" color="gray.500">
+                        Showing {filteredEdgesCount} of {selectedTask?.total_pairs ?? 0} connections
+                      </Text>
+                    </HStack>
+                  </Box>
+                )}
 
                 <HStack spacing={4} fontSize="sm">
                   <HStack>

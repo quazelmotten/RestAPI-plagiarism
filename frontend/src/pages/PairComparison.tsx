@@ -20,6 +20,7 @@ import api from '../services/api';
 interface FileInfo {
   id: string;
   filename: string;
+  language: string;
 }
 
 interface PlagiarismMatch {
@@ -122,14 +123,11 @@ const FileViewer: React.FC<FileViewerProps> = ({
 
   const lines = useMemo(() => content.split('\n'), [content]);
 
-  // Precompute line-to-match mapping for O(1) lookup
   const lineMatchMap = useMemo(() => {
     const map: Array<{ matchIndex: number } | null> = new Array(lines.length).fill(null);
     matches.forEach((match, index) => {
       const startLine = isFileA ? match.file_a_start_line : match.file_b_start_line;
       const endLine = isFileA ? match.file_a_end_line : match.file_b_end_line;
-      
-      // Convert 1-based to 0-based array indices
       for (let lineNum = Math.max(1, startLine); lineNum <= endLine && lineNum <= lines.length; lineNum++) {
         const idx = lineNum - 1;
         if (map[idx] === null) {
@@ -144,8 +142,6 @@ const FileViewer: React.FC<FileViewerProps> = ({
     const lineEl = event.currentTarget as HTMLDivElement;
     const container = scrollContainerRef.current;
     if (!container) return;
-    
-    // offsetTop is relative to offsetParent (container's padding box)
     const offsetInContainer = lineEl.offsetTop - container.scrollTop;
     onJumpToMatch(lineNumber, offsetInContainer, isFileA);
   }, [scrollContainerRef, onJumpToMatch, isFileA]);
@@ -164,21 +160,19 @@ const FileViewer: React.FC<FileViewerProps> = ({
             overflowY="auto"
             fontFamily="monospace"
             fontSize="sm"
-            maxH="calc(100vh - 20rem)" // More responsive than 320px
+            maxH="calc(100vh - 20rem)"
           >
             {lines.map((line, idx) => {
               const lineNumber = idx + 1;
               const matchInfo = lineMatchMap[idx];
               const isHovered = matchInfo !== null && matchInfo.matchIndex === hoveredMatchIndex;
-              
               return (
                 <Flex
                   key={idx}
                   ref={(el) => getLineRef(idx, el)}
-                  bg={isHovered 
-                    ? getMatchColorHover(matchInfo!.matchIndex) 
-                    : (matchInfo ? getMatchColor(matchInfo.matchIndex) : 'transparent')
-                  }
+                  bg={isHovered
+                    ? getMatchColorHover(matchInfo!.matchIndex)
+                    : (matchInfo ? getMatchColor(matchInfo.matchIndex) : 'transparent')}
                   borderLeftWidth={matchInfo ? 4 : 0}
                   borderLeftColor={matchInfo ? getMatchBorder(matchInfo.matchIndex) : 'transparent'}
                   onMouseEnter={() => onHoverMatch(matchInfo ? matchInfo.matchIndex : null)}
@@ -230,7 +224,8 @@ const FileViewer: React.FC<FileViewerProps> = ({
 };
 
 const PairComparison: React.FC = () => {
-  const [pairs, setPairs] = useState<PairResult[]>([]);
+  const [files, setFiles] = useState<FileInfo[]>([]);
+  const [currentPair, setCurrentPair] = useState<PairResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedFileAId, setSelectedFileAId] = useState<string>('');
@@ -248,72 +243,69 @@ const PairComparison: React.FC = () => {
 
   const bgColor = useColorModeValue('white', 'gray.800');
 
-  const uniqueFiles = useMemo(() => {
-    const fileMap = new Map<string, { id: string; filename: string }>();
-    pairs.forEach(pair => {
-      fileMap.set(pair.file_a.id, pair.file_a);
-      fileMap.set(pair.file_b.id, pair.file_b);
-    });
-    return Array.from(fileMap.values());
-  }, [pairs]);
+  const uniqueFiles = useMemo(() => files, [files]);
 
-  const currentPair = useMemo(() => {
-    return pairs.find(p => 
-      (p.file_a.id === selectedFileAId && p.file_b.id === selectedFileBId) ||
-      (p.file_a.id === selectedFileBId && p.file_b.id === selectedFileAId)
-    ) || null;
-  }, [pairs, selectedFileAId, selectedFileBId]);
+  const currentPairMemo = useMemo(() => currentPair, [currentPair]);
 
-  // Determine which selected file corresponds to pair.file_a
   const isFileAInPair = useMemo(() => {
-    if (!currentPair) return false;
-    return currentPair.file_a.id === selectedFileAId;
-  }, [currentPair, selectedFileAId]);
+    if (!currentPairMemo) return false;
+    return currentPairMemo.file_a.id === selectedFileAId;
+  }, [currentPairMemo, selectedFileAId]);
 
-  // Memoize matches for FileViewer to prevent unnecessary re-renders
-  const memoizedMatches = useMemo(() => currentPair?.matches || [], [currentPair]);
-
+  // Fetch file list on mount
   useEffect(() => {
-    fetchAllPairs();
+    fetchFileList();
   }, []);
 
-  useEffect(() => {
-    if (selectedFileAId && selectedFileBId) {
-      loadFileContent();
-    }
-  }, [selectedFileAId, selectedFileBId]);
-
-  const fetchAllPairs = async () => {
+  const fetchFileList = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get('/plagiarism/results/all');
-
-      if (!Array.isArray(response.data)) {
-        setError('Invalid data format received from server');
-        setPairs([]);
-        return;
+      const response = await api.get('/plagiarism/files/list');
+      if (Array.isArray(response.data)) {
+        setFiles(response.data);
+        // Auto-select first two files if available
+        if (response.data.length >= 2 && !selectedFileAId && !selectedFileBId) {
+          setSelectedFileAId(response.data[0].id);
+          setSelectedFileBId(response.data[1].id);
+        }
+      } else {
+        setError('Invalid file list format');
+        setFiles([]);
       }
-
-      setPairs(response.data || []);
-      
-      if (response.data && response.data.length > 0) {
-        const firstPair = response.data[0];
-        setSelectedFileAId(firstPair.file_a.id);
-        setSelectedFileBId(firstPair.file_b.id);
-      }
-    } catch (err) {
-      console.error('Error fetching pairs:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch pairs';
-      setError(errorMessage);
+    } catch (err: any) {
+      console.error('Error fetching file list:', err);
+      setError(err.response?.data?.detail || err.message || 'Failed to load file list');
     } finally {
       setLoading(false);
     }
   };
 
+  // Fetch specific file pair when selection changes
+  useEffect(() => {
+    if (selectedFileAId && selectedFileBId) {
+      fetchFilePair();
+    } else {
+      setCurrentPair(null);
+    }
+  }, [selectedFileAId, selectedFileBId]);
+
+  const fetchFilePair = async () => {
+    try {
+      const response = await api.get('/plagiarism/file-pair', {
+        params: { file_a: selectedFileAId, file_b: selectedFileBId }
+      });
+      setCurrentPair(response.data);
+    } catch (err: any) {
+      if (err.response?.status !== 404) {
+        console.error('Error fetching file pair:', err);
+      }
+      setCurrentPair(null);
+    }
+  };
+
   const loadFileContent = useCallback(async () => {
     if (!selectedFileAId || !selectedFileBId) return;
-    
     setLoadingContent(true);
     setFileAContent(null);
     setFileBContent(null);
@@ -326,7 +318,6 @@ const PairComparison: React.FC = () => {
         api.get(`/plagiarism/files/${selectedFileAId}/content`),
         api.get(`/plagiarism/files/${selectedFileBId}/content`)
       ]);
-
       setFileAContent(fileAResponse.data);
       setFileBContent(fileBResponse.data);
     } catch (error) {
@@ -336,6 +327,12 @@ const PairComparison: React.FC = () => {
       setLoadingContent(false);
     }
   }, [selectedFileAId, selectedFileBId]);
+
+  useEffect(() => {
+    if (selectedFileAId && selectedFileBId) {
+      loadFileContent();
+    }
+  }, [selectedFileAId, selectedFileBId, loadFileContent]);
 
   const getLineRef = useCallback((fileA: boolean) => (lineIndex: number, el: HTMLDivElement | null) => {
     if (el) {
@@ -348,14 +345,13 @@ const PairComparison: React.FC = () => {
   }, []);
 
   const handleJumpToMatch = useCallback((clickedLine: number, clickedLineOffset: number, clickedIsFileA: boolean) => {
-    if (!currentPair) return;
-    
+    if (!currentPairMemo) return;
     let targetLine: number;
     let targetRefs: React.MutableRefObject<Map<number, HTMLDivElement>>;
     let targetContainer: HTMLDivElement | null;
-    
+
     if (clickedIsFileA) {
-      const match = currentPair.matches.find(m => 
+      const match = currentPairMemo.matches.find(m =>
         clickedLine >= m.file_a_start_line && clickedLine <= m.file_a_end_line
       );
       if (!match) return;
@@ -363,7 +359,7 @@ const PairComparison: React.FC = () => {
       targetRefs = fileBLineRefs;
       targetContainer = fileBContainerRef.current;
     } else {
-      const match = currentPair.matches.find(m => 
+      const match = currentPairMemo.matches.find(m =>
         clickedLine >= m.file_b_start_line && clickedLine <= m.file_b_end_line
       );
       if (!match) return;
@@ -373,18 +369,13 @@ const PairComparison: React.FC = () => {
     }
 
     if (!targetContainer) return;
-    
     const targetEl = targetRefs.current.get(targetLine - 1);
     if (!targetEl) return;
-
-    // Calculate target offset relative to its container
     const targetOffset = targetEl.offsetTop;
-    
-    // Set scroll so target line appears at same offset as clicked line
     const newScrollTop = targetOffset - clickedLineOffset;
     const maxScrollTop = targetContainer.scrollHeight - targetContainer.clientHeight;
     targetContainer.scrollTop = Math.max(0, Math.min(newScrollTop, maxScrollTop));
-  }, [currentPair]);
+  }, [currentPairMemo]);
 
   const handleFileAChange = (fileId: string) => {
     setSelectedFileAId(fileId);
@@ -404,7 +395,7 @@ const PairComparison: React.FC = () => {
     return (
       <Box p={8} textAlign="center">
         <Spinner size="xl" color="blue.500" thickness="4px" />
-        <Text mt={4}>Loading pair comparisons...</Text>
+        <Text mt={4}>Loading file list...</Text>
       </Box>
     );
   }
@@ -416,22 +407,7 @@ const PairComparison: React.FC = () => {
           <AlertIcon />
           {error}
         </Alert>
-        <Button onClick={fetchAllPairs}>Retry</Button>
-      </Box>
-    );
-  }
-
-  if (pairs.length === 0) {
-    return (
-      <Box>
-        <Heading mb={6}>Pair Comparison</Heading>
-        <Card>
-          <CardBody>
-            <Text textAlign="center" color="gray.500" py={8}>
-              No plagiarism comparisons found. Upload files and run plagiarism checks to see pairs.
-            </Text>
-          </CardBody>
-        </Card>
+        <Button onClick={fetchFileList}>Retry</Button>
       </Box>
     );
   }
@@ -507,7 +483,7 @@ const PairComparison: React.FC = () => {
             content={fileAContent?.content || ''}
             fileName={fileAContent?.filename || 'File A'}
             language={fileAContent?.language || 'unknown'}
-            matches={memoizedMatches}
+            matches={currentPair?.matches || []}
             isFileA={isFileAInPair}
             hoveredMatchIndex={hoveredMatchIndex}
             onHoverMatch={setHoveredMatchIndex}
@@ -520,7 +496,7 @@ const PairComparison: React.FC = () => {
             content={fileBContent?.content || ''}
             fileName={fileBContent?.filename || 'File B'}
             language={fileBContent?.language || 'unknown'}
-            matches={memoizedMatches}
+            matches={currentPair?.matches || []}
             isFileA={!isFileAInPair}
             hoveredMatchIndex={hoveredMatchIndex}
             onHoverMatch={setHoveredMatchIndex}

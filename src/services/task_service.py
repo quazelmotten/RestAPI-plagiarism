@@ -1,9 +1,9 @@
 import uuid
 from typing import List, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
-from models.models import PlagiarismTask, File as FileModel
+from models.models import PlagiarismTask, File as FileModel, SimilarityResult
 from schemas.task import TaskCreateResponse, TaskResponse, TaskListResponse, TaskProgress
 from schemas.file import FileUploadInfo
 
@@ -103,11 +103,44 @@ class TaskService:
             ) if task else None
         )
 
-    async def get_all_tasks(self) -> List[TaskListResponse]:
-        result = await self.db.execute(
-            select(PlagiarismTask).order_by(PlagiarismTask.id)
-        )
+    async def get_all_tasks(self, limit: Optional[int] = None, offset: Optional[int] = None) -> List[TaskListResponse]:
+        """Get all plagiarism tasks with optional pagination and aggregated stats."""
+        # Base query with ordering and pagination
+        query = select(PlagiarismTask).order_by(PlagiarismTask.id.desc())
+        
+        if limit is not None:
+            query = query.limit(limit)
+        if offset is not None:
+            query = query.offset(offset)
+            
+        result = await self.db.execute(query)
         tasks = result.scalars().all()
+
+        # If no tasks, return early
+        if not tasks:
+            return []
+
+        # Collect task IDs for aggregate queries
+        task_ids = [task.id for task in tasks]
+
+        # Fetch files_count per task in a single query
+        files_count_query = select(
+            FileModel.task_id,
+            func.count().label('files_count')
+        ).where(FileModel.task_id.in_(task_ids)).group_by(FileModel.task_id)
+        files_count_result = await self.db.execute(files_count_query)
+        files_count_map = {row.task_id: row.files_count for row in files_count_result.all()}
+
+        # Fetch high_similarity_count per task (ast_similarity >= 0.8)
+        high_sim_query = select(
+            SimilarityResult.task_id,
+            func.count().label('high_count')
+        ).where(
+            (SimilarityResult.task_id.in_(task_ids)) &
+            (SimilarityResult.ast_similarity >= 0.8)
+        ).group_by(SimilarityResult.task_id)
+        high_sim_result = await self.db.execute(high_sim_query)
+        high_sim_map = {row.task_id: row.high_count for row in high_sim_result.all()}
 
         return [
             TaskListResponse(
@@ -122,7 +155,10 @@ class TaskService:
                     total=task.total_pairs or 0,
                     percentage=round((task.progress or 0) * 100, 1),
                     display=f"{task.processed_pairs or 0}/{task.total_pairs or 0}"
-                )
+                ),
+                files_count=files_count_map.get(task.id, 0),
+                high_similarity_count=high_sim_map.get(task.id, 0),
+                total_pairs=task.total_pairs or 0
             )
             for task in tasks
         ]

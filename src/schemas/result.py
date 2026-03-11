@@ -57,3 +57,4 @@ class TaskResultsResponse(BaseModel):
     total_pairs: int
     files: List[FileInfo]
     results: List[ResultItem]
+    overall_stats: Optional[dict] = None  # Contains avg_similarity, high, medium, low counts

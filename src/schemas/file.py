@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 
 class FileResponse(BaseModel):
@@ -28,3 +28,8 @@ class FileUploadInfo(BaseModel):
     path: str
     hash: str
     filename: str
+
+
+class FilesListResponse(BaseModel):
+    files: List[FileResponse]
+    total: int

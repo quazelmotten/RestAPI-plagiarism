@@ -35,6 +35,9 @@ class TaskListResponse(BaseModel):
     error: Optional[str] = None
     created_at: Optional[str] = None
     progress: TaskProgress
+    files_count: int = 0
+    high_similarity_count: int = 0
+    total_pairs: int = 0
 
 
 class TaskCreateResponse(BaseModel):

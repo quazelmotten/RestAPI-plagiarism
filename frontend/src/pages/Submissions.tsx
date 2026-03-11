@@ -16,6 +16,10 @@ import {
   Spinner,
   Alert,
   AlertIcon,
+  HStack,
+  Select,
+  Text,
+  useColorModeValue,
 } from '@chakra-ui/react';
 import { FiEye } from 'react-icons/fi';
 import api from '../services/api';
@@ -34,28 +38,34 @@ const Submissions: React.FC = () => {
   const [submissions, setSubmissions] = useState<FileSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0); // offset
+  const [pageSize, setPageSize] = useState(50);
   const navigate = useNavigate();
+
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
 
   useEffect(() => {
     fetchSubmissions();
   }, []);
 
-  const fetchSubmissions = async () => {
+  const fetchSubmissions = async (offset: number = currentPage, limit: number = pageSize) => {
     try {
       setLoading(true);
-      console.log('Fetching submissions from /plagiarism/files/all');
-      const response = await api.get('/plagiarism/files/all');
-      console.log('Response:', response.data);
+      const response = await api.get('/plagiarism/files', {
+        params: { limit, offset }
+      });
       
-      // Validate response is an array
-      if (!Array.isArray(response.data)) {
-        console.error('Expected array from /plagiarism/files/all, got:', typeof response.data, response.data);
+      // Response is {files: FileSubmission[], total: number}
+      if (!response.data || !Array.isArray(response.data.files)) {
         setError('Invalid data format received from server');
         setSubmissions([]);
+        setTotalCount(0);
         return;
       }
       
-      setSubmissions(response.data);
+      setSubmissions(response.data.files);
+      setTotalCount(response.data.total || 0);
       setError(null);
     } catch (err: any) {
       console.error('Error fetching submissions:', err);
@@ -64,6 +74,18 @@ const Submissions: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (newOffset: number) => {
+    setCurrentPage(newOffset);
+    fetchSubmissions(newOffset, pageSize);
+  };
+
+  const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newSize = parseInt(e.target.value, 10);
+    setPageSize(newSize);
+    setCurrentPage(0); // reset to first page
+    fetchSubmissions(0, newSize);
   };
 
   const handleViewComparison = (submissionId: string) => {
@@ -167,6 +189,50 @@ const Submissions: React.FC = () => {
               )}
             </Tbody>
           </Table>
+          
+          {/* Pagination Controls */}
+          {totalCount > pageSize && (
+            <Box mt={4} pt={4} borderTopWidth={1} borderColor={borderColor}>
+              <HStack justify="space-between" align="center" wrap="wrap" spacing={4}>
+                <HStack spacing={2}>
+                  <Button
+                    size="sm"
+                    onClick={() => handlePageChange(Math.max(0, currentPage - pageSize))}
+                    isDisabled={currentPage === 0}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage + pageSize)}
+                    isDisabled={currentPage + pageSize >= totalCount}
+                  >
+                    Next
+                  </Button>
+                </HStack>
+                
+                <HStack spacing={2}>
+                  <Text fontSize="sm" color="gray.600">
+                    Page Size:
+                  </Text>
+                  <Select
+                    value={pageSize.toString()}
+                    onChange={handlePageSizeChange}
+                    w="80px"
+                    size="sm"
+                  >
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </Select>
+                </HStack>
+                
+                <Text fontSize="sm" color="gray.500">
+                  Showing {Math.min(currentPage + 1, totalCount)} - {Math.min(currentPage + pageSize, totalCount)} of {totalCount} files
+                </Text>
+              </HStack>
+            </Box>
+          )}
         </CardBody>
       </Card>
     </Box>

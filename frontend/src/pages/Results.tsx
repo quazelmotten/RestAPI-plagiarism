@@ -67,6 +67,13 @@ interface Task {
     percentage: number;
     display: string;
   };
+  overall_stats?: {
+    avg_similarity: number;
+    high: number;
+    medium: number;
+    low: number;
+    total_results: number;
+  };
 }
 
 interface FileContent {
@@ -109,6 +116,9 @@ const Results: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'heatmap'>('cards');
+  const [selectedTaskDetails, setSelectedTaskDetails] = useState<Task | null>(null);
+  const [loadingTaskDetails, setLoadingTaskDetails] = useState(false);
+  const [loadingMoreResults, setLoadingMoreResults] = useState(false);
   
   // Compare mode state
   const [compareMode, setCompareMode] = useState(false);
@@ -121,14 +131,6 @@ const Results: React.FC = () => {
   const tasksRef = useRef(tasks);
   tasksRef.current = tasks;
   
-  // Color mode values
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.700');
-  const selectedBg = useColorModeValue('blue.50', 'blue.900');
-  const codeBg = useColorModeValue('gray.50', 'gray.800');
-  const hoverBg = useColorModeValue('gray.50', 'gray.700');
-  const matchBg = useColorModeValue('gray.50', 'gray.700');
-  
   useEffect(() => {
     fetchTasks();
   }, []);
@@ -139,7 +141,6 @@ const Results: React.FC = () => {
       const response = await api.get('/plagiarism/tasks');
       const taskList = response.data;
       
-      // Validate that taskList is an array
       if (!Array.isArray(taskList)) {
         console.error('Expected array from /plagiarism/tasks, got:', typeof taskList, taskList);
         setError('Invalid data format received from server');
@@ -147,64 +148,104 @@ const Results: React.FC = () => {
         return;
       }
       
-      // Fetch detailed results for each task
-      const tasksWithDetails = await Promise.all(
-        taskList.map(async (task: Task) => {
-          try {
-            const detailsResponse = await api.get(`/plagiarism/${task.task_id}/results`);
-            return detailsResponse.data;
-          } catch (err) {
-            console.error('Failed to fetch details for task %s', task.task_id, err);
-            return null;
-          }
-        })
-      );
+      // Transform to Task format with empty files and results
+      const tasks: Task[] = taskList.map((t: any) => ({
+        task_id: t.task_id,
+        status: t.status,
+        total_pairs: t.progress?.total || 0,
+        files: [],
+        results: [],
+        progress: t.progress
+      }));
       
-      const validTasks = tasksWithDetails.filter(Boolean);
-      setTasks(validTasks);
+      setTasks(tasks);
       
-      if (validTasks.length > 0 && !selectedTaskId) {
-        setSelectedTaskId(validTasks[0].task_id);
+      if (tasks.length > 0 && !selectedTaskId) {
+        setSelectedTaskId(tasks[0].task_id);
       }
     } catch (err) {
-      setError('Failed to fetch plagiarism results');
+      setError('Failed to fetch plagiarism tasks');
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
   
-  const selectedTask = tasks.find(t => t.task_id === selectedTaskId);
-  
-  const handleCompare = async (result: PlagiarismResult) => {
-    setSelectedPair(result);
-    setCompareMode(true);
-    setLoadingContent(true);
-    
+  const fetchTaskDetails = async (offset: number, isLoadMore: boolean = false) => {
+    if (!selectedTaskId) return;
     try {
-      const [fileAResponse, fileBResponse] = await Promise.all([
-        api.get(`/plagiarism/files/${result.file_a.id}/content`).catch(() => null),
-        api.get(`/plagiarism/files/${result.file_b.id}/content`).catch(() => null)
-      ]);
+      if (!isLoadMore) {
+        setLoadingTaskDetails(true);
+        setSelectedTaskDetails(null);
+      } else {
+        setLoadingMoreResults(true);
+      }
       
-      if (fileAResponse?.data) setFileAContent(fileAResponse.data);
-      if (fileBResponse?.data) setFileBContent(fileBResponse.data);
+      const response = await api.get(`/plagiarism/${selectedTaskId}/results`, {
+        params: {
+          limit: 50,
+          offset
+        }
+      });
+      const data = response.data;
+      
+      const taskDetails: Task = {
+        task_id: data.task_id,
+        status: data.status,
+        total_pairs: data.total_pairs,
+        files: data.files,
+        results: data.results,
+        progress: {
+          completed: data.progress.completed,
+          total: data.progress.total,
+          percentage: data.progress.percentage,
+          display: data.progress.display,
+        },
+        overall_stats: data.overall_stats
+      };
+      
+      if (offset === 0) {
+        setSelectedTaskDetails(taskDetails);
+      } else {
+        setSelectedTaskDetails(prev => prev ? { ...prev, results: [...prev.results, ...data.results] } : null);
+      }
     } catch (err) {
-      console.error('Error fetching file contents:', err);
+      console.error('Failed to fetch task details:', err);
     } finally {
-      setLoadingContent(false);
+      if (!isLoadMore) {
+        setLoadingTaskDetails(false);
+      } else {
+        setLoadingMoreResults(false);
+      }
     }
   };
-
-  const handleBackToResults = () => {
-    setCompareMode(false);
-    setSelectedPair(null);
-    setFileAContent(null);
-    setFileBContent(null);
-  };
   
+  useEffect(() => {
+    if (selectedTaskId) {
+      fetchTaskDetails(0);
+    } else {
+      setSelectedTaskDetails(null);
+    }
+  }, [selectedTaskId]);
+  
+  const selectedTaskListItem = tasks.find(t => t.task_id === selectedTaskId);
+  const selectedTask = selectedTaskDetails;
+
   const getStats = () => {
-    if (!selectedTask || !selectedTask.results) return { high: 0, medium: 0, low: 0, avg: 0 };
+    if (!selectedTask) return { high: 0, medium: 0, low: 0, avg: 0 };
+    
+    // Use overall_stats from API if available (accurate for whole task)
+    if (selectedTask.overall_stats) {
+      return {
+        high: selectedTask.overall_stats.high,
+        medium: selectedTask.overall_stats.medium,
+        low: selectedTask.overall_stats.low,
+        avg: selectedTask.overall_stats.avg_similarity
+      };
+    }
+    
+    // Fallback: compute from loaded results only (partial)
+    if (!selectedTask.results) return { high: 0, medium: 0, low: 0, avg: 0 };
     
     const similarities = selectedTask.results.map(r => r.ast_similarity || 0);
     const high = similarities.filter(s => s >= 0.8).length;
@@ -316,208 +357,41 @@ const Results: React.FC = () => {
       </Box>
     );
   };
-
-  // Compare Mode UI
-  if (compareMode && selectedPair && selectedTask) {
-    return (
-      <Flex h="calc(100vh - 150px)" gap={4}>
-        {/* Compact Results List - Left Side */}
-        <Box w="320px" flexShrink={0}>
-          <Card h="100%" bg={cardBg} borderColor={borderColor}>
-            <CardBody p={0}>
-              <VStack align="stretch" h="100%" spacing={0}>
-                <Box p={4} borderBottomWidth={1} borderColor={borderColor}>
-                  <HStack justify="space-between">
-                    <Heading size="sm">Results ({selectedTask.results.length})</Heading>
-                    <Button
-                      size="sm"
-                      leftIcon={<FiArrowLeft />}
-                      onClick={handleBackToResults}
-                    >
-                      Back
-                    </Button>
-                  </HStack>
-                </Box>
-                
-                <Box overflowY="auto" flex={1} maxH="calc(100vh - 250px)">
-                  <VStack align="stretch" spacing={1} p={2}>
-                    {selectedTask.results
-                      .sort((a, b) => (b.ast_similarity || 0) - (a.ast_similarity || 0))
-                      .map((result, idx) => (
-                        <Box
-                          key={idx}
-                          p={3}
-                          borderRadius="md"
-                          cursor="pointer"
-                          bg={selectedPair.file_a.id === result.file_a.id && selectedPair.file_b.id === result.file_b.id ? selectedBg : 'transparent'}
-                          _hover={{ bg: selectedPair.file_a.id === result.file_a.id && selectedPair.file_b.id === result.file_b.id ? selectedBg : hoverBg }}
-                          onClick={() => handleCompare(result)}
-                          borderWidth={1}
-                          borderColor={selectedPair.file_a.id === result.file_a.id && selectedPair.file_b.id === result.file_b.id ? 'blue.300' : borderColor}
-                        >
-                          <VStack align="stretch" spacing={1}>
-                            <Text fontSize="xs" fontWeight="medium" noOfLines={1}>
-                              {result.file_a.filename}
-                            </Text>
-                            <Text fontSize="xs" color="gray.500" textAlign="center">
-                              vs
-                            </Text>
-                            <Text fontSize="xs" fontWeight="medium" noOfLines={1}>
-                              {result.file_b.filename}
-                            </Text>
-                            <Box
-                              mt={1}
-                              p={1}
-                              borderRadius="md"
-                              bg={getSimilarityGradient(result.ast_similarity || 0)}
-                              color="white"
-                              textAlign="center"
-                            >
-                              <Text fontSize="sm" fontWeight="bold">
-                                {((result.ast_similarity || 0) * 100).toFixed(1)}%
-                              </Text>
-                            </Box>
-                          </VStack>
-                        </Box>
-                      ))}
-                  </VStack>
-                </Box>
-              </VStack>
-            </CardBody>
-          </Card>
-        </Box>
-
-        {/* Main Compare Window - Right Side */}
-        <Box flex={1} overflow="auto">
-          <Card bg={cardBg}>
-            <CardBody>
-              <VStack align="stretch" spacing={6}>
-                {/* Header with Similarity */}
-                <HStack justify="space-between">
-                  <Heading size="lg">Compare Files</Heading>
-                </HStack>
-                
-                <Card variant="outline">
-                  <CardBody>
-                    <VStack spacing={4}>
-                      <HStack justify="space-between" w="100%">
-                        <Text fontWeight="bold">{selectedPair.file_a.filename}</Text>
-                        <Text color="gray.500">vs</Text>
-                        <Text fontWeight="bold">{selectedPair.file_b.filename}</Text>
-                      </HStack>
-                      
-                      <Box
-                        w="100%"
-                        p={6}
-                        borderRadius="lg"
-                        bg={getSimilarityGradient(selectedPair.ast_similarity || 0)}
-                        color="white"
-                        textAlign="center"
-                      >
-                        <Text fontSize="3xl" fontWeight="bold">
-                          {((selectedPair.ast_similarity || 0) * 100).toFixed(1)}%
-                        </Text>
-                        <Text fontSize="sm">Similarity Score</Text>
-                      </Box>
-                      
-                      <Text fontSize="sm" color="gray.600">
-                        Matches: {selectedPair.matches?.length || 0} regions
-                      </Text>
-                    </VStack>
-                  </CardBody>
-                </Card>
-
-                {/* File Contents */}
-                {loadingContent ? (
-                  <Box textAlign="center" py={8}>
-                    <Spinner size="lg" />
-                    <Text mt={2}>Loading file contents...</Text>
-                  </Box>
-                ) : (
-                  <>
-                    <Flex gap={4}>
-                      {/* File A */}
-                      <Card flex={1}>
-                        <CardBody>
-                          <VStack align="stretch" spacing={3}>
-                            <HStack justify="space-between">
-                              <Text fontWeight="bold">{selectedPair.file_a.filename}</Text>
-                              <Badge colorScheme="blue">{fileAContent?.language || 'unknown'}</Badge>
-                            </HStack>
-                            <Box
-                              bg={codeBg}
-                              p={4}
-                              borderRadius="md"
-                              maxH="500px"
-                              overflowY="auto"
-                              fontFamily="monospace"
-                              fontSize="sm"
-                              whiteSpace="pre-wrap"
-                            >
-                              <Text>{fileAContent?.content || 'File content not available'}</Text>
-                            </Box>
-                          </VStack>
-                        </CardBody>
-                      </Card>
-
-                      {/* File B */}
-                      <Card flex={1}>
-                        <CardBody>
-                          <VStack align="stretch" spacing={3}>
-                            <HStack justify="space-between">
-                              <Text fontWeight="bold">{selectedPair.file_b.filename}</Text>
-                              <Badge colorScheme="green">{fileBContent?.language || 'unknown'}</Badge>
-                            </HStack>
-                            <Box
-                              bg={codeBg}
-                              p={4}
-                              borderRadius="md"
-                              maxH="500px"
-                              overflowY="auto"
-                              fontFamily="monospace"
-                              fontSize="sm"
-                              whiteSpace="pre-wrap"
-                            >
-                              <Text>{fileBContent?.content || 'File content not available'}</Text>
-                            </Box>
-                          </VStack>
-                        </CardBody>
-                      </Card>
-                    </Flex>
-
-                    {/* Matches */}
-                    {selectedPair.matches && selectedPair.matches.length > 0 && (
-                      <Card>
-                        <CardBody>
-                          <Heading size="sm" mb={4}>Matching Regions</Heading>
-                          <VStack align="stretch" spacing={3}>
-                            {selectedPair.matches.map((match, index) => (
-                              <Box key={index} p={3} bg={matchBg} borderRadius="md">
-                                <Flex gap={4}>
-                                  <Box flex={1}>
-                                    <Text fontSize="sm" fontWeight="medium">{selectedPair.file_a.filename}</Text>
-                                    <Text fontSize="sm">Lines {match.file_a_start_line} - {match.file_a_end_line}</Text>
-                                  </Box>
-                                  <Box flex={1}>
-                                    <Text fontSize="sm" fontWeight="medium">{selectedPair.file_b.filename}</Text>
-                                    <Text fontSize="sm">Lines {match.file_b_start_line} - {match.file_b_end_line}</Text>
-                                  </Box>
-                                </Flex>
-                              </Box>
-                            ))}
-                          </VStack>
-                        </CardBody>
-                      </Card>
-                    )}
-                  </>
-                )}
-              </VStack>
-            </CardBody>
-          </Card>
-        </Box>
-      </Flex>
-    );
-  }
+  
+  const handleCompare = async (result: PlagiarismResult) => {
+    setSelectedPair(result);
+    setCompareMode(true);
+    setLoadingContent(true);
+    
+    try {
+      const [fileAResponse, fileBResponse] = await Promise.all([
+        api.get(`/plagiarism/files/${result.file_a.id}/content`).catch(() => null),
+        api.get(`/plagiarism/files/${result.file_b.id}/content`).catch(() => null)
+      ]);
+      
+      if (fileAResponse?.data) setFileAContent(fileAResponse.data);
+      if (fileBResponse?.data) setFileBContent(fileBResponse.data);
+    } catch (err) {
+      console.error('Error fetching file contents:', err);
+    } finally {
+      setLoadingContent(false);
+    }
+  };
+  
+  const handleBackToResults = () => {
+    setCompareMode(false);
+    setSelectedPair(null);
+    setFileAContent(null);
+    setFileBContent(null);
+  };
+  
+  // Color mode values
+  const cardBg = useColorModeValue('white', 'gray.800');
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const selectedBg = useColorModeValue('blue.50', 'blue.900');
+  const codeBg = useColorModeValue('gray.50', 'gray.800');
+  const hoverBg = useColorModeValue('gray.50', 'gray.700');
+  const matchBg = useColorModeValue('gray.50', 'gray.700');
   
   if (loading) {
     return (
@@ -541,7 +415,7 @@ const Results: React.FC = () => {
       <Heading mb={6}>Plagiarism Results</Heading>
       
       {tasks.length === 0 ? (
-        <Card>
+        <Card bg={cardBg}>
           <CardBody>
             <Text textAlign="center" color="gray.500" py={8}>
               No plagiarism checks found. Upload files to get started!
@@ -567,7 +441,7 @@ const Results: React.FC = () => {
                       </option>
                     ))}
                   </Select>
-                  {selectedTask?.status === 'processing' && (
+                  {selectedTaskListItem?.status === 'processing' && (
                     <Spinner size="sm" color="orange.500" speed="0.8s" />
                   )}
                   <Button
@@ -595,7 +469,7 @@ const Results: React.FC = () => {
             </CardBody>
           </Card>
           
-          {selectedTask && (
+          {selectedTask ? (
             <>
               {/* Statistics */}
               <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
@@ -675,7 +549,7 @@ const Results: React.FC = () => {
                     </VStack>
                   </CardBody>
                 </Card>
-)}
+              )}
               
               {/* Similarity Distribution */}
               <Card bg={cardBg}>
@@ -737,7 +611,7 @@ const Results: React.FC = () => {
                       <Heading size="md">Top Similarities</Heading>
                       <HStack>
                         <Text color="gray.500" fontSize="sm">
-                          {selectedTask.results.length} pairs analyzed
+                          {selectedTask.overall_stats?.total_results || selectedTask.results.length} pairs analyzed
                         </Text>
                         {selectedTask.status === 'processing' && (
                           <Badge colorScheme="orange" size="sm">
@@ -750,7 +624,6 @@ const Results: React.FC = () => {
                     <VStack align="stretch" spacing={2}>
                       {selectedTask.results
                         .sort((a, b) => (b.ast_similarity || 0) - (a.ast_similarity || 0))
-                        .slice(0, 50)
                         .map((result, idx) => (
                           <HStack
                             key={idx}
@@ -784,16 +657,26 @@ const Results: React.FC = () => {
                         ))}
                     </VStack>
                     
-                    {selectedTask.results.length > 50 && (
-                      <Text textAlign="center" color="gray.500" mt={4} fontSize="sm">
-                        Showing top 50 of {selectedTask.results.length} results
-                      </Text>
+                    {selectedTask.results.length < selectedTask.total_pairs && (
+                      <Box textAlign="center" mt={4}>
+                        <Button 
+                          onClick={() => fetchTaskDetails(selectedTask.results.length, true)}
+                          isLoading={loadingMoreResults}
+                          loadingText="Loading..."
+                        >
+                          Load More Results
+                        </Button>
+                      </Box>
                     )}
                   </CardBody>
                 </Card>
               )}
             </>
-          )}
+          ) : loadingTaskDetails ? (
+            <Box textAlign="center" py={8}>
+              <Spinner size="lg" />
+            </Box>
+          ) : null}
         </VStack>
       )}
     </Box>
