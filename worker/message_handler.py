@@ -36,7 +36,7 @@ class MessageHandler:
     ) -> None:
         """
         Handle incoming message.
-        
+
         Args:
             ch: RabbitMQ channel
             method: Delivery method
@@ -54,4 +54,4 @@ class MessageHandler:
             log.error(f"Error in message handler: {e}")
             import traceback
             log.error(traceback.format_exc())
-            # Note: ack/reject should be handled by the orchestrator
+            raise  # Re-raise to let worker handle nack

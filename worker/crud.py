@@ -140,3 +140,68 @@ def get_max_similarity(task_id: str) -> float:
             .where(SimilarityResult.task_id == task_id)
         ).scalar()
         return result if result is not None else 0.0
+
+
+def bulk_insert_similarity_results(results: list) -> None:
+    """
+    Bulk insert similarity results.
+
+    Args:
+        results: List of dicts with keys: task_id, file_a_id, file_b_id, ast_similarity, matches, error
+    """
+    from uuid import uuid4
+    from sqlalchemy.exc import IntegrityError
+
+    if not results:
+        return
+
+    with get_session() as session:
+        # Convert dicts to model instances
+        instances = []
+        for r in results:
+            result = SimilarityResult(
+                id=str(uuid4()),
+                task_id=r['task_id'],
+                file_a_id=r['file_a_id'],
+                file_b_id=r['file_b_id'],
+                ast_similarity=r.get('ast_similarity'),
+                matches=r.get('matches', {}),
+            )
+            instances.append(result)
+
+        # Use bulk_insert_mappings for better performance
+        try:
+            session.bulk_insert_mappings(
+                SimilarityResult,
+                [
+                    {
+                        'id': r['id'] if 'id' in r else str(uuid4()),
+                        'task_id': r['task_id'],
+                        'file_a_id': r['file_a_id'],
+                        'file_b_id': r['file_b_id'],
+                        'ast_similarity': r.get('ast_similarity'),
+                        'matches': r.get('matches', {}),
+                    }
+                    for r in results
+                ]
+            )
+            session.commit()
+        except IntegrityError:
+            # Fallback to individual inserts on conflict
+            session.rollback()
+            for r in results:
+                try:
+                    result = SimilarityResult(
+                        id=r['id'] if 'id' in r else str(uuid4()),
+                        task_id=r['task_id'],
+                        file_a_id=r['file_a_id'],
+                        file_b_id=r['file_b_id'],
+                        ast_similarity=r.get('ast_similarity'),
+                        matches=r.get('matches', {}),
+                    )
+                    session.add(result)
+                    session.commit()
+                except IntegrityError:
+                    session.rollback()
+                    # Record already exists, that's okay
+                    pass

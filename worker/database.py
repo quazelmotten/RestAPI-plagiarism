@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import QueuePool
 
 from config import settings
 
@@ -12,7 +12,16 @@ DATABASE_URL = (
 )
 Base = declarative_base()
 
-engine = create_engine(DATABASE_URL, poolclass=NullPool)
+# Use connection pool for concurrent access
+# Pool size should be >= max_workers * threads_per_worker
+engine = create_engine(
+    DATABASE_URL,
+    poolclass=QueuePool,
+    pool_size=getattr(settings, 'db_pool_size', 10),
+    max_overflow=getattr(settings, 'db_max_overflow', 20),
+    pool_timeout=getattr(settings, 'db_pool_timeout', 30),
+    pool_pre_ping=True,  # Check connections before using
+)
 Session = sessionmaker(engine)
 
 

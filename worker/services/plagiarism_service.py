@@ -14,11 +14,11 @@ log = logging.getLogger(__name__)
 
 class PlagiarismService:
     """Service for plagiarism analysis operations."""
-    
+
     def __init__(self, analysis_executor: Optional[ProcessPoolExecutor] = None):
         """
         Initialize plagiarism service.
-        
+
         Args:
             analysis_executor: ProcessPoolExecutor for running analysis in separate processes.
                               If None, will be created with worker_concurrency.
@@ -26,6 +26,19 @@ class PlagiarismService:
         self.analysis_executor = analysis_executor or ProcessPoolExecutor(
             max_workers=getattr(settings, 'worker_concurrency', 4)
         )
+
+    def __getstate__(self):
+        """Exclude executor from pickling to prevent FD inheritance."""
+        state = self.__dict__.copy()
+        # Remove the executor - it can't be pickled and shouldn't be sent to subprocesses
+        state['analysis_executor'] = None
+        return state
+
+    def __setstate__(self, state):
+        """Restore state without executor."""
+        self.__dict__.update(state)
+        # Executor will be None in subprocess; safe_run_cli_ methods will fail if called
+        self.analysis_executor = None
     
     def run_cli_analyze(self, file1_path: str, file2_path: str, language: str) -> Dict:
         """
@@ -96,9 +109,12 @@ class PlagiarismService:
     def safe_run_cli_fingerprint(self, file_path: str, language: str, timeout: int = 300) -> Dict:
         """
         Run fingerprint extraction in a separate process with timeout.
+        If called from within a subprocess (executor is None), runs directly.
         """
         if self.analysis_executor is None:
-            raise RuntimeError("Analysis executor not initialized")
+            # Already in a subprocess, run directly without further parallelization
+            return self.run_cli_fingerprint(file_path, language)
+
         future = self.analysis_executor.submit(self.run_cli_fingerprint, file_path, language)
         try:
             return future.result(timeout=timeout)
@@ -112,9 +128,12 @@ class PlagiarismService:
     def safe_run_cli_analyze(self, file1_path: str, file2_path: str, language: str, timeout: int = 600) -> Dict:
         """
         Run plagiarism analysis in a separate process with timeout.
+        If called from within a subprocess (executor is None), runs directly.
         """
         if self.analysis_executor is None:
-            raise RuntimeError("Analysis executor not initialized")
+            # Already in a subprocess, run directly without further parallelization
+            return self.run_cli_analyze(file1_path, file2_path, language)
+
         future = self.analysis_executor.submit(self.run_cli_analyze, file1_path, file2_path, language)
         try:
             return future.result(timeout=timeout)

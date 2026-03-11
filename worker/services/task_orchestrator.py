@@ -5,6 +5,7 @@ Coordinates between services to process a complete task.
 
 import json
 import logging
+import time
 from typing import List, Dict, Tuple
 
 from crud import update_plagiarism_task, get_all_files
@@ -52,11 +53,11 @@ class TaskOrchestrator:
         try:
             message = json.loads(body.decode())
             task_id = message.get("task_id")
-            
+            start_time = time.time()
+
             if not task_id:
                 log.error("No task_id in message")
-                self._reject_message(channel, delivery_tag, False)
-                return
+                raise ValueError("No task_id in message")
             
             log.info(f"[Task {task_id}] Start processing plagiarism task")
             
@@ -70,8 +71,7 @@ class TaskOrchestrator:
                     status="failed",
                     error="Need at least 2 files for plagiarism check"
                 )
-                self._reject_message(channel, delivery_tag, False)
-                return
+                raise ValueError("Need at least 2 files for plagiarism check")
             
             # Mark task as processing
             update_plagiarism_task(
@@ -119,43 +119,69 @@ class TaskOrchestrator:
             
             # Process intra-task pairs
             processed_count = 0
+            result_buffer = []
             if intra_task_pairs:
                 log.info(f"[Task {task_id}] Processing {len(intra_task_pairs)} intra-task pairs...")
                 for file_a, file_b in intra_task_pairs:
-                    success, processed_count = self.result_service.process_pair(
+                    success, processed_count, result_buffer = self.result_service.process_pair(
                         file_a=file_a,
                         file_b=file_b,
                         language=language,
                         task_id=task_id,
                         total_pairs=total_pairs_count,
-                        processed_count=processed_count
+                        processed_count=processed_count,
+                        result_buffer=result_buffer
                     )
-            
+                    # Flush results every 50 pairs
+                    if len(result_buffer) >= 50:
+                        self.result_service.flush_results(task_id, result_buffer)
+                        # Update progress after flush
+                        self.result_service.update_task_progress_batch(
+                            task_id=task_id,
+                            processed=processed_count,
+                            total=total_pairs_count
+                        )
+
             # Process cross-task pairs
             if cross_task_pairs:
                 log.info(f"[Task {task_id}] Processing {len(cross_task_pairs)} cross-task pairs...")
                 for new_file, existing_file in cross_task_pairs:
-                    success, processed_count = self.result_service.process_pair(
+                    success, processed_count, result_buffer = self.result_service.process_pair(
                         file_a=new_file,
                         file_b=existing_file,
                         language=language,
                         task_id=task_id,
                         total_pairs=total_pairs_count,
-                        processed_count=processed_count
+                        processed_count=processed_count,
+                        result_buffer=result_buffer
                     )
+                    # Flush results every 50 pairs
+                    if len(result_buffer) >= 50:
+                        self.result_service.flush_results(task_id, result_buffer)
+                        # Update progress after flush
+                        self.result_service.update_task_progress_batch(
+                            task_id=task_id,
+                            processed=processed_count,
+                            total=total_pairs_count
+                        )
             
+            # Final flush of any remaining results
+            self.result_service.flush_results(task_id, result_buffer, force=True)
+
             # Finalize task
             self.result_service.finalize_task(
                 task_id=task_id,
                 total_pairs=total_pairs_count,
                 processed_count=processed_count
             )
-            
-            log.info(f"[Task {task_id}] COMPLETED: {processed_count}/{total_pairs_count} pairs analyzed")
-            
-            # Acknowledge message
-            self._ack_message(channel, delivery_tag)
-            
+
+            duration = time.time() - start_time
+            pairs_per_sec = total_pairs_count / duration if duration > 0 else 0
+            log.info(f"[Task {task_id}] COMPLETED: {processed_count}/{total_pairs_count} pairs analyzed "
+                    f"in {duration:.2f}s ({pairs_per_sec:.2f} pairs/sec)")
+
+            # Message will be auto-acked by the worker thread wrapper on successful completion
+
         except Exception as e:
             log.error(f"Error processing message: {e}")
             import traceback
@@ -166,18 +192,5 @@ class TaskOrchestrator:
                     status="failed",
                     error=str(e)
                 )
-            self._reject_message(channel, delivery_tag, False)
-    
-    def _ack_message(self, channel, delivery_tag: int) -> None:
-        """Acknowledge a message from RabbitMQ."""
-        if channel and channel.is_open:
-            channel.basic_ack(delivery_tag=delivery_tag)
-        else:
-            log.warning(f"Channel closed or None, cannot ack message {delivery_tag}")
-    
-    def _reject_message(self, channel, delivery_tag: int, requeue: bool = False) -> None:
-        """Reject a message from RabbitMQ."""
-        if channel and channel.is_open:
-            channel.basic_reject(delivery_tag=delivery_tag, requeue=requeue)
-        else:
-            log.warning(f"Channel closed or None, cannot reject message {delivery_tag}")
+            raise  # Re-raise to let worker nack the message
+

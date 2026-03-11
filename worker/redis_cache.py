@@ -215,8 +215,11 @@ class PlagiarismCache:
         if not common_hashes:
             return []
 
-        positions_a = self._redis.hmget(f"{key_a}:positions", list(common_hashes))
-        positions_b = self._redis.hmget(f"{key_b}:positions", list(common_hashes))
+        # Pipeline the two HMGET calls
+        pipe = self._redis.pipeline()
+        pipe.hmget(f"{key_a}:positions", list(common_hashes))
+        pipe.hmget(f"{key_b}:positions", list(common_hashes))
+        positions_a, positions_b = pipe.execute()
 
         matches = []
         for hash_val, pos_a_json, pos_b_json in zip(common_hashes, positions_a, positions_b):

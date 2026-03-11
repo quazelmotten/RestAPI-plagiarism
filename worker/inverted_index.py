@@ -69,50 +69,55 @@ class InvertedIndex:
         
         logger.debug(f"Added {len(hash_values)} fingerprints to inverted index for file {file_hash[:16]}...")
     
-    def find_candidate_files(self, fingerprints: List[Dict[str, Any]], 
+    def find_candidate_files(self, fingerprints: List[Dict[str, Any]],
                             language: str = "python") -> Set[str]:
         """
         Find candidate files that share fingerprints with the query file.
         Uses overlap count threshold to filter out non-viable candidates.
-        
+
         Args:
             fingerprints: List of fingerprint dicts from the query file
             language: Programming language of the query file
-            
+
         Returns:
             Set of file hashes that meet the overlap threshold
         """
         if not fingerprints:
             return set()
-        
+
         # Count overlaps for each candidate file
         overlap_counter = Counter()
-        
-        # Query each fingerprint hash
+
+        # Use pipeline for batch SMEMBERS calls
+        pipe = self.redis.pipeline()
+        hash_keys = []
         for fp in fingerprints:
             hash_val = str(fp['hash'])
             inv_key = f"{self.HASH_TO_FILES_PREFIX}:{language}:{hash_val}"
-            
-            # Get all files containing this hash
-            files_with_hash = self.redis.smembers(inv_key)
-            
-            # Increment overlap count for each file
+            pipe.smembers(inv_key)
+            hash_keys.append(inv_key)
+
+        # Execute all SMEMBERS commands in one round-trip
+        results = pipe.execute()
+
+        # Process results
+        for files_with_hash in results:
             for file_hash in files_with_hash:
                 overlap_counter[file_hash] += 1
-        
+
         # Calculate minimum overlap threshold based on query file fingerprint count
         total_query_fingerprints = len(fingerprints)
         min_overlap = max(1, int(total_query_fingerprints * self.min_overlap_threshold))
-        
+
         # Filter candidates that meet the threshold
         candidates = {
             file_hash for file_hash, overlap_count in overlap_counter.items()
             if overlap_count >= min_overlap
         }
-        
+
         logger.info(f"Found {len(candidates)} candidate files from {len(overlap_counter)} "
                    f"potential matches (min_overlap={min_overlap}, threshold={self.min_overlap_threshold:.0%})")
-        
+
         return candidates
     
     def get_file_fingerprints(self, file_hash: str, language: str = "python") -> Optional[Set[str]]:
