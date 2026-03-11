@@ -18,9 +18,9 @@ const Dashboard: React.FC = () => {
   return (
     <Flex minH="100vh" bg={useColorModeValue('gray.100', 'gray.900')}>
       <Sidebar />
-      <Box flex="1" ml="250px">
+      <Box flex="1" ml="250px" display="flex" flexDirection="column">
         <Header />
-        <Box as="main" p={8} pt={24}>
+        <Box as="main" p={8} pt={24} flex="1" overflow="hidden" minH="0">
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="submissions" element={<Submissions />} />

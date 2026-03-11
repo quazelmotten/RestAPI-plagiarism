@@ -61,11 +61,30 @@ async def get_all_files(db: AsyncSession = Depends(get_async_session)):
 async def get_files(
     db: AsyncSession = Depends(get_async_session),
     limit: Optional[int] = None,
-    offset: Optional[int] = None
+    offset: Optional[int] = None,
+    filename: Optional[str] = None,
+    language: Optional[str] = None,
+    status: Optional[str] = None,
+    task_id: Optional[str] = None,
+    similarity_min: Optional[float] = None,
+    similarity_max: Optional[float] = None,
+    submitted_after: Optional[str] = None,
+    submitted_before: Optional[str] = None,
 ):
-    """Get paginated list of files with total count."""
+    """Get paginated list of files with total count and optional filters."""
     file_service = FileService(db)
-    result = await file_service.get_files(limit=limit, offset=offset)
+    result = await file_service.get_files(
+        limit=limit,
+        offset=offset,
+        filename=filename,
+        language=language,
+        status=status,
+        task_id=task_id,
+        similarity_min=similarity_min,
+        similarity_max=similarity_max,
+        submitted_after=submitted_after,
+        submitted_before=submitted_before,
+    )
     return result
 
 
