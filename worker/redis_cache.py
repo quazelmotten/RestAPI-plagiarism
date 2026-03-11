@@ -355,6 +355,36 @@ class PlagiarismCache:
 
         return merged
 
+    def lock_fingerprint_computation(self, file_hash: str, timeout: int = 300) -> bool:
+        """
+        Acquire a lock to prevent duplicate fingerprint computation.
+        Returns True if lock acquired, False if already locked.
+        """
+        if not self.is_connected:
+            return False  # If no Redis, we can't lock, assume we have it
+        lock_key = f"fp_lock:{file_hash}"
+        try:
+            # SET NX with PX (set if not exists with expiry)
+            acquired = self._redis.set(lock_key, "1", px=timeout * 1000, nx=True)
+            return acquired is True
+        except RedisError as e:
+            logger.warning(f"Failed to acquire lock for {file_hash}: {e}")
+            return False
+
+    def unlock_fingerprint_computation(self, file_hash: str) -> bool:
+        """
+        Release a lock for fingerprint computation.
+        """
+        if not self.is_connected:
+            return False
+        lock_key = f"fp_lock:{file_hash}"
+        try:
+            deleted = self._redis.delete(lock_key)
+            return deleted > 0
+        except RedisError as e:
+            logger.warning(f"Failed to release lock for {file_hash}: {e}")
+            return False
+
 
 cache = PlagiarismCache()
 

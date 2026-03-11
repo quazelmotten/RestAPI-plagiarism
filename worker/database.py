@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -15,12 +16,14 @@ engine = create_engine(DATABASE_URL, poolclass=NullPool)
 Session = sessionmaker(engine)
 
 
-def get_session() -> Session:
+@contextmanager
+def get_session():
+    """Get a database session as a context manager."""
     session = Session()
     try:
         yield session
-    except Exception as e:
+    except Exception:
         session.rollback()
-        raise e
+        raise
     finally:
         session.close()
