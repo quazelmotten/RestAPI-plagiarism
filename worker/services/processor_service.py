@@ -4,6 +4,7 @@ Handles fingerprint indexing and candidate generation using inverted index.
 """
 
 import logging
+import os
 from typing import Dict, List, Tuple, Set, Optional
 
 from inverted_index import inverted_index
@@ -23,6 +24,17 @@ class ProcessorService:
             plagiarism_service: PlagiarismService instance for fingerprint generation
         """
         self.plagiarism_service = plagiarism_service
+    
+    def __setstate__(self, state):
+        """Restore state. Ensure Redis cache is connected in subprocess."""
+        self.__dict__.update(state)
+        # Connect Redis cache in subprocess if not already connected
+        if not cache.is_connected:
+            try:
+                cache.connect()
+                log.info(f"Redis cache connected in subprocess (PID: {os.getpid()})")
+            except Exception as e:
+                log.warning(f"Failed to connect Redis cache in subprocess: {e}")
     
     def index_file_fingerprints(
         self, 

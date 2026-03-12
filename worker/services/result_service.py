@@ -4,6 +4,7 @@ Handles result computation, caching, persistence, and progress tracking.
 """
 
 import logging
+import os
 from typing import Dict, List, Tuple, Optional
 
 from crud import save_similarity_result, get_max_similarity, update_plagiarism_task, bulk_insert_similarity_results
@@ -24,34 +25,37 @@ class ResultService:
         """
         self.plagiarism_service = plagiarism_service
     
+    def __setstate__(self, state):
+        """Restore state. Ensure Redis cache is connected in subprocess."""
+        self.__dict__.update(state)
+        # Connect Redis cache in subprocess if not already connected
+        if not cache.is_connected:
+            try:
+                cache.connect()
+                log.info(f"Redis cache connected in subprocess (PID: {os.getpid()})")
+            except Exception as e:
+                log.warning(f"Failed to connect Redis cache in subprocess: {e}")
+    
     def process_pair(
         self,
         file_a: Dict,
         file_b: Dict,
         language: str,
-        task_id: str,
-        total_pairs: int,
-        processed_count: int,
-        result_buffer: list = None
-    ) -> Tuple[bool, int, list]:
+        task_id: str
+    ) -> Dict:
         """
-        Process a single file pair.
+        Process a single file pair. Returns a result dict for batch insertion.
+        Designed for concurrent execution - does not manage its own buffer.
 
         Args:
             file_a: First file info dict
             file_b: Second file info dict
             language: Programming language
-            task_id: Task ID for logging and persistence
-            total_pairs: Total number of pairs to process (for progress calculation)
-            processed_count: Current count of processed pairs (will be incremented)
-            result_buffer: Buffer to collect results for batch insert (modified in-place)
+            task_id: Task ID for logging
 
         Returns:
-            Tuple of (success, new_processed_count, result_buffer)
+            Result dict ready for database insertion
         """
-        if result_buffer is None:
-            result_buffer = []
-
         file_a_id = file_a.get("id")
         file_b_id = file_b.get("id")
         file_a_hash = file_a.get('hash') or file_a.get('file_hash')
@@ -61,11 +65,23 @@ class ResultService:
 
         if not file_a_id or not file_b_id or not file_a_path or not file_b_path:
             log.warning(f"[Task {task_id}] Skipping pair due to missing file info")
-            return False, processed_count, result_buffer
+            return {
+                'task_id': task_id,
+                'file_a_id': file_a_id,
+                'file_b_id': file_b_id,
+                'ast_similarity': None,
+                'matches': {'error': 'missing file info'},
+            }
 
         if not file_a_hash or not file_b_hash:
             log.warning(f"[Task {task_id}] Skipping pair due to missing file hash")
-            return False, processed_count, result_buffer
+            return {
+                'task_id': task_id,
+                'file_a_id': file_a_id,
+                'file_b_id': file_b_id,
+                'ast_similarity': None,
+                'matches': {'error': 'missing file hash'},
+            }
 
         try:
             # Check cache first
@@ -108,37 +124,28 @@ class ResultService:
                     # Cache the result
                     cache.cache_similarity_result(file_a_hash, file_b_hash, ast_similarity, matches_data)
 
-            # Add to result buffer for batch insert
-            result_buffer.append({
+            # Build result dict
+            result = {
                 'task_id': task_id,
                 'file_a_id': file_a_id,
                 'file_b_id': file_b_id,
                 'ast_similarity': ast_similarity if not error else None,
                 'matches': matches_data if not error else {'error': error},
-            })
-
-            if error:
-                processed_count += 1
-                log.error(f"[Task {task_id}]   Error comparing files {file_a_id} vs {file_b_id}: {error}")
-                return False, processed_count, result_buffer
-
-            processed_count += 1
-
+            }
             log.info(f"[Task {task_id}]   Queued result: ast={ast_similarity:.4f}")
-            return True, processed_count, result_buffer
+            return result
 
         except Exception as e:
             log.error(f"[Task {task_id}]   Error comparing files {file_a_id} vs {file_b_id}: {e}")
             import traceback
             log.error(traceback.format_exc())
-            result_buffer.append({
+            return {
                 'task_id': task_id,
                 'file_a_id': file_a_id,
                 'file_b_id': file_b_id,
                 'ast_similarity': None,
                 'matches': {'error': str(e)},
-            })
-            return False, processed_count + 1, result_buffer
+            }
 
     def update_task_progress_batch(
         self,

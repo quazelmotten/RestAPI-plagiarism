@@ -30,10 +30,10 @@ def main():
     """Initialize and run the worker."""
     from config import settings
 
-    # Create shared analysis executor with limited processes
-    # Use min(2, worker_concurrency) to limit total processes across all workers
-    # Each process can be CPU-intensive; 2-3 processes per worker is usually sufficient
-    analysis_max_workers = min(2, settings.worker_concurrency)
+    # Create shared analysis executor with worker-concurrency processes
+    # The worker_concurrency setting determines how many analysis processes to run in parallel
+    # Each process can be CPU-intensive; scale based on available CPU cores
+    analysis_max_workers = settings.worker_concurrency
     analysis_executor = ProcessPoolExecutor(max_workers=analysis_max_workers)
 
     # Initialize services with shared executor

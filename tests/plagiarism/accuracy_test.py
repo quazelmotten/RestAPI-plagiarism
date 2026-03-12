@@ -75,7 +75,8 @@ def run_accuracy_test(
     file_range: Tuple[int, int] = (0, 100),
     types: List[int] = [1, 2, 3, 4],
     threshold: float = 0.30,
-    cleanup: bool = True
+    cleanup: bool = True,
+    seed: int = 42
 ) -> Dict[str, Any]:
     """Run accuracy test on synthetic clones."""
     
@@ -85,9 +86,11 @@ def run_accuracy_test(
     print(f"File range: {file_range[0]} - {file_range[1]}")
     print(f"Types: {types}")
     print(f"Threshold: {threshold}")
+    print(f"Random seed: {seed}")
     print()
     
-    random.seed(42)
+    # Set random seed for deterministic results
+    random.seed(seed)
     
     dataset_path = Path(DATASET_DIR)
     output_path = Path(PLAGIARISM_DIR)
@@ -282,6 +285,8 @@ def main():
                         help="Detection threshold (default: 0.30)")
     parser.add_argument("--no-cleanup", action="store_true",
                         help="Don't delete generated clones after test")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for deterministic results (default: 42)")
     parser.add_argument("--output", type=str, default=None,
                         help="Output JSON file for results")
     
@@ -293,7 +298,8 @@ def main():
         file_range=(args.start, args.end),
         types=args.types,
         threshold=args.threshold,
-        cleanup=not args.no_cleanup
+        cleanup=not args.no_cleanup,
+        seed=args.seed
     )
     
     print_results(results)

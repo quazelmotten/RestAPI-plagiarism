@@ -4,10 +4,12 @@ Handles fingerprint generation and similarity analysis.
 """
 
 import logging
+import os
 from concurrent.futures import ProcessPoolExecutor, TimeoutError
 from typing import Dict, List, Optional
 
 from config import settings
+from redis_cache import cache
 
 log = logging.getLogger(__name__)
 
@@ -35,10 +37,18 @@ class PlagiarismService:
         return state
 
     def __setstate__(self, state):
-        """Restore state without executor."""
+        """Restore state without executor. Ensure Redis cache is connected in subprocess."""
         self.__dict__.update(state)
         # Executor will be None in subprocess; safe_run_cli_ methods will fail if called
         self.analysis_executor = None
+        
+        # Connect Redis cache in subprocess if not already connected
+        if not cache.is_connected:
+            try:
+                cache.connect()
+                log.info(f"Redis cache connected in subprocess (PID: {os.getpid()})")
+            except Exception as e:
+                log.warning(f"Failed to connect Redis cache in subprocess: {e}")
     
     def run_cli_analyze(self, file1_path: str, file2_path: str, language: str) -> Dict:
         """

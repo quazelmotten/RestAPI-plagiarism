@@ -8,8 +8,10 @@ import os
 import sys
 import time
 import statistics
+import random
+import argparse
 from pathlib import Path
-from itertools import combinations
+from itertools import combinations, islice
 
 # Setup paths
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -19,8 +21,6 @@ sys.path.insert(0, root_dir)
 from cli.analyzer import Analyzer
 
 DATASET_PATH = "/home/bobbybrown/RestAPI-plagiarism/dataset"
-NUM_ITERATIONS = 10  # Run each pair multiple times for stats
-SAMPLE_PAIRS = 20    # Number of random pairs to benchmark
 
 
 def get_sample_files(num_files=None):
@@ -28,7 +28,7 @@ def get_sample_files(num_files=None):
     files = []
     if os.path.exists(DATASET_PATH):
         # Discover all .py files in the dataset directory
-        for filename in os.listdir(DATASET_PATH):
+        for filename in sorted(os.listdir(DATASET_PATH)):  # Sorted for determinism
             if filename.endswith('.py'):
                 files.append(os.path.join(DATASET_PATH, filename))
     
@@ -37,8 +37,6 @@ def get_sample_files(num_files=None):
         print("Warning: No dataset found, using synthetic test files")
         return create_synthetic_files()
     
-    if num_files:
-        files = files[:num_files]
     return files
 
 
@@ -73,41 +71,82 @@ def benchmark_pair(file1, file2, language='python', iterations=1):
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Benchmark analyzer.Start() speed"
+    )
+    parser.add_argument(
+        "--max-files", 
+        type=int, 
+        default=None,
+        help="Maximum number of files to use from dataset (default: all)"
+    )
+    parser.add_argument(
+        "--max-pairs", 
+        type=int, 
+        default=100,
+        help="Maximum number of pairs to benchmark (default: 100)"
+    )
+    parser.add_argument(
+        "--iterations", 
+        type=int, 
+        default=3,
+        help="Number of iterations per pair (default: 3)"
+    )
+    parser.add_argument(
+        "--seed", 
+        type=int, 
+        default=42,
+        help="Random seed for deterministic results (default: 42)"
+    )
+    
+    args = parser.parse_args()
+    
     print("="*60)
     print("Analyzer.Start() Benchmark")
     print("="*60)
     
-    files = get_sample_files()
-    print(f"\nUsing {len(files)} files")
+    # Set random seed for deterministic results
+    random.seed(args.seed)
+    
+    files = get_sample_files(args.max_files)
+    print(f"\nUsing {len(files)} files from dataset")
     
     if len(files) < 2:
         print("Need at least 2 files to benchmark")
         return
     
-    # Generate pairs
-    pairs = list(combinations(files, 2))
-    if len(pairs) > SAMPLE_PAIRS:
-        pairs = pairs[:SAMPLE_PAIRS]
+    # Generate pairs deterministically
+    all_pairs = list(combinations(files, 2))
+    print(f"Total possible pairs: {len(all_pairs):,}")
     
-    print(f"Benchmarking {len(pairs)} pairs")
-    print(f"Iterations per pair: {NUM_ITERATIONS}")
-    print(f"Total analysis runs: {len(pairs) * NUM_ITERATIONS}\n")
+    # Limit pairs if needed
+    if len(all_pairs) > args.max_pairs:
+        # Use random sampling for deterministic selection
+        pairs = random.sample(all_pairs, args.max_pairs)
+        print(f"Sampling {args.max_pairs} pairs for benchmarking")
+    else:
+        pairs = all_pairs
+        print(f"Benchmarking all {len(pairs):,} pairs")
+    
+    print(f"Iterations per pair: {args.iterations}")
+    print(f"Total analysis runs: {len(pairs) * args.iterations}\n")
     
     all_timings = []
-    cache_hits = 0
     
     for idx, (f1, f2) in enumerate(pairs, 1):
-        print(f"[{idx}/{len(pairs)}] Benchmarking {os.path.basename(f1)} vs {os.path.basename(f2)}...", end=" ", flush=True)
+        if idx % 20 == 0 or idx == len(pairs):
+            print(f"[{idx}/{len(pairs)}] Progress...", end=" ", flush=True)
         
         try:
-            timings, result = benchmark_pair(f1, f2, iterations=NUM_ITERATIONS)
+            timings, result = benchmark_pair(f1, f2, iterations=args.iterations)
             all_timings.extend(timings)
             
-            # Check if result was from cache (should not be in this benchmark as we use fresh Analyzer each time)
-            avg = statistics.mean(timings)
-            print(f"avg={avg:.4f}s")
+            if idx <= 5 or idx % 20 == 0:  # Show first few and every 20th
+                avg = statistics.mean(timings)
+                print(f"avg={avg:.4f}s")
         except Exception as e:
-            print(f"ERROR: {e}")
+            if idx <= 5:  # Show errors for first few pairs
+                print(f"[{idx}/{len(pairs)}] ERROR: {e}")
     
     if all_timings:
         print("\n" + "="*60)

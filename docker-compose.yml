@@ -178,10 +178,11 @@ services:
   rabbitmq:
     container_name: plagiarism-rabbitmq
     hostname: rabbitmq
-    image: rabbitmq:3.12-management-alpine
+    image: rabbitmq:4.2.4-management-alpine
     environment:
       RABBITMQ_DEFAULT_USER: ${RMQ_USER:-plagiarism_mq_user}
       RABBITMQ_DEFAULT_PASS: ${RMQ_PASS}
+      RABBITMQ_FEATURE_FLAGS: stream_filtering
     ports:
       - "15672:15672"
     volumes:
@@ -201,7 +202,7 @@ services:
   redis:
     container_name: plagiarism-redis
     hostname: redis
-    image: redis:7-alpine
+    image: redis:8.6.1-alpine
     command: redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru
     ports:
       - "${REDIS_PORT:-6379}:6379"
