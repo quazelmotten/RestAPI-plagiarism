@@ -483,10 +483,7 @@ def generate_dataset(
         with open(file_path, 'r', encoding='utf-8') as f:
             source_code = f.read()
         
-        match = re.search(r'file_(\d+)\.py', file_path.name)
-        if not match:
-            continue
-        file_idx = match.group(1)
+        file_stem = file_path.stem  # Use the actual filename without extension
         
         for type_num in types:
             type_dir = output_path / f'type{type_num}'
@@ -503,7 +500,7 @@ def generate_dataset(
                 continue
             
             for j, clone in enumerate(clones):
-                clone_name = f'file_{file_idx}_type{type_num}_{j+1}.py'
+                clone_name = f'{file_stem}_type{type_num}_{j+1}.py'
                 clone_path = type_dir / clone_name
                 
                 with open(clone_path, 'w', encoding='utf-8') as f:

@@ -72,5 +72,6 @@ build/
 # Datasets and synthetic clones
 dataset/
 tests/plagiarism/type*
+tests/tmp_synthetic
 
 *.prof

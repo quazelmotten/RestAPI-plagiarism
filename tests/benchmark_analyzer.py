@@ -18,7 +18,7 @@ sys.path.insert(0, root_dir)
 
 from cli.analyzer import Analyzer
 
-DATASET_PATH = os.path.join(root_dir, "dataset")
+DATASET_PATH = "/home/bobbybrown/RestAPI-plagiarism/dataset"
 NUM_ITERATIONS = 10  # Run each pair multiple times for stats
 SAMPLE_PAIRS = 20    # Number of random pairs to benchmark
 
@@ -27,10 +27,11 @@ def get_sample_files(num_files=None):
     """Get sample Python files from dataset."""
     files = []
     if os.path.exists(DATASET_PATH):
-        for i in range(1, 40):
-            f = os.path.join(DATASET_PATH, f"file_{i}.py")
-            if os.path.exists(f):
-                files.append(f)
+        # Discover all .py files in the dataset directory
+        for filename in os.listdir(DATASET_PATH):
+            if filename.endswith('.py'):
+                files.append(os.path.join(DATASET_PATH, filename))
+    
     if not files:
         # Fallback: create tiny synthetic files
         print("Warning: No dataset found, using synthetic test files")
@@ -60,6 +61,7 @@ def benchmark_pair(file1, file2, language='python', iterations=1):
     """Benchmark a single pair, returning list of timings."""
     analyzer = Analyzer()
     timings = []
+    result = None
     
     for _ in range(iterations):
         start = time.perf_counter()

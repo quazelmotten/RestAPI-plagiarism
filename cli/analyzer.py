@@ -111,7 +111,9 @@ def tokenize_with_tree_sitter(file_path, lang_code='python', tree=None):
 
     def visit(node):
         if not node.children:
-            tokens.append((node.type, node.start_point, node.end_point))
+            # Skip comment tokens to be robust to added comments
+            if node.type != 'comment':
+                tokens.append((node.type, node.start_point, node.end_point))
         else:
             for child in node.children:
                 visit(child)
@@ -182,18 +184,28 @@ def index_fingerprints(fingerprints):
 
 def hash_ast_subtrees(root, min_depth=3):
     """
-    Hash AST subtrees with depth >= min_depth.
+    Hash AST subtrees with depth >= min_depth, ignoring comment nodes.
     Depth is measured as max distance to a leaf.
     """
     hashes = []
 
     def visit(node):
+        # Skip comment nodes entirely
+        if node.type == 'comment':
+            return 0, ""  # Depth 0 indicates no contribution
+        
         if not node.children:
             return 1, ""
 
         child_results = [visit(c) for c in node.children]
-        child_depths, child_hashes = zip(*child_results)
-
+        # Filter out empty results from skipped nodes
+        child_depths = [d for d, _ in child_results if d > 0]
+        child_hashes = [h for _, h in child_results if h]
+        
+        if not child_depths:
+            # All children were comments, treat as leaf
+            return 1, ""
+        
         depth = 1 + max(child_depths)
         rep = node.type + "(" + ",".join(child_hashes) + ")"
 
@@ -477,9 +489,9 @@ def analyze_plagiarism(
     total_right = len(fps2)
     metrics = compute_similarity_metrics(occurrences, total_left, total_right)
 
-    # Use k-gram similarity as the decision metric (like Dolos)
-    if metrics['similarity'] < ast_threshold:
-        return metrics['similarity'], [], metrics
+    # Use AST similarity as the decision metric (more robust to lexical changes)
+    if ast_sim < ast_threshold:
+        return ast_sim, [], metrics
 
     # Convert fragments to match format
     matches = []
@@ -490,7 +502,7 @@ def analyze_plagiarism(
             'kgram_count': len(frag.pairs)
         })
 
-    return metrics['similarity'], matches, metrics
+    return ast_sim, matches, metrics
 
 
 # -------------------------------
@@ -614,7 +626,8 @@ def analyze_plagiarism_cached(
     
     if ast1 and ast2:
         logger.info(f"AST hash samples: file1={ast1[:3] if len(ast1) >= 3 else ast1}, file2={ast2[:3] if len(ast2) >= 3 else ast2}")
-    
+    # Compute AST similarity
+    ast_sim = ast_similarity(ast1, ast2)
     # --- Find paired occurrences using k-gram indices ---
     occurrences = find_paired_occurrences(index1, index2)
 
@@ -630,10 +643,10 @@ def analyze_plagiarism_cached(
     logger.info(f"K-gram similarity calculated: {metrics['similarity']:.4f}")
     logger.info(f"Longest fragment: {metrics['longest_fragment']}")
 
-    # Use k-gram similarity as the decision metric (like Dolos)
-    if metrics['similarity'] < ast_threshold:
-        logger.info(f"K-gram similarity {metrics['similarity']:.4f} below threshold {ast_threshold}, returning without matches")
-        return metrics['similarity'], [], metrics
+    # Use AST similarity as the decision metric (more robust to lexical changes)
+    if ast_sim < ast_threshold:
+        logger.info(f"AST similarity {ast_sim:.4f} below threshold {ast_threshold}, returning without matches")
+        return ast_sim, [], metrics
 
     # Convert fragments to match format
     matches = []
@@ -644,8 +657,8 @@ def analyze_plagiarism_cached(
             'kgram_count': len(frag.pairs)
         })
 
-    logger.info(f"Plagiarism analysis complete: similarity={metrics['similarity']:.4f}, matches={len(matches)}, longest_fragment={metrics['longest_fragment']}")
-    return metrics['similarity'], matches, metrics
+    logger.info(f"Plagiarism analysis complete: similarity={ast_sim:.4f}, matches={len(matches)}, longest_fragment={metrics['longest_fragment']}")
+    return ast_sim, matches, metrics
 
 
 class Analyzer:

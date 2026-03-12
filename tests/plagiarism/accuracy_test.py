@@ -22,7 +22,7 @@ from py_clone_generator import generate_dataset, CloneGenerator
 
 DATASET_DIR = "/home/bobbybrown/RestAPI-plagiarism/dataset"
 PLAGIARISM_DIR = "/home/bobbybrown/RestAPI-plagiarism/tests/plagiarism"
-CLI_PATH = "/home/bobbybrown/RestAPI-plagiarism/src/plagiarism/cli.py"
+CLI_PATH = "/home/bobbybrown/RestAPI-plagiarism/cli/cli.py"
 
 
 def run_analyze(file1: str, file2: str, threshold: float = 0.0) -> Dict[str, Any]:
@@ -93,14 +93,14 @@ def run_accuracy_test(
     output_path = Path(PLAGIARISM_DIR)
     
     source_files = []
-    for i in range(file_range[0], min(file_range[1], 1000)):
-        f = dataset_path / f"file_{i:04d}.py"
-        if f.exists():
-            with open(f, 'r') as fp:
-                if len(fp.read()) >= 50:
-                    source_files.append(f)
+    all_files = sorted(dataset_path.glob("*.py"))
+    for f in all_files:
         if len(source_files) >= n_files:
             break
+        with open(f, 'r') as fp:
+            content = fp.read()
+            if len(content) >= 50:
+                source_files.append(f)
     
     if len(source_files) < n_files:
         print(f"Warning: Only found {len(source_files)} valid source files")
@@ -149,8 +149,9 @@ def run_accuracy_test(
             if len(parts) < 3:
                 continue
             
-            original_idx = parts[1]
-            original_file = dataset_path / f"file_{original_idx}.py"
+            # Clone filename format: {original_stem}_type{type_num}_{j+1}
+            original_stem = "_".join(parts[:-2])  # Everything except last two parts
+            original_file = dataset_path / f"{original_stem}.py"
             
             if not original_file.exists():
                 continue
@@ -159,6 +160,7 @@ def run_accuracy_test(
             
             if "error" in analysis:
                 type_results["errors"] += 1
+                print(f"  Error analyzing {clone_file.name}: {analysis['error'][:100]}")
                 continue
             
             similarity = analysis.get("similarity", 0)
