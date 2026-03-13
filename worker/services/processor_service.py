@@ -24,6 +24,9 @@ class ProcessorService:
             plagiarism_service: PlagiarismService instance for fingerprint generation
         """
         self.plagiarism_service = plagiarism_service
+        # Reference to global cache and inverted_index
+        self.cache = cache
+        self.inverted_index = inverted_index
     
     def __setstate__(self, state):
         """Restore state. Ensure Redis cache is connected in subprocess."""
@@ -63,7 +66,7 @@ class ProcessorService:
         
         try:
             # Check if already indexed
-            if inverted_index.get_file_fingerprints(file_hash, language):
+            if self.inverted_index.get_file_fingerprints(file_hash, language):
                 log.debug(f"[Task {task_id}] File {filename} already in inverted index")
                 return True
             
@@ -89,7 +92,7 @@ class ProcessorService:
                 ]
                 
                 # Add to inverted index
-                inverted_index.add_file_fingerprints(file_hash, fingerprints_for_index, language)
+                self.inverted_index.add_file_fingerprints(file_hash, fingerprints_for_index, language)
                 log.debug(f"[Task {task_id}] Indexed {len(fingerprints)} fingerprints for {filename}")
                 
                 # Cache fingerprints for reuse
@@ -103,7 +106,7 @@ class ProcessorService:
                     cache.unlock_fingerprint_computation(file_hash)
                     
         except Exception as e:
-            log.warning(f"[Task {task_id}] Failed to index file {filename}: {e}")
+            log.exception(f"[Task {task_id}] Failed to index file {filename}: {e}")
             return False
     
     def ensure_files_indexed(
@@ -142,13 +145,13 @@ class ProcessorService:
             if not file_hash or not file_path:
                 continue
             # Check if already indexed in inverted index
-            if inverted_index.get_file_fingerprints(file_hash, language):
+            if self.inverted_index.get_file_fingerprints(file_hash, language):
                 continue
             # Check if fingerprints are in cache (if so, we can add to index without recomputation)
             fingerprints = cache.get_fingerprints(file_hash)
             if fingerprints:
                 try:
-                    inverted_index.add_file_fingerprints(file_hash, fingerprints, language)
+                    self.inverted_index.add_file_fingerprints(file_hash, fingerprints, language)
                     log.debug(f"[Task {task_id}] Added cached fingerprints for {file_info.get('filename')} to inverted index")
                     continue
                 except Exception as e:
@@ -234,7 +237,7 @@ class ProcessorService:
                     cache.cache_fingerprints(file_a_hash, fingerprints, ast_hashes, tokens)
                 
                 # Find candidate files using inverted index
-                candidate_hashes = inverted_index.find_candidate_files(fingerprints, language)
+                candidate_hashes = self.inverted_index.find_candidate_files(fingerprints, language)
                 
                 if not candidate_hashes:
                     continue
@@ -310,7 +313,7 @@ class ProcessorService:
                             cache.unlock_fingerprint_computation(new_file_hash)
                 
                 # Find candidate files using inverted index
-                candidate_hashes = inverted_index.find_candidate_files(fingerprints, language)
+                candidate_hashes = self.inverted_index.find_candidate_files(fingerprints, language)
                 
                 log.info(f"[Task {task_id}] {new_file_name}: fingerprints={len(fingerprints)}, candidate_hashes={len(candidate_hashes) if candidate_hashes else 0}")
                 

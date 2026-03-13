@@ -26,12 +26,17 @@ class TestRedisCache:
         result = mock_cache.cache_fingerprints(file_hash, fingerprints, ast_hashes, tokens=[])
 
         assert result is True
-        # Check that sadd was called for AST hashes
-        mock_cache._redis.sadd.assert_called()
+        # Verify pipeline was used
+        mock_cache._redis.pipeline.assert_called_once()
+        pipe = mock_cache._redis.pipeline.return_value
+        # Check that sadd was called for AST hashes and token hashes
+        assert pipe.sadd.call_count >= 2
         # Check that hset was called for positions
-        mock_cache._redis.hset.assert_called()
-        # Check that expire was set
-        mock_cache._redis.expire.assert_called()
+        pipe.hset.assert_called()
+        # Check that expire was called for keys
+        assert pipe.expire.call_count >= 2
+        # Check that execute was called
+        pipe.execute.assert_called_once()
 
     def test_get_fingerprints_returns_list(self, mock_cache):
         """Test retrieving fingerprints."""

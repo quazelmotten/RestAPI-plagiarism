@@ -28,6 +28,8 @@ class PlagiarismService:
         self.analysis_executor = analysis_executor or ProcessPoolExecutor(
             max_workers=getattr(settings, 'worker_concurrency', 4)
         )
+        # Reference to the global cache instance (for testing and usage)
+        self.cache = cache
 
     def __getstate__(self):
         """Exclude executor from pickling to prevent FD inheritance."""
@@ -74,7 +76,7 @@ class PlagiarismService:
         """
         Run plagiarism analysis using cached fingerprints and AST hashes from Redis.
         This avoids re-parsing files and recomputing fingerprints.
-        
+
         Args:
             file1_path: Path to first file
             file2_path: Path to second file
@@ -82,27 +84,26 @@ class PlagiarismService:
             file2_hash: SHA256 hash of second file
             language: Programming language
             ast_threshold: Minimum AST similarity to compute matches (default 0.15)
-            
+
         Returns:
             Dict with 'similarity_ratio' and 'matches' (in legacy format)
         """
         from cli.analyzer import analyze_plagiarism_cached
-        from redis_cache import cache
-        
+
         # Use the cached analysis function which will fetch from Redis or compute if missing
         ast_sim, matches, metrics = analyze_plagiarism_cached(
             file1_path, file2_path, file1_hash, file2_hash,
-            cache=cache,
+            cache=cache,  # use module-level cache (patched in tests)
             language=language,
             ast_threshold=ast_threshold
         )
-        
+
         # Transform matches to legacy DB format if above threshold
         if ast_sim >= ast_threshold:
             matches_data = self.transform_matches_to_legacy_format(matches)
         else:
             matches_data = []
-        
+
         return {
             "similarity_ratio": ast_sim,
             "matches": matches_data,

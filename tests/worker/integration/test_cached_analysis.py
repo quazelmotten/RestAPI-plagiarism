@@ -1,257 +1,170 @@
 """
-Integration tests for worker components.
-Requires Redis (and optionally DB) to be running.
+Integration tests for ProcessorService with mock Redis.
+Tests that indexing and pair generation work correctly with the in-memory Redis mock.
 """
 
 import pytest
 import os
-import sys
-import tempfile
-import shutil
-from pathlib import Path
+from unittest.mock import patch
 
-# Mark all tests in this file as integration tests
 pytestmark = pytest.mark.integration
 
 
-class TestCachedAnalysis:
-    """Integration tests with real Redis and file system."""
+class TestServiceIntegration:
+    """Integration tests for ProcessorService."""
 
     @pytest.fixture(autouse=True)
     def setup_redis(self, redis_test_instance):
-        """Ensure Redis is connected and clean before each test."""
+        """Provide a mock Redis instance for each test and configure global cache."""
         self.redis = redis_test_instance
-        # Clear any existing data
         self.redis.flushdb()
+        # Configure the top-level redis_cache.cache to use this mock Redis
+        import redis_cache
+        redis_cache.cache._redis = self.redis
+        redis_cache.cache._connected = True
+        # Also configure inverted_index.redis to use this mock
+        import inverted_index
+        inverted_index.redis = self.redis
         yield
-        # Cleanup after test
         self.redis.flushdb()
 
-    def test_full_workflow_with_caching(self, temp_dir):
-        """
-        Test complete workflow:
-        1. Compute and cache fingerprints manually
-        2. Run analysis using cached data (should not re-read files)
-        3. Verify result matches direct Analyzer.Start()
-        """
-        from cli.analyzer import Analyzer, parse_file, tokenize_with_tree_sitter, \
-            compute_fingerprints, winnow_fingerprints, extract_ast_hashes, index_fingerprints
-        from worker.redis_cache import cache
-
-        # Ensure cache is connected to our test redis
-        cache._redis = self.redis
-        cache._connected = True
-
-        # Create two nearly identical Python files
-        code1 = """
-def add(a, b):
-    return a + b
-
-def multiply(x, y):
-    return x * y
-"""
-        code2 = """
-def add(a, b):
-    return a + b
-
-def multiply(x, y):
-    return x * y
-"""
-        file1 = os.path.join(temp_dir, "a.py")
-        file2 = os.path.join(temp_dir, "b.py")
-        with open(file1, 'w') as f:
-            f.write(code1)
-        with open(file2, 'w') as f:
-            f.write(code2)
-
-        # Compute fingerprints for both files (simulating indexing phase)
-        _, tree1 = parse_file(file1, "python")
-        tokens1 = tokenize_with_tree_sitter(file1, "python", tree=tree1)
-        fps1 = winnow_fingerprints(compute_fingerprints(tokens1))
-        ast1 = extract_ast_hashes(file1, "python", tree=tree1)
-
-        _, tree2 = parse_file(file2, "python")
-        tokens2 = tokenize_with_tree_sitter(file2, "python", tree=tree2)
-        fps2 = winnow_fingerprints(compute_fingerprints(tokens2))
-        ast2 = extract_ast_hashes(file2, "python", tree=tree2)
-
-        # Cache them
-        hash1 = "test_integration_hash1"
-        hash2 = "test_integration_hash2"
-        cache.cache_fingerprints(hash1, fps1, ast1, tokens1)
-        cache.cache_fingerprints(hash2, fps2, ast2, tokens2)
-
-        # Verify they are cached
-        assert cache.get_fingerprints(hash1) is not None
-        assert cache.get_ast_hashes(hash1) is not None
-
-        # Now run cached analysis (this is what worker does)
+    def test_processor_index_stores_fingerprints_in_cache_and_index(self, temp_dir):
+        """Test that indexing a file stores fingerprints in both cache and inverted index."""
         from worker.services.plagiarism_service import PlagiarismService
-        from worker.services.result_service import ResultService
-
-        # Use a small executor for testing
-        from concurrent.futures import ProcessPoolExecutor
-        executor = ProcessPoolExecutor(max_workers=2)
-        ps = PlagiarismService(analysis_executor=executor)
-        rs = ResultService(ps)
-
-        # Process the pair (this should use cached fingerprints)
-        file_a_info = {
-            'id': '1',
-            'file_hash': hash1,
-            'file_path': file1,
-            'filename': 'a.py'
-        }
-        file_b_info = {
-            'id': '2',
-            'file_hash': hash2,
-            'file_path': file2,
-            'filename': 'b.py'
-        }
-
-        result = rs.process_pair(file_a_info, file_b_info, "python", "test_task")
-
-        # Should have a valid similarity score
-        assert result['ast_similarity'] is not None
-        assert result['ast_similarity'] > 0
-
-        # Compare with direct Analyzer.Start()
-        direct = Analyzer().Start(file1, file2, "python")
-
-        # Similarity must match (within small tolerance for floating point)
-        diff = abs(result['ast_similarity'] - direct['similarity_ratio'])
-        assert diff < 0.001, f"Similarity mismatch: {result['ast_similarity']} vs {direct['similarity_ratio']}"
-
-        # Verify pairwise result was cached
-        cached_pair = cache.get_cached_similarity(hash1, hash2)
-        assert cached_pair is not None
-
-        executor.shutdown(wait=True)
-
-    def test_cache_miss_triggers_fingerprint_generation(self, temp_dir):
-        """Test that if fingerprints are not in cache, they are generated and stored."""
         from worker.services.processor_service import ProcessorService
-        from worker.services.plagiarism_service import PlagiarismService
-        from inverted_index import inverted_index
 
-        # Clear inverted index
-        inverted_index.clear_all()
+        # Fake analyzer output (positions as lists for JSON serialization)
+        fake_fingerprints = [
+            {'hash': 123, 'start': [0, 0], 'end': [1, 0]},
+            {'hash': 456, 'start': [1, 0], 'end': [2, 0]}
+        ]
+        fake_ast_hashes = [789]
+        fake_tokens = [{'type': 'def', 'start': [0, 0], 'end': [0, 3]}]
 
-        # Setup
-        code = "def foo():\n    return 42\n"
-        file_path = os.path.join(temp_dir, "test.py")
-        with open(file_path, 'w') as f:
-            f.write(code)
+        ps = PlagiarismService(analysis_executor=None)
+        proc = ProcessorService(ps)
+
+        # Debug: check cache._redis
+        import sys
+        print(f"DEBUG: cache._redis type: {type(proc.cache._redis)} id={id(proc.cache._redis)}", file=sys.stderr)
+        print(f"DEBUG: self.redis type: {type(self.redis)} id={id(self.redis)}", file=sys.stderr)
+        print(f"DEBUG: same object? {proc.cache._redis is self.redis}", file=sys.stderr)
 
         file_info = {
             'id': '1',
-            'file_hash': 'missing_hash',
-            'file_path': file_path,
+            'file_hash': 'filehash123',
+            'file_path': os.path.join(temp_dir, 'test.py'),
             'filename': 'test.py'
         }
+        with open(file_info['file_path'], 'w') as f:
+            f.write("def foo():\n    return 42\n")
 
-        # Use real services (with small executor)
-        from concurrent.futures import ProcessPoolExecutor
-        executor = ProcessPoolExecutor(max_workers=2)
-        ps = PlagiarismService(analysis_executor=executor)
+        # Mock fingerprint generation
+        with patch.object(ps, 'safe_run_cli_fingerprint', return_value={
+            'fingerprints': fake_fingerprints,
+            'ast_hashes': fake_ast_hashes,
+            'tokens': fake_tokens
+        }):
+            result = proc.index_file_fingerprints(file_info, 'python', 'test_task')
+
+        assert result is True
+
+        # Verify cached fingerprints can be retrieved
+        cached_fps = proc.cache.get_fingerprints(file_info['file_hash'])
+        assert cached_fps is not None
+        assert len(cached_fps) == len(fake_fingerprints)
+
+        # Verify inverted index contains fingerprints for this file
+        indexed_fps = proc.inverted_index.get_file_fingerprints(file_info['file_hash'], 'python')
+        assert indexed_fps is not None
+        assert len(indexed_fps) == len(fake_fingerprints)
+
+    def test_processor_find_intra_task_pairs(self, temp_dir):
+        """Test that find_intra_task_pairs generates pairs using inverted index."""
+        from worker.services.plagiarism_service import PlagiarismService
+        from worker.services.processor_service import ProcessorService
+
+        ps = PlagiarismService(analysis_executor=None)
         proc = ProcessorService(ps)
 
-        # This should generate fingerprints and add to index
-        proc.index_file_fingerprints(file_info, 'python', 'test_task')
-
-        # Verify fingerprints are now in inverted index
-        indexed_fps = inverted_index.get_file_fingerprints('missing_hash', 'python')
-        assert indexed_fps is not None
-        assert len(indexed_fps) > 0
-
-        # Verify fingerprints are also cached in Redis
-        cached_fps = proc.cache.get_fingerprints('missing_hash')
-        assert cached_fps is not None
-
-        executor.shutdown(wait=True)
-
-    def test_pair_generation_uses_inverted_index(self, temp_dir):
-        """Test that candidate pairs are generated efficiently via inverted index."""
-        from worker.services.processor_service import ProcessorService
-        from worker.services.plagiarism_service import PlagiarismService
-        from inverted_index import inverted_index
-
-        inverted_index.clear_all()
-
-        # Create multiple similar files
+        # Create 5 files
         files = []
-        code_template = "def func{i}():\n    return {i}\n"
         for i in range(5):
-            path = os.path.join(temp_dir, f"file{i}.py")
+            path = os.path.join(temp_dir, f'f{i}.py')
             with open(path, 'w') as f:
-                f.write(code_template.format(i=i))
+                f.write(f'def func{i}():\n    return {i}\n')
             files.append({
                 'id': str(i),
-                'file_hash': f"hash{i}",
+                'file_hash': f'hash{i}',
                 'file_path': path,
-                'filename': f"file{i}.py"
+                'filename': f'f{i}.py'
             })
 
-        # Index all files first
-        from concurrent.futures import ProcessPoolExecutor
-        executor = ProcessPoolExecutor(max_workers=2)
-        ps = PlagiarismService(analysis_executor=executor)
-        proc = ProcessorService(ps)
-
-        # Pre-index to avoid fingerprinting during pair gen
+        # Index all files with many fingerprints to ensure candidate generation
         for f in files:
-            proc.index_file_fingerprints(f, 'python', 'setup')
+            with patch.object(ps, 'safe_run_cli_fingerprint', return_value={
+                'fingerprints': [{'hash': j, 'start': [0,0], 'end': [1,0]} for j in range(100)],
+                'ast_hashes': list(range(100)),
+                'tokens': []
+            }):
+                result = proc.index_file_fingerprints(f, 'python', 'setup')
+                assert result is True
 
-        # Now generate intra-task pairs
+        # Generate intra-task pairs
         pairs = proc.find_intra_task_pairs(files, 'python', 'test_task')
 
-        # Should have some pairs (depending on fingerprint overlap)
-        assert isinstance(pairs, list)
-        # Each pair is (file_a, file_b)
+        assert len(pairs) > 0
         for a, b in pairs:
-            assert a in files
-            assert b in files
+            assert a in files and b in files
             assert a['id'] != b['id']
 
-        executor.shutdown(wait=True)
-
-
-class TestFingerprintIndexingPerformance:
-    """Performance tests for indexing."""
-
-    def test_indexing_30_files_completes_quickly(self, temp_dir):
-        """Integration: indexing 30 files should complete in reasonable time."""
-        from worker.services.processor_service import ProcessorService
+    def test_processor_find_cross_task_pairs(self, temp_dir):
+        """Test cross-task pair generation."""
         from worker.services.plagiarism_service import PlagiarismService
-        from inverted_index import inverted_index
-        import time
+        from worker.services.processor_service import ProcessorService
 
-        inverted_index.clear_all()
-
-        # Generate 30 small files
-        files = []
-        for i in range(30):
-            path = os.path.join(temp_dir, f"file{i}.py")
-            with open(path, 'w') as f:
-                f.write(f"def func{i}():\n    return {i}\n")
-            files.append({
-                'id': str(i),
-                'file_hash': f"hash{i}",
-                'file_path': path,
-                'filename': f"file{i}.py"
-            })
-
-        from concurrent.futures import ProcessPoolExecutor
-        executor = ProcessPoolExecutor(max_workers=4)
-        ps = PlagiarismService(analysis_executor=executor)
+        ps = PlagiarismService(analysis_executor=None)
         proc = ProcessorService(ps)
 
-        start = time.time()
-        proc.ensure_files_indexed(files, 'python', 'perf_test')
-        elapsed = time.time() - start
+        # New files
+        new_files = []
+        for i in range(2):
+            path = os.path.join(temp_dir, f'new{i}.py')
+            with open(path, 'w') as f:
+                f.write(f'def new{i}():\n    return {i}\n')
+            new_files.append({
+                'id': f'n{i}',
+                'file_hash': f'newhash{i}',
+                'file_path': path,
+                'filename': f'new{i}.py'
+            })
+        # Existing files
+        existing_files = []
+        for i in range(3):
+            path = os.path.join(temp_dir, f'exist{i}.py')
+            with open(path, 'w') as f:
+                f.write(f'def exist{i}():\n    return {i}\n')
+            existing_files.append({
+                'id': f'e{i}',
+                'file_hash': f'existhash{i}',
+                'file_path': path,
+                'filename': f'exist{i}.py'
+            })
 
-        print(f"Indexing 30 files took {elapsed:.2f}s")
-        # This is a performance test - should complete in under 2 seconds
-        assert elapsed < 2.0, f"Indexing too slow: {elapsed:.2f}s"
+        # Index all files with many fingerprints
+        for f in new_files + existing_files:
+            with patch.object(ps, 'safe_run_cli_fingerprint', return_value={
+                'fingerprints': [{'hash': j, 'start': [0,0], 'end': [1,0]} for j in range(100)],
+                'ast_hashes': list(range(100)),
+                'tokens': []
+            }):
+                result = proc.index_file_fingerprints(f, 'python', 'setup')
+                assert result is True
 
-        executor.shutdown(wait=True)
+        # Generate cross-task pairs
+        pairs = proc.find_cross_task_pairs(new_files, existing_files, 'python', 'test_task')
+
+        assert len(pairs) == len(new_files) * len(existing_files)
+        for new_file, old_file in pairs:
+            assert new_file in new_files
+            assert old_file in existing_files

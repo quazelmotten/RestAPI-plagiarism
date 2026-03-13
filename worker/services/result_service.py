@@ -21,9 +21,11 @@ class ResultService:
         Initialize result service.
         
         Args:
-            plagiarism_service: PlagiarismService instance for similarity analysis
+            plagiarism_service: PlagiarismService instance for analysis
         """
         self.plagiarism_service = plagiarism_service
+        # Reference to the global cache instance (for testing and usage)
+        self.cache = cache
     
     def __setstate__(self, state):
         """Restore state. Ensure Redis cache is connected in subprocess."""
