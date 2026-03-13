@@ -12,3 +12,10 @@ tree-sitter
 tree-sitter-python
 tree-sitter-cpp
 xxhash
+
+# Testing dependencies
+pytest==7.4.3
+pytest-mock==23.4.0
+pytest-xdist==3.5.0
+pytest-cov==4.1.0
+pytest-benchmark==4.0.0

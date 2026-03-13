@@ -47,18 +47,18 @@ jobs:
 
       - name: Save Docker images
         run: |
-          docker save plagiarism-api:test > api-image.tar
-          docker save plagiarism-worker:test > worker-image.tar
-          docker save plagiarism-db:test > db-image.tar
+          docker save plagiarism-api:test | gzip > api-image.tar.gz
+          docker save plagiarism-worker:test | gzip > worker-image.tar.gz
+          docker save plagiarism-db:test | gzip > db-image.tar.gz
 
       - name: Upload Docker images as artifacts
         uses: actions/upload-artifact@v4
         with:
           name: docker-images
           path: |
-            api-image.tar
-            worker-image.tar
-            db-image.tar
+            api-image.tar.gz
+            worker-image.tar.gz
+            db-image.tar.gz
           retention-days: 1
 
   # ===========================================
@@ -82,23 +82,23 @@ jobs:
 
       - name: Load Docker images
         run: |
-          docker load < api-image.tar
-          docker load < worker-image.tar
-          docker load < db-image.tar
+          docker load <(gunzip -c api-image.tar.gz)
+          docker load <(gunzip -c worker-image.tar.gz)
+          docker load <(gunzip -c db-image.tar.gz)
 
       - name: Set up environment
         run: |
-          cat > .env << 'EOF'
+          cat > .env << EOF
           DB_HOST=postgres
           DB_PORT=5432
           DB_NAME=plagiarism_db
           DB_USER=plagiarism_user
-          DB_PASS=test_password_123
+          DB_PASS=${{ secrets.DB_PASSWORD }}
           RMQ_HOST=rabbitmq
           RMQ_PORT=5672
           RMQ_USER=plagiarism_mq_user
-          RMQ_PASS=test_mq_password_123
-          SECRET_KEY=test_secret_key_for_ci_123456789
+          RMQ_PASS=${{ secrets.RABBITMQ_PASSWORD }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
           ENVIRONMENT=test
           API_HOST=0.0.0.0
           API_PORT=8000
@@ -285,7 +285,7 @@ jobs:
 
       - name: Test frontend linting
         working-directory: frontend
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Upload frontend build
         uses: actions/upload-artifact@v4
@@ -306,17 +306,17 @@ jobs:
 
       - name: Set up environment
         run: |
-          cat > .env << 'EOF'
+          cat > .env << EOF
           DB_HOST=postgres
           DB_PORT=5432
           DB_NAME=plagiarism_db
           DB_USER=plagiarism_user
-          DB_PASS=smoke_test_pass
+          DB_PASS=${{ secrets.DB_PASSWORD }}
           RMQ_HOST=rabbitmq
           RMQ_PORT=5672
           RMQ_USER=plagiarism_mq_user
-          RMQ_PASS=smoke_test_mq_pass
-          SECRET_KEY=smoke_test_secret_key_123
+          RMQ_PASS=${{ secrets.RABBITMQ_PASSWORD }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
           ENVIRONMENT=test
           API_HOST=0.0.0.0
           API_PORT=8000
@@ -351,17 +351,17 @@ jobs:
 
       - name: Set up environment
         run: |
-          cat > .env << 'EOF'
+          cat > .env << EOF
           DB_HOST=postgres
           DB_PORT=5432
           DB_NAME=plagiarism_db
           DB_USER=plagiarism_user
-          DB_PASS=perf_test_pass
+          DB_PASS=${{ secrets.DB_PASSWORD }}
           RMQ_HOST=rabbitmq
           RMQ_PORT=5672
           RMQ_USER=plagiarism_mq_user
-          RMQ_PASS=perf_test_mq_pass
-          SECRET_KEY=perf_test_secret_key_123
+          RMQ_PASS=${{ secrets.RABBITMQ_PASSWORD }}
+          SECRET_KEY=${{ secrets.SECRET_KEY }}
           ENVIRONMENT=test
           API_HOST=0.0.0.0
           API_PORT=8000

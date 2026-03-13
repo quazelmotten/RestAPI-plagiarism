@@ -142,25 +142,31 @@ jobs:
           cache-to: type=gha,mode=max
 
   test-compose:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+   runs-on: ubuntu-latest
+   needs: [build-api, build-worker, build-db]
+   steps:
+     - name: Checkout repository
+       uses: actions/checkout@v4
 
-      - name: Set up Docker Compose
-        run: |
-          docker compose version
+     - name: Set up Docker Compose
+       run: |
+         docker compose version
 
-      - name: Create env file
-        run: |
-          cp .env.example .env
-          # Set dummy values for required secrets
-          echo "DB_PASS=testpassword" >> .env
-          echo "RMQ_PASS=testpassword" >> .env
-          echo "SECRET_KEY=testsecretkey" >> .env
+     - name: Create env file
+       run: |
+         if [ -f .env.example ]; then
+           cp .env.example .env
+           # Set dummy values for required secrets if not already set
+           echo "DB_PASS=${DB_PASSWORD:-testpassword}" >> .env
+           echo "RMQ_PASS=${RABBITMQ_PASSWORD:-testpassword}" >> .env
+           echo "SECRET_KEY=${SECRET_KEY:-testsecretkey}" >> .env
+         else
+           echo "ERROR: .env.example not found"
+           exit 1
+         fi
 
-      - name: Build all services
-        run: docker compose build
+     - name: Build all services
+       run: docker compose build
 
-      - name: Check docker-compose config
-        run: docker compose config
+     - name: Check docker-compose config
+       run: docker compose config

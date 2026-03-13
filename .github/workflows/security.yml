@@ -40,14 +40,14 @@ jobs:
       # SAST – Semgrep
       # -------------------------------
       - name: Run Semgrep (SAST)
-        uses: returntocorp/semgrep-action@v1
+        uses: returntocorp/semgrep-action@v1.24.0
         with:
           config: auto
           error: false
           generateSarif: true
 
       - name: Upload Semgrep SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v3.1.6
         with:
           sarif_file: semgrep.sarif
 
@@ -56,7 +56,6 @@ jobs:
       # Dependency vulnerabilities
       # -------------------------------
       - name: Run pip-audit (API)
-        continue-on-error: true
         run: |
           if [ -f src/requirements.txt ]; then
             pip-audit -r src/requirements.txt
@@ -66,7 +65,6 @@ jobs:
 
 
       - name: Run pip-audit (Worker)
-        continue-on-error: true
         run: |
           if [ -f worker/requirements.txt ]; then
             pip-audit -r worker/requirements.txt
@@ -78,8 +76,7 @@ jobs:
       # Secret scanning
       # -------------------------------
       - name: Run Gitleaks
-        continue-on-error: true
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v2.4.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -89,38 +86,37 @@ jobs:
       # Docker build
       # -------------------------------
       - name: Build API Docker image
-        run: docker build -f api.Dockerfile -t plagitype-api:ci .
+        run: docker build -f api.Dockerfile -t plagiarism-api:ci .
 
       - name: Build Worker Docker image
-        run: docker build -f worker.Dockerfile -t plagitype-worker:ci .
+        run: docker build -f worker.Dockerfile -t plagiarism-worker:ci .
 
       - name: Build DB Docker image
-        run: docker build -f db.Dockerfile -t plagitype-db:ci .
+        run: docker build -f db.Dockerfile -t plagiarism-db:ci .
 
       # -------------------------------
       # Trivy – Docker image scan
       # -------------------------------
       - name: Trivy scan (API)
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.30.0
         with:
-          image-ref: plagitype-api:ci
+          image-ref: plagiarism-api:ci
           format: table
           severity: CRITICAL,HIGH
           exit-code: "1"
 
       - name: Trivy scan (Worker)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.30.0
         with:
-          image-ref: plagitype-worker:ci
+          image-ref: plagiarism-worker:ci
           format: table
           severity: CRITICAL,HIGH
           exit-code: "1"
 
       - name: Trivy scan (DB)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.30.0
         with:
-          image-ref: plagitype-db:ci
+          image-ref: plagiarism-db:ci
           format: table
           severity: CRITICAL,HIGH
           exit-code: "1"
@@ -129,7 +125,7 @@ jobs:
       # Trivy – repo & IaC scan
       # -------------------------------
       - name: Trivy scan (filesystem & IaC)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.30.0
         with:
           scan-type: fs
           format: table
