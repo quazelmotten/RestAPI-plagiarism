@@ -102,7 +102,7 @@ def tokenize_with_tree_sitter(file_path, lang_code='python', tree=None):
         language = get_language(lang_code)
         parser = Parser(language)
 
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             code = f.read()
 
         tree = parser.parse(code.encode('utf-8'))
@@ -224,7 +224,7 @@ def extract_ast_hashes(file_path, lang_code, min_depth=3, tree=None):
         language = get_language(lang_code)
         parser = Parser(language)
 
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             code = f.read()
 
         tree = parser.parse(code.encode('utf-8'))
@@ -237,7 +237,7 @@ def parse_file(file_path, lang_code='python'):
     language = get_language(lang_code)
     parser = Parser(language)
     
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
         code = f.read()
     
     tree = parser.parse(code.encode('utf-8'))
