@@ -32,22 +32,26 @@ class PlagiarismService:
         self.cache = cache
 
     def __getstate__(self):
-        """Exclude executor from pickling to prevent FD inheritance."""
+        """Exclude executor and cache from pickling to prevent FD inheritance and pickle errors."""
         state = self.__dict__.copy()
         # Remove the executor - it can't be pickled and shouldn't be sent to subprocesses
         state['analysis_executor'] = None
+        # Remove the cache reference - Redis connection can't be pickled; use module-level cache in subprocesses
+        state['cache'] = None
         return state
 
     def __setstate__(self, state):
-        """Restore state without executor. Ensure Redis cache is connected in subprocess."""
+        """Restore state. Ensure Redis cache is connected in subprocess."""
         self.__dict__.update(state)
         # Executor will be None in subprocess; safe_run_cli_ methods will fail if called
         self.analysis_executor = None
-        
+        # Restore cache reference to the global cache instance
+        from redis_cache import cache as global_cache
+        self.cache = global_cache
         # Connect Redis cache in subprocess if not already connected
-        if not cache.is_connected:
+        if not self.cache.is_connected:
             try:
-                cache.connect()
+                self.cache.connect()
                 log.info(f"Redis cache connected in subprocess (PID: {os.getpid()})")
             except Exception as e:
                 log.warning(f"Failed to connect Redis cache in subprocess: {e}")

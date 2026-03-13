@@ -7,8 +7,8 @@ import logging
 import os
 from typing import Dict, List, Tuple, Set, Optional
 
-from inverted_index import inverted_index
-from redis_cache import cache
+from inverted_index import inverted_index as global_inverted_index
+from redis_cache import cache as global_cache
 
 log = logging.getLogger(__name__)
 
@@ -25,16 +25,29 @@ class ProcessorService:
         """
         self.plagiarism_service = plagiarism_service
         # Reference to global cache and inverted_index
-        self.cache = cache
-        self.inverted_index = inverted_index
+        self.cache = global_cache
+        self.inverted_index = global_inverted_index
+    
+    def __getstate__(self):
+        """Exclude cache and inverted_index from pickling to prevent pickle errors."""
+        state = self.__dict__.copy()
+        # These objects contain Redis connections which can't be pickled
+        state['cache'] = None
+        state['inverted_index'] = None
+        return state
     
     def __setstate__(self, state):
-        """Restore state. Ensure Redis cache is connected in subprocess."""
+        """Restore state. Reconnect to Redis cache and inverted index in subprocess."""
         self.__dict__.update(state)
+        # Restore references to global cache and inverted_index
+        from inverted_index import inverted_index as global_inverted_index
+        from redis_cache import cache as global_cache
+        self.cache = global_cache
+        self.inverted_index = global_inverted_index
         # Connect Redis cache in subprocess if not already connected
-        if not cache.is_connected:
+        if not self.cache.is_connected:
             try:
-                cache.connect()
+                self.cache.connect()
                 log.info(f"Redis cache connected in subprocess (PID: {os.getpid()})")
             except Exception as e:
                 log.warning(f"Failed to connect Redis cache in subprocess: {e}")
@@ -72,8 +85,8 @@ class ProcessorService:
             
             # Try to acquire lock to prevent duplicate fingerprinting
             lock_acquired = False
-            if cache.is_connected:
-                lock_acquired = cache.lock_fingerprint_computation(file_hash)
+            if self.cache.is_connected:
+                lock_acquired = self.cache.lock_fingerprint_computation(file_hash)
             
             try:
                 # Generate fingerprints
@@ -98,12 +111,12 @@ class ProcessorService:
                 # Cache fingerprints for reuse
                 tokens_serializable = fp_result.get("tokens", [])
                 tokens = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in tokens_serializable]
-                cache.cache_fingerprints(file_hash, fingerprints_for_index, ast_hashes, tokens)
+                self.cache.cache_fingerprints(file_hash, fingerprints_for_index, ast_hashes, tokens)
                 
                 return True
             finally:
                 if lock_acquired:
-                    cache.unlock_fingerprint_computation(file_hash)
+                    self.cache.unlock_fingerprint_computation(file_hash)
                     
         except Exception as e:
             log.exception(f"[Task {task_id}] Failed to index file {filename}: {e}")
@@ -148,7 +161,7 @@ class ProcessorService:
             if self.inverted_index.get_file_fingerprints(file_hash, language):
                 continue
             # Check if fingerprints are in cache (if so, we can add to index without recomputation)
-            fingerprints = cache.get_fingerprints(file_hash)
+            fingerprints = self.cache.get_fingerprints(file_hash)
             if fingerprints:
                 try:
                     self.inverted_index.add_file_fingerprints(file_hash, fingerprints, language)
@@ -220,7 +233,7 @@ class ProcessorService:
             
             try:
                 # Get fingerprints from cache or generate
-                fingerprints = cache.get_fingerprints(file_a_hash)
+                fingerprints = self.cache.get_fingerprints(file_a_hash)
                 if fingerprints is None:
                     fp_result = self.plagiarism_service.safe_run_cli_fingerprint(file_a_path, language)
                     fingerprints = [
@@ -234,7 +247,7 @@ class ProcessorService:
                     ast_hashes = fp_result.get("ast_hashes", [])
                     tokens_serializable = fp_result.get("tokens", [])
                     tokens = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in tokens_serializable]
-                    cache.cache_fingerprints(file_a_hash, fingerprints, ast_hashes, tokens)
+                    self.cache.cache_fingerprints(file_a_hash, fingerprints, ast_hashes, tokens)
                 
                 # Find candidate files using inverted index
                 candidate_hashes = self.inverted_index.find_candidate_files(fingerprints, language)
@@ -289,11 +302,11 @@ class ProcessorService:
             
             try:
                 # Get or generate fingerprints for new file
-                fingerprints = cache.get_fingerprints(new_file_hash)
+                fingerprints = self.cache.get_fingerprints(new_file_hash)
                 if fingerprints is None:
                     lock_acquired = False
-                    if cache.is_connected:
-                        lock_acquired = cache.lock_fingerprint_computation(new_file_hash)
+                    if self.cache.is_connected:
+                        lock_acquired = self.cache.lock_fingerprint_computation(new_file_hash)
                     try:
                         fp_result = self.plagiarism_service.safe_run_cli_fingerprint(new_file_path, language)
                         fingerprints = [
@@ -307,10 +320,10 @@ class ProcessorService:
                         ast_hashes = fp_result.get("ast_hashes", [])
                         tokens_serializable = fp_result.get("tokens", [])
                         tokens = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in tokens_serializable]
-                        cache.cache_fingerprints(new_file_hash, fingerprints, ast_hashes, tokens)
+                        self.cache.cache_fingerprints(new_file_hash, fingerprints, ast_hashes, tokens)
                     finally:
                         if lock_acquired:
-                            cache.unlock_fingerprint_computation(new_file_hash)
+                            self.cache.unlock_fingerprint_computation(new_file_hash)
                 
                 # Find candidate files using inverted index
                 candidate_hashes = self.inverted_index.find_candidate_files(fingerprints, language)

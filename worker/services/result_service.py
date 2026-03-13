@@ -8,7 +8,7 @@ import os
 from typing import Dict, List, Tuple, Optional
 
 from crud import save_similarity_result, get_max_similarity, update_plagiarism_task, bulk_insert_similarity_results
-from redis_cache import cache
+from redis_cache import cache as global_cache
 
 log = logging.getLogger(__name__)
 
@@ -25,15 +25,25 @@ class ResultService:
         """
         self.plagiarism_service = plagiarism_service
         # Reference to the global cache instance (for testing and usage)
-        self.cache = cache
+        self.cache = global_cache
+    
+    def __getstate__(self):
+        """Exclude cache from pickling to prevent pickle errors."""
+        state = self.__dict__.copy()
+        # Cache contains Redis connection which can't be pickled
+        state['cache'] = None
+        return state
     
     def __setstate__(self, state):
-        """Restore state. Ensure Redis cache is connected in subprocess."""
+        """Restore state. Reconnect to Redis cache in subprocess."""
         self.__dict__.update(state)
+        # Restore reference to global cache
+        from redis_cache import cache as global_cache
+        self.cache = global_cache
         # Connect Redis cache in subprocess if not already connected
-        if not cache.is_connected:
+        if not self.cache.is_connected:
             try:
-                cache.connect()
+                self.cache.connect()
                 log.info(f"Redis cache connected in subprocess (PID: {os.getpid()})")
             except Exception as e:
                 log.warning(f"Failed to connect Redis cache in subprocess: {e}")
@@ -87,14 +97,14 @@ class ResultService:
 
         try:
             # First ensure both files have fingerprints cached (they should from indexing)
-            if not cache.has_ast_fingerprints(file_a_hash):
+            if not self.cache.has_ast_fingerprints(file_a_hash):
                 self._ensure_fingerprints_cached(file_a, language, task_id)
 
-            if not cache.has_ast_fingerprints(file_b_hash):
+            if not self.cache.has_ast_fingerprints(file_b_hash):
                 self._ensure_fingerprints_cached(file_b, language, task_id)
             
             # Check if we have cached pairwise similarity result
-            cached_result = cache.get_cached_similarity(file_a_hash, file_b_hash)
+            cached_result = self.cache.get_cached_similarity(file_a_hash, file_b_hash)
             if cached_result:
                 log.info(f"[Task {task_id}]   Using cached pairwise similarity result")
                 ast_similarity = cached_result['ast_similarity']
@@ -114,7 +124,7 @@ class ResultService:
                         log.info(f"[Task {task_id}]   Found {len(matches_data)} matching fragments")
                     
                     # Cache the pairwise result for future reuse
-                    cache.cache_similarity_result(file_a_hash, file_b_hash, ast_similarity, matches_data)
+                    self.cache.cache_similarity_result(file_a_hash, file_b_hash, ast_similarity, matches_data)
                     error = None
                 except Exception as cache_analysis_error:
                     # If cached analysis fails for any reason, fallback to full analysis
@@ -188,12 +198,12 @@ class ResultService:
         if not file_hash or not file_path:
             return
         
-        if cache.has_ast_fingerprints(file_hash):
+        if self.cache.has_ast_fingerprints(file_hash):
             return
         
         lock_acquired = False
-        if cache.is_connected:
-            lock_acquired = cache.lock_fingerprint_computation(file_hash)
+        if self.cache.is_connected:
+            lock_acquired = self.cache.lock_fingerprint_computation(file_hash)
         
         try:
             fp_result = self.plagiarism_service.safe_run_cli_fingerprint(file_path, language)
@@ -208,10 +218,10 @@ class ResultService:
             ast_hashes = fp_result.get("ast_hashes", [])
             tokens_serializable = fp_result.get("tokens", [])
             tokens = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in tokens_serializable]
-            cache.cache_fingerprints(file_hash, fingerprints, ast_hashes, tokens)
+            self.cache.cache_fingerprints(file_hash, fingerprints, ast_hashes, tokens)
         finally:
             if lock_acquired:
-                cache.unlock_fingerprint_computation(file_hash)
+                self.cache.unlock_fingerprint_computation(file_hash)
     
     def update_task_progress(
         self, 
