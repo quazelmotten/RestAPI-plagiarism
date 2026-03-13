@@ -84,45 +84,50 @@ class ResultService:
             }
 
         try:
-            # Check cache first
+            # First ensure both files have fingerprints cached (they should from indexing)
+            if not cache.has_ast_fingerprints(file_a_hash):
+                self._ensure_fingerprints_cached(file_a, language, task_id)
+
+            if not cache.has_ast_fingerprints(file_b_hash):
+                self._ensure_fingerprints_cached(file_b, language, task_id)
+            
+            # Check if we have cached pairwise similarity result
             cached_result = cache.get_cached_similarity(file_a_hash, file_b_hash)
             if cached_result:
-                log.info(f"[Task {task_id}]   Using cached similarity result")
+                log.info(f"[Task {task_id}]   Using cached pairwise similarity result")
                 ast_similarity = cached_result['ast_similarity']
                 matches_data = cached_result['matches']
                 error = None
             else:
-                # Ensure both files have fingerprints cached
-                if not cache.has_ast_fingerprints(file_a_hash):
-                    self._ensure_fingerprints_cached(file_a, language, task_id)
-
-                if not cache.has_ast_fingerprints(file_b_hash):
-                    self._ensure_fingerprints_cached(file_b, language, task_id)
-
-                # Check cache again after ensuring fingerprints
-                cached_result = cache.get_cached_similarity(file_a_hash, file_b_hash)
-                if cached_result:
-                    log.info(f"[Task {task_id}]   Using cached similarity result")
-                    ast_similarity = cached_result['ast_similarity']
-                    matches_data = cached_result['matches']
+                # Use cached analysis (reads fingerprints/AST from Redis, avoids re-parsing)
+                log.info(f"[Task {task_id}]   Running cached analysis (using Redis fingerprints)...")
+                try:
+                    analyze_result = self.plagiarism_service.safe_run_cached_analyze(
+                        file_a_path, file_b_path, file_a_hash, file_b_hash, language
+                    )
+                    ast_similarity = analyze_result.get('similarity_ratio', 0)
+                    matches_data = analyze_result.get('matches', [])
+                    log.info(f"[Task {task_id}]   Cached analysis similarity: {ast_similarity:.4f}")
+                    if ast_similarity >= 0.15:
+                        log.info(f"[Task {task_id}]   Found {len(matches_data)} matching fragments")
+                    
+                    # Cache the pairwise result for future reuse
+                    cache.cache_similarity_result(file_a_hash, file_b_hash, ast_similarity, matches_data)
                     error = None
-                else:
-                    # Run analysis
+                except Exception as cache_analysis_error:
+                    # If cached analysis fails for any reason, fallback to full analysis
+                    log.warning(f"[Task {task_id}] Cached analysis failed: {cache_analysis_error}. Falling back to full analysis.")
                     analyze_result = self.plagiarism_service.safe_run_cli_analyze(
                         file_a_path, file_b_path, language
                     )
                     ast_similarity = analyze_result.get('similarity_ratio', 0)
-                    log.info(f"[Task {task_id}]   Analyzer similarity: {ast_similarity:.4f}")
-
+                    log.info(f"[Task {task_id}]   Full analysis similarity: {ast_similarity:.4f}")
                     matches_data = []
-                    error = None
                     if ast_similarity >= 0.15:
                         raw_matches = analyze_result.get('matches', [])
                         matches_data = self.plagiarism_service.transform_matches_to_legacy_format(raw_matches)
                         log.info(f"[Task {task_id}]   Found {len(matches_data)} matching fragments")
-
-                    # Cache the result
-                    cache.cache_similarity_result(file_a_hash, file_b_hash, ast_similarity, matches_data)
+                    error = None
 
             # Build result dict
             result = {

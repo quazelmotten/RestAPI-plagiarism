@@ -54,12 +54,89 @@ class PlagiarismService:
         """
         Run plagiarism analysis using the new analyzer (Dolos-style fragment building).
         Returns parsed JSON result with similarity and matches.
+        This method does NOT use cached fingerprints; kept for fallback.
         """
         from cli.analyzer import Analyzer
         
         analyzer = Analyzer()
         result = analyzer.Start(file1_path, file2_path, language)
         return result
+    
+    def run_cached_analysis(
+        self,
+        file1_path: str,
+        file2_path: str,
+        file1_hash: str,
+        file2_hash: str,
+        language: str,
+        ast_threshold: float = 0.15
+    ) -> Dict:
+        """
+        Run plagiarism analysis using cached fingerprints and AST hashes from Redis.
+        This avoids re-parsing files and recomputing fingerprints.
+        
+        Args:
+            file1_path: Path to first file
+            file2_path: Path to second file
+            file1_hash: SHA256 hash of first file
+            file2_hash: SHA256 hash of second file
+            language: Programming language
+            ast_threshold: Minimum AST similarity to compute matches (default 0.15)
+            
+        Returns:
+            Dict with 'similarity_ratio' and 'matches' (in legacy format)
+        """
+        from cli.analyzer import analyze_plagiarism_cached
+        from redis_cache import cache
+        
+        # Use the cached analysis function which will fetch from Redis or compute if missing
+        ast_sim, matches, metrics = analyze_plagiarism_cached(
+            file1_path, file2_path, file1_hash, file2_hash,
+            cache=cache,
+            language=language,
+            ast_threshold=ast_threshold
+        )
+        
+        # Transform matches to legacy DB format if above threshold
+        if ast_sim >= ast_threshold:
+            matches_data = self.transform_matches_to_legacy_format(matches)
+        else:
+            matches_data = []
+        
+        return {
+            "similarity_ratio": ast_sim,
+            "matches": matches_data,
+        }
+    
+    def safe_run_cached_analyze(
+        self,
+        file1_path: str,
+        file2_path: str,
+        file1_hash: str,
+        file2_hash: str,
+        language: str,
+        timeout: int = 600
+    ) -> Dict:
+        """
+        Run cached analysis in a separate process with timeout.
+        If called from within a subprocess (executor is None), runs directly.
+        """
+        if self.analysis_executor is None:
+            # Already in a subprocess, run directly
+            return self.run_cached_analysis(file1_path, file2_path, file1_hash, file2_hash, language)
+        
+        future = self.analysis_executor.submit(
+            self.run_cached_analysis,
+            file1_path, file2_path, file1_hash, file2_hash, language
+        )
+        try:
+            return future.result(timeout=timeout)
+        except TimeoutError:
+            future.cancel()
+            raise TimeoutError(f"Cached analysis timed out after {timeout} seconds for {file1_path} vs {file2_path}")
+        except Exception as e:
+            log.error(f"Error in safe_run_cached_analyze: {e}")
+            raise
     
     def transform_matches_to_legacy_format(self, matches: List[Dict]) -> List[Dict]:
         """

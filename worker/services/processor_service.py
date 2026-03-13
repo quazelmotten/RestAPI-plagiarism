@@ -122,30 +122,71 @@ class ProcessorService:
             task_id: Task ID for logging
             existing_files: Optional list of existing files from other tasks to ensure indexed
         """
+        import time
+        from concurrent.futures import as_completed
+        
         log.info(f"[Task {task_id}] Indexing fingerprints for new files...")
+        start_time = time.time()
         
-        # First, ensure existing files from other tasks are indexed
+        # Collect all files that may need indexing
+        all_files_to_check = []
         if existing_files:
-            log.info(f"[Task {task_id}] Checking/adding existing files to inverted index...")
-            for file_info in existing_files:
-                file_hash = file_info.get('hash') or file_info.get('file_hash')
-                if not file_hash:
-                    continue
+            all_files_to_check.extend(existing_files)
+        all_files_to_check.extend(files)
+        
+        # Determine which files actually need indexing (not in inverted index and not in progress)
+        files_to_index = []
+        for file_info in all_files_to_check:
+            file_hash = file_info.get('hash') or file_info.get('file_hash')
+            file_path = file_info.get('path') or file_info.get('file_path')
+            if not file_hash or not file_path:
+                continue
+            # Check if already indexed in inverted index
+            if inverted_index.get_file_fingerprints(file_hash, language):
+                continue
+            # Check if fingerprints are in cache (if so, we can add to index without recomputation)
+            fingerprints = cache.get_fingerprints(file_hash)
+            if fingerprints:
                 try:
-                    if not inverted_index.get_file_fingerprints(file_hash, language):
-                        # Need to get fingerprints from cache or regenerate
-                        fingerprints = cache.get_fingerprints(file_hash)
-                        if fingerprints:
-                            inverted_index.add_file_fingerprints(file_hash, fingerprints, language)
-                            log.debug(f"[Task {task_id}] Added existing file {file_info.get('filename')} to inverted index")
+                    inverted_index.add_file_fingerprints(file_hash, fingerprints, language)
+                    log.debug(f"[Task {task_id}] Added cached fingerprints for {file_info.get('filename')} to inverted index")
+                    continue
                 except Exception as e:
-                    log.warning(f"[Task {task_id}] Could not add existing file to index: {e}")
+                    log.warning(f"[Task {task_id}] Failed to add cached fingerprints: {e}")
+            # Need to generate and index
+            files_to_index.append(file_info)
         
-        # Index new files
-        for file_info in files:
-            self.index_file_fingerprints(file_info, language, task_id)
+        # Parallelize fingerprint generation and indexing for files that need it
+        if files_to_index:
+            log.info(f"[Task {task_id}] Need to generate fingerprints for {len(files_to_index)} files (parallelizing)...")
+            executor = self.plagiarism_service.analysis_executor
+            if executor is None:
+                # Fallback to sequential
+                log.warning(f"[Task {task_id}] No executor available, indexing sequentially")
+                for file_info in files_to_index:
+                    self.index_file_fingerprints(file_info, language, task_id)
+            else:
+                # Submit all indexing jobs to executor
+                futures = {}
+                for file_info in files_to_index:
+                    future = executor.submit(self.index_file_fingerprints, file_info, language, task_id)
+                    futures[future] = file_info
+                
+                # Collect results
+                success_count = 0
+                for future in as_completed(futures):
+                    file_info = futures[future]
+                    filename = file_info.get('filename', 'unknown')
+                    try:
+                        result = future.result()
+                        if result:
+                            success_count += 1
+                    except Exception as e:
+                        log.error(f"[Task {task_id}] Indexing failed for {filename}: {e}")
+                log.info(f"[Task {task_id}] Indexed {success_count}/{len(files_to_index)} files successfully")
         
-        log.info(f"[Task {task_id}] Finished indexing fingerprints")
+        elapsed = time.time() - start_time
+        log.info(f"[Task {task_id}] Finished indexing fingerprints in {elapsed:.2f}s")
     
     def find_intra_task_pairs(
         self, 

@@ -166,6 +166,39 @@ class PlagiarismCache:
         except RedisError:
             return None
 
+    def get_ast_hashes(self, file_hash: str) -> Optional[List[int]]:
+        """Retrieve AST hashes from Set-based storage."""
+        if not self.is_connected:
+            return None
+        try:
+            key = self._get_ast_key(file_hash)
+            if not self._redis.exists(f"{key}:hashes"):
+                return None
+            
+            hash_strings = self._redis.smembers(f"{key}:hashes")
+            # Convert strings to integers
+            ast_hashes = []
+            for h in hash_strings:
+                try:
+                    ast_hashes.append(int(h))
+                except ValueError:
+                    # If hash is not an integer, keep as string (shouldn't happen)
+                    ast_hashes.append(h)
+            return ast_hashes if ast_hashes else None
+        except RedisError:
+            return None
+
+    def get_tokens(self, file_hash: str) -> List[Dict[str, Any]]:
+        """
+        Retrieve tokens from storage.
+        Note: Tokens are not currently stored in Redis. Return empty list to indicate
+        tokens are available (so analyze_plagiarism_cached won't re-tokenize).
+        The token list is not used in similarity calculation, only for metrics which
+        can use fingerprint count instead.
+        """
+        # Since we don't store tokens, return empty list to skip tokenization
+        return []
+
     def calculate_ast_similarity(self, file_a_hash: str, file_b_hash: str) -> float:
         """
         Calculate AST-based similarity using Redis SINTER.

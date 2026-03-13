@@ -168,15 +168,21 @@ class TaskOrchestrator:
                         )
             else:
                 # Concurrent processing with batches
-                BATCH_SIZE = 50
-                log.info(f"[Task {task_id}] Processing {len(all_pairs)} pairs concurrently using {executor._max_workers} workers...")
+                BATCH_SIZE = 200  # Increased from 50 to reduce DB flush overhead
+                FLUSH_THRESHOLD = 200  # Flush when buffer reaches this size
+                log.info(f"[Task {task_id}] Processing {len(all_pairs)} pairs concurrently using {executor._max_workers} workers (batch size: {BATCH_SIZE})...")
+                
+                # Import as_completed for non-blocking result gathering
+                from concurrent.futures import as_completed
                 
                 for batch_start in range(0, len(all_pairs), BATCH_SIZE):
                     batch_end = min(batch_start + BATCH_SIZE, len(all_pairs))
                     batch = all_pairs[batch_start:batch_end]
                     
+                    log.debug(f"[Task {task_id}] Submitting batch {batch_start//BATCH_SIZE + 1}/{(len(all_pairs) + BATCH_SIZE - 1)//BATCH_SIZE} ({len(batch)} pairs)")
+                    
                     # Submit all tasks in the batch
-                    futures = []
+                    future_to_pair = {}
                     for file_a, file_b in batch:
                         future = executor.submit(
                             self.result_service.process_pair,
@@ -185,14 +191,16 @@ class TaskOrchestrator:
                             language=language,
                             task_id=task_id
                         )
-                        futures.append(future)
+                        future_to_pair[future] = (file_a, file_b)
                     
-                    # Collect results as they complete
-                    for future in futures:
+                    # Collect results as they complete (avoid head-of-line blocking)
+                    completed_count = 0
+                    for future in as_completed(future_to_pair):
                         try:
                             result = future.result()
                             processed_count += 1
                             result_buffer.append(result)
+                            completed_count += 1
                         except Exception as e:
                             log.error(f"[Task {task_id}] Future failed: {e}")
                             processed_count += 1
@@ -203,23 +211,29 @@ class TaskOrchestrator:
                                 'ast_similarity': None,
                                 'matches': {'error': str(e)},
                             })
+                            completed_count += 1
                         
-                        # Flush if buffer reaches BATCH_SIZE
-                        if len(result_buffer) >= 50:
+                        # Flush if buffer reaches threshold
+                        if len(result_buffer) >= FLUSH_THRESHOLD:
                             self.result_service.flush_results(task_id, result_buffer)
                             self.result_service.update_task_progress_batch(
                                 task_id=task_id,
                                 processed=processed_count,
-                                total=len(all_pairs)
-                             )
-             
+                                total=total_pairs_count
+                            )
+                            log.debug(f"[Task {task_id}] Flushed {FLUSH_THRESHOLD} results (batch {batch_start//BATCH_SIZE + 1})")
+                
+                log.debug(f"[Task {task_id}] All {len(all_pairs)} pairs submitted and processed")
+            
             analysis_elapsed = time.time() - analysis_start_time
             log.info(f"[Task {task_id}] Timing: analysis (pair processing) took {analysis_elapsed:.2f}s")
             
             # Final flush of any remaining results
-            self.result_service.flush_results(task_id, result_buffer, force=True)
+            if result_buffer:
+                self.result_service.flush_results(task_id, result_buffer, force=True)
+                log.info(f"[Task {task_id}] Final flush: {len(result_buffer)} remaining results")
 
-             # Finalize task
+            # Finalize task
             self.result_service.finalize_task(
                 task_id=task_id,
                 total_pairs=total_pairs_count,
