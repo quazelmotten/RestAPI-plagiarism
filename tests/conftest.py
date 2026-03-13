@@ -23,7 +23,7 @@ def mock_rabbit(monkeypatch):
     """Mock RabbitMQ publish_message."""
     from unittest.mock import AsyncMock
     mock = AsyncMock()
-    monkeypatch.setattr("rabbit.publish_message", mock)
+    monkeypatch.setattr("src.rabbit.publish_message", mock)
 
 
 @pytest.fixture(autouse=True)
@@ -34,4 +34,4 @@ def mock_database(monkeypatch):
     mock_execute = MagicMock()
     mock_session.execute = mock_execute
     mock_execute.return_value.scalars.return_value.all.return_value = []
-    monkeypatch.setattr("database.get_async_session", mock_session)
+    monkeypatch.setattr("database.get_session", mock_session)

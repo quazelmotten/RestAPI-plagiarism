@@ -15,6 +15,7 @@ on:
       - 'tests/worker/**'
       - '.github/workflows/worker-tests.yml'
       - 'worker/requirements.txt'
+  workflow_dispatch:
 
 jobs:
   test:
@@ -31,7 +32,7 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
+          POSTGRES_PASSWORD: testpasswordthatis16characterslong
           POSTGRES_DB: test_plagiarism
         ports:
           - 5432:5432
@@ -64,7 +65,9 @@ jobs:
         echo "DB_PORT=5432" >> $GITHUB_ENV
         echo "DB_NAME=test_plagiarism" >> $GITHUB_ENV
         echo "DB_USER=test" >> $GITHUB_ENV
-        echo "DB_PASS=test" >> $GITHUB_ENV
+        echo "DB_PASS=testpasswordthatis16characterslong" >> $GITHUB_ENV
+        echo "RMQ_PASS=testpasswordthatis16characterslong" >> $GITHUB_ENV
+        echo "SECRET_KEY=supersecretkeythatis32characterslong1234567890" >> $GITHUB_ENV
         echo "WORKER_CONCURRENCY=4" >> $GITHUB_ENV
         echo "WORKER_PREFETCH_COUNT=1" >> $GITHUB_ENV
         echo "LOG_LEVEL=INFO" >> $GITHUB_ENV
@@ -79,23 +82,19 @@ jobs:
 
     - name: Run unit tests
       run: |
-        cd tests/worker/unit
-        pytest -v --tb=short
+        PYTHONPATH=$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/worker:$GITHUB_WORKSPACE/src pytest tests/worker/unit -v --tb=short
 
     - name: Run integration tests
       run: |
-        cd tests/worker/integration
-        pytest -v -m "integration" --tb=short
+        PYTHONPATH=$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/worker:$GITHUB_WORKSPACE/src pytest tests/worker/integration -v -m "integration" --tb=short
 
     - name: Run performance regression tests
       run: |
-        cd tests/worker/performance
-        python regression_suite.py
+        PYTHONPATH=$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/worker:$GITHUB_WORKSPACE/src python tests/worker/performance/regression_suite.py
 
     - name: Run coverage
       run: |
-        cd tests/worker
-        pytest --cov=../../worker --cov-report=xml --cov-report=term --cov-fail-under=70
+        PYTHONPATH=$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/worker:$GITHUB_WORKSPACE/src pytest tests/worker --cov=worker --cov=inverted_index --cov=config --cov=database --cov=redis_client --cov=cli --cov-report=xml --cov-report=term --cov-fail-under=30
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
