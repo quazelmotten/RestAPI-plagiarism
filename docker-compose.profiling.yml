@@ -1,0 +1,24 @@
+# Docker Compose override for profiling
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.profiling.yml up -d
+#
+# This override adds capabilities needed for py-spy to attach to processes.
+# It removes the no-new-privileges restriction and adds SYS_PTRACE capability.
+# Only use for profiling/debugging, not for production.
+
+version: '3.8'
+
+services:
+  api:
+    security_opt:
+      - no-new-privileges:false  # Disable restriction for profiling
+    cap_add:
+      - SYS_PTRACE  # Allow ptrace for py-spy
+    # Optional: increase pid limit for better sampling
+    pids_limit: 8192
+
+  worker:
+    security_opt:
+      - no-new-privileges:false  # Disable restriction for profiling
+    cap_add:
+      - SYS_PTRACE  # Allow ptrace for py-spy
+    pids_limit: 8192

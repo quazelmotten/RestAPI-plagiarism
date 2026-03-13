@@ -12,11 +12,11 @@ from itertools import combinations
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(script_dir)
-src_dir = os.path.join(root_dir, "src")
+src_dir = os.path.join(root_dir, "cli")
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
-from plagiarism.analyzer import (
+from cli.analyzer import (
     tokenize_with_tree_sitter,
     winnow_fingerprints,
     compute_fingerprints,

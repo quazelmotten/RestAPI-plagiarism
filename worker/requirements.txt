@@ -19,3 +19,6 @@ pytest-mock
 pytest-xdist
 pytest-cov
 pytest-benchmark
+
+# Profiling
+py-spy==0.3.14
