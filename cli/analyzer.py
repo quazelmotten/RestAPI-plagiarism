@@ -477,6 +477,14 @@ def analyze_plagiarism(
 
     ast_sim = ast_similarity(ast1, ast2)
 
+    # Early exit: skip expensive fragment building if AST similarity is below threshold
+    if ast_sim < ast_threshold:
+        return ast_sim, [], {
+            'left_covered': 0, 'right_covered': 0,
+            'left_total': len(fps1), 'right_total': len(fps2),
+            'similarity': 0.0, 'longest_fragment': 0,
+        }
+
     # --- Find paired occurrences using k-gram indices ---
     occurrences = find_paired_occurrences(index1, index2)
 
@@ -484,14 +492,9 @@ def analyze_plagiarism(
     fragments = build_fragments(occurrences, minimum_occurrences=1)
 
     # --- Compute proper similarity metrics ---
-    # Use winnowed fingerprint count (not raw k-grams) for proper similarity calculation
     total_left = len(fps1)
     total_right = len(fps2)
     metrics = compute_similarity_metrics(occurrences, total_left, total_right)
-
-    # Use AST similarity as the decision metric (more robust to lexical changes)
-    if ast_sim < ast_threshold:
-        return ast_sim, [], metrics
 
     # Convert fragments to match format
     matches = []
@@ -620,14 +623,23 @@ def analyze_plagiarism_cached(
     if cache and cache.is_connected:
         cache.cache_fingerprints(file2_hash, fps2, ast2, tokens2)
 
-    # --- AST similarity check ---
-    logger.info(f"AST analysis: file1={file1_path}, file2={file2_path}")
-    logger.info(f"AST hashes count: file1={len(ast1) if ast1 else 0}, file2={len(ast2) if ast2 else 0}")
-    
-    if ast1 and ast2:
-        logger.info(f"AST hash samples: file1={ast1[:3] if len(ast1) >= 3 else ast1}, file2={ast2[:3] if len(ast2) >= 3 else ast2}")
-    # Compute AST similarity
+    # --- AST similarity check (cheap O(n) set intersection) ---
     ast_sim = ast_similarity(ast1, ast2)
+    logger.info(f"AST similarity: {ast_sim:.4f} (threshold={ast_threshold})")
+
+    # Early exit: skip expensive fragment building if AST similarity is below threshold
+    if ast_sim < ast_threshold:
+        logger.info(f"AST similarity {ast_sim:.4f} below threshold {ast_threshold}, skipping fragment building")
+        # Build minimal metrics without expensive operations
+        total_left = len(fps1) if fps1 else 0
+        total_right = len(fps2) if fps2 else 0
+        metrics = {
+            'left_covered': 0, 'right_covered': 0,
+            'left_total': total_left, 'right_total': total_right,
+            'similarity': 0.0, 'longest_fragment': 0,
+        }
+        return ast_sim, [], metrics
+
     # --- Find paired occurrences using k-gram indices ---
     occurrences = find_paired_occurrences(index1, index2)
 
@@ -635,18 +647,9 @@ def analyze_plagiarism_cached(
     fragments = build_fragments(occurrences, minimum_occurrences=1)
 
     # --- Compute proper similarity metrics ---
-    # Note: total counts need actual token counts from files
     total_left = len(fps1) if fps1 else 0
     total_right = len(fps2) if fps2 else 0
     metrics = compute_similarity_metrics(occurrences, total_left, total_right)
-
-    logger.info(f"K-gram similarity calculated: {metrics['similarity']:.4f}")
-    logger.info(f"Longest fragment: {metrics['longest_fragment']}")
-
-    # Use AST similarity as the decision metric (more robust to lexical changes)
-    if ast_sim < ast_threshold:
-        logger.info(f"AST similarity {ast_sim:.4f} below threshold {ast_threshold}, returning without matches")
-        return ast_sim, [], metrics
 
     # Convert fragments to match format
     matches = []

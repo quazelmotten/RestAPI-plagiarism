@@ -84,10 +84,10 @@ class TestRedisCache:
         assert mock_cache.has_ast_fingerprints("test") is False
 
     def test_calculate_ast_similarity(self, mock_cache):
-        """Test AST similarity calculation via Redis SINTER."""
+        """Test AST similarity calculation via Redis SINTERCARD."""
         mock_cache._redis.exists.return_value = True
         mock_cache._redis.scard.side_effect = [5, 3]  # count_a, count_b
-        mock_cache._redis.sinter.return_value = {"hash1", "hash2"}
+        mock_cache._redis.sintercard.return_value = 2  # intersection size
 
         sim = mock_cache.calculate_ast_similarity("file_a", "file_b")
 

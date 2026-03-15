@@ -29,6 +29,7 @@ class PlagiarismCache:
         self._redis: Optional[redis.Redis] = None
         self._connected = False
         self.ttl = getattr(settings, 'redis_ttl', 604800)
+        self.fp_ttl = getattr(settings, 'redis_fingerprint_ttl', 604800)
 
     def connect(self) -> bool:
         """Establish connection to Redis."""
@@ -99,14 +100,14 @@ class PlagiarismCache:
                     'start': fp['start'], 'end': fp['end']
                 }))
                 pipe.sadd(f"{token_key}:hashes", hash_val)
-            pipe.expire(f"{token_key}:count", self.ttl)
-            pipe.expire(f"{token_key}:positions", self.ttl)
-            pipe.expire(f"{token_key}:hashes", self.ttl)
+            pipe.expire(f"{token_key}:count", self.fp_ttl)
+            pipe.expire(f"{token_key}:positions", self.fp_ttl)
+            pipe.expire(f"{token_key}:hashes", self.fp_ttl)
 
             ast_key = self._get_ast_key(file_hash)
             hash_strings = [str(h) for h in ast_hashes]
             pipe.sadd(f"{ast_key}:hashes", *hash_strings)
-            pipe.expire(f"{ast_key}:hashes", self.ttl)
+            pipe.expire(f"{ast_key}:hashes", self.fp_ttl)
 
             pipe.execute()
             logger.debug(f"Cached fingerprints for {file_hash[:16]}...")
@@ -201,7 +202,7 @@ class PlagiarismCache:
 
     def calculate_ast_similarity(self, file_a_hash: str, file_b_hash: str) -> float:
         """
-        Calculate AST-based similarity using Redis SINTER.
+        Calculate AST-based similarity using Redis SINTERCARD (or SINTER fallback).
         Uses Jaccard index: |A ∩ B| / |A ∪ B|
         """
         if not self.is_connected:
@@ -210,18 +211,26 @@ class PlagiarismCache:
         key_a = self._get_ast_key(file_a_hash)
         key_b = self._get_ast_key(file_b_hash)
 
-        if not self._redis.exists(f"{key_a}:hashes") or \
-           not self._redis.exists(f"{key_b}:hashes"):
+        hashes_a = f"{key_a}:hashes"
+        hashes_b = f"{key_b}:hashes"
+
+        if not self._redis.exists(hashes_a) or \
+           not self._redis.exists(hashes_b):
             return 0.0
 
-        count_a = self._redis.scard(f"{key_a}:hashes")
-        count_b = self._redis.scard(f"{key_b}:hashes")
+        count_a = self._redis.scard(hashes_a)
+        count_b = self._redis.scard(hashes_b)
 
         if count_a == 0 or count_b == 0:
             return 0.0
 
-        intersection = self._redis.sinter(f"{key_a}:hashes", f"{key_b}:hashes")
-        intersection_size = len(intersection)
+        # Use SINTERCARD to get intersection size without materializing the set
+        try:
+            intersection_size = self._redis.sintercard(2, [hashes_a, hashes_b])
+        except AttributeError:
+            # Fallback for Redis < 7.0 (sintercard not available)
+            intersection_size = len(self._redis.sinter(hashes_a, hashes_b))
+
         union_size = count_a + count_b - intersection_size
 
         if union_size == 0:

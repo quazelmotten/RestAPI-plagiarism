@@ -57,7 +57,8 @@ class TestProcessorService:
 
         result = processor.index_file_fingerprints(file_info, 'python', 'test_task')
 
-        assert result is True
+        assert result is not None
+        assert len(result) == 1
         mock_plagiarism_service.safe_run_cli_fingerprint.assert_called_once()
         mock_inverted_index.add_file_fingerprints.assert_called_once()
         # Verify caching
@@ -72,18 +73,19 @@ class TestProcessorService:
         }
 
         mock_inverted_index.get_file_fingerprints.return_value = [{'hash': 123}]
+        processor.cache.get_fingerprints.return_value = [{'hash': 123, 'start': (0,0), 'end': (1,0)}]
 
         result = processor.index_file_fingerprints(file_info, 'python', 'test_task')
 
-        assert result is True
+        assert result is not None
         mock_inverted_index.add_file_fingerprints.assert_not_called()
         # Fingerprint generation should not be called
         processor.plagiarism_service.safe_run_cli_fingerprint.assert_not_called()
 
-    def test_index_file_fingerprint_missing_info_returns_false(self, processor):
+    def test_index_file_fingerprint_missing_info_returns_none(self, processor):
         file_info = {'id': '1'}  # missing hash and path
         result = processor.index_file_fingerprints(file_info, 'python', 'test_task')
-        assert result is False
+        assert result is None
 
     def test_ensure_files_indexed_parallelizes(self, processor, mock_plagiarism_service, temp_dir):
         files = []
@@ -106,17 +108,21 @@ class TestProcessorService:
         # Mock executor.submit to return a completed real Future
         from concurrent.futures import Future
 
+        mock_fps = [{'hash': 123, 'start': (0, 0), 'end': (1, 0)}]
+
         def mock_submit(func, *args, **kwargs):
             f = Future()
-            f.set_result(True)
+            f.set_result(mock_fps)
             return f
 
         mock_plagiarism_service.analysis_executor.submit.side_effect = mock_submit
 
-        processor.ensure_files_indexed(files, 'python', 'test_task')
+        fingerprint_map = processor.ensure_files_indexed(files, 'python', 'test_task')
 
         # Each file should be submitted to executor
         assert mock_plagiarism_service.analysis_executor.submit.call_count == 5
+        # Fingerprint map should contain entries for all files
+        assert len(fingerprint_map) == 5
 
     def test_ensure_files_indexed_sequential_fallback(self, processor, mock_plagiarism_service, temp_dir):
         files = []
@@ -162,21 +168,27 @@ class TestProcessorService:
 
         mock_inverted_index = processor.inverted_index
         # First file already indexed, second not
-        mock_inverted_index.get_file_fingerprints.side_effect = [True, None]
-        processor.cache.get_fingerprints.return_value = None
+        mock_inverted_index.get_file_fingerprints.side_effect = [[{'hash': 123}], None]
+        # Return fingerprints for the already-indexed file
+        processor.cache.get_fingerprints.side_effect = [
+            [{'hash': 123, 'start': (0,0), 'end': (1,0)}],  # for already-indexed file
+            None  # for the second file (not cached)
+        ]
 
         from concurrent.futures import Future
 
         def mock_submit(func, *args, **kwargs):
             f = Future()
-            f.set_result(True)
+            f.set_result([{'hash': 456, 'start': (0,0), 'end': (1,0)}])
             return f
         mock_plagiarism_service.analysis_executor.submit.side_effect = mock_submit
 
-        processor.ensure_files_indexed(files, 'python', 'test_task')
+        fingerprint_map = processor.ensure_files_indexed(files, 'python', 'test_task')
 
         # Only second file should be submitted
         assert mock_plagiarism_service.analysis_executor.submit.call_count == 1
+        # Fingerprint map should have entries for both files
+        assert len(fingerprint_map) == 2
 
     def test_ensure_files_indexed_uses_cached_fingerprints(self, processor, mock_plagiarism_service, temp_dir):
         files = []

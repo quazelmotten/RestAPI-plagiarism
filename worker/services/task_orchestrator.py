@@ -92,7 +92,7 @@ class TaskOrchestrator:
             
             # Index fingerprints for all relevant files
             index_start = time.time()
-            self.processor_service.ensure_files_indexed(
+            fingerprint_map = self.processor_service.ensure_files_indexed(
                 files=files,
                 language=language,
                 task_id=task_id,
@@ -107,14 +107,16 @@ class TaskOrchestrator:
             intra_task_pairs = self.processor_service.find_intra_task_pairs(
                 files=files,
                 language=language,
-                task_id=task_id
+                task_id=task_id,
+                fingerprint_map=fingerprint_map
             )
             
             cross_task_pairs = self.processor_service.find_cross_task_pairs(
                 new_files=files,
                 existing_files=existing_files,
                 language=language,
-                task_id=task_id
+                task_id=task_id,
+                fingerprint_map=fingerprint_map
             )
             pair_gen_end = time.time()
             pair_gen_time = pair_gen_end - pair_gen_start

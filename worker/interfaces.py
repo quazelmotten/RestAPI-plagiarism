@@ -3,7 +3,7 @@ Interface definitions for services.
 Using Python's structural typing ( Protocols) for flexibility.
 """
 
-from typing import Protocol, List, Dict, Tuple, Optional
+from typing import Protocol, List, Dict, Tuple, Optional, Any
 
 
 class PlagiarismServiceProtocol(Protocol):
@@ -28,14 +28,15 @@ class ProcessorServiceProtocol(Protocol):
         language: str, 
         task_id: str,
         existing_files: Optional[List[Dict]] = None
-    ) -> None:
+    ) -> Dict[str, List[Dict[str, Any]]]:
         ...
     
     def find_intra_task_pairs(
         self, 
         files: List[Dict], 
         language: str, 
-        task_id: str
+        task_id: str,
+        fingerprint_map: Optional[Dict[str, List[Dict[str, Any]]]] = None
     ) -> List[Tuple[dict, dict]]:
         ...
     
@@ -44,7 +45,8 @@ class ProcessorServiceProtocol(Protocol):
         new_files: List[Dict], 
         existing_files: List[Dict], 
         language: str, 
-        task_id: str
+        task_id: str,
+        fingerprint_map: Optional[Dict[str, List[Dict[str, Any]]]] = None
     ) -> List[Tuple[dict, dict]]:
         ...
 

@@ -5,7 +5,7 @@ Handles fingerprint indexing and candidate generation using inverted index.
 
 import logging
 import os
-from typing import Dict, List, Tuple, Set, Optional
+from typing import Dict, List, Tuple, Set, Optional, Any
 
 from inverted_index import inverted_index as global_inverted_index
 from redis_cache import cache as global_cache
@@ -57,7 +57,7 @@ class ProcessorService:
         file_info: Dict, 
         language: str,
         task_id: str
-    ) -> bool:
+    ) -> Optional[List[Dict[str, Any]]]:
         """
         Index fingerprints for a single file.
         
@@ -67,7 +67,7 @@ class ProcessorService:
             task_id: Task ID for logging
             
         Returns:
-            True if indexing succeeded, False otherwise
+            List of fingerprint dicts if indexing succeeded, None otherwise
         """
         file_hash = file_info.get('hash') or file_info.get('file_hash')
         file_path = file_info.get('path') or file_info.get('file_path')
@@ -75,13 +75,13 @@ class ProcessorService:
         
         if not file_hash or not file_path:
             log.warning(f"[Task {task_id}] Skipping file with missing hash or path")
-            return False
+            return None
         
         try:
-            # Check if already indexed
+            # Check if already indexed - return fingerprints from cache
             if self.inverted_index.get_file_fingerprints(file_hash, language):
                 log.debug(f"[Task {task_id}] File {filename} already in inverted index")
-                return True
+                return self.cache.get_fingerprints(file_hash)
             
             # Try to acquire lock to prevent duplicate fingerprinting
             lock_acquired = False
@@ -113,14 +113,14 @@ class ProcessorService:
                 tokens = [(t["type"], tuple(t["start"]), tuple(t["end"])) for t in tokens_serializable]
                 self.cache.cache_fingerprints(file_hash, fingerprints_for_index, ast_hashes, tokens)
                 
-                return True
+                return fingerprints_for_index
             finally:
                 if lock_acquired:
                     self.cache.unlock_fingerprint_computation(file_hash)
                     
         except Exception as e:
             log.exception(f"[Task {task_id}] Failed to index file {filename}: {e}")
-            return False
+            return None
     
     def ensure_files_indexed(
         self, 
@@ -128,7 +128,7 @@ class ProcessorService:
         language: str, 
         task_id: str,
         existing_files: Optional[List[Dict]] = None
-    ) -> None:
+    ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Ensure files are indexed in the inverted index.
         
@@ -137,12 +137,20 @@ class ProcessorService:
             language: Programming language
             task_id: Task ID for logging
             existing_files: Optional list of existing files from other tasks to ensure indexed
+            
+        Returns:
+            Dict mapping file_hash -> list of fingerprint dicts for all processed files.
+            This map can be passed to find_intra_task_pairs and find_cross_task_pairs
+            to avoid redundant cache lookups and recomputation.
         """
         import time
         from concurrent.futures import as_completed
         
         log.info(f"[Task {task_id}] Indexing fingerprints for new files...")
         start_time = time.time()
+        
+        # Map of file_hash -> fingerprints, built as we process files
+        fingerprint_map: Dict[str, List[Dict[str, Any]]] = {}
         
         # Collect all files that may need indexing
         all_files_to_check = []
@@ -159,6 +167,10 @@ class ProcessorService:
                 continue
             # Check if already indexed in inverted index
             if self.inverted_index.get_file_fingerprints(file_hash, language):
+                # Already indexed - fetch fingerprints from cache for the map
+                fps = self.cache.get_fingerprints(file_hash)
+                if fps:
+                    fingerprint_map[file_hash] = fps
                 continue
             # Check if fingerprints are in cache (if so, we can add to index without recomputation)
             fingerprints = self.cache.get_fingerprints(file_hash)
@@ -166,6 +178,7 @@ class ProcessorService:
                 try:
                     self.inverted_index.add_file_fingerprints(file_hash, fingerprints, language)
                     log.debug(f"[Task {task_id}] Added cached fingerprints for {file_info.get('filename')} to inverted index")
+                    fingerprint_map[file_hash] = fingerprints
                     continue
                 except Exception as e:
                     log.warning(f"[Task {task_id}] Failed to add cached fingerprints: {e}")
@@ -180,7 +193,10 @@ class ProcessorService:
                 # Fallback to sequential
                 log.warning(f"[Task {task_id}] No executor available, indexing sequentially")
                 for file_info in files_to_index:
-                    self.index_file_fingerprints(file_info, language, task_id)
+                    file_hash = file_info.get('hash') or file_info.get('file_hash')
+                    fps = self.index_file_fingerprints(file_info, language, task_id)
+                    if fps and file_hash:
+                        fingerprint_map[file_hash] = fps
             else:
                 # Submit all indexing jobs to executor
                 futures = {}
@@ -192,23 +208,28 @@ class ProcessorService:
                 success_count = 0
                 for future in as_completed(futures):
                     file_info = futures[future]
+                    file_hash = file_info.get('hash') or file_info.get('file_hash')
                     filename = file_info.get('filename', 'unknown')
                     try:
-                        result = future.result()
-                        if result:
+                        fps = future.result()
+                        if fps:
                             success_count += 1
+                            if file_hash:
+                                fingerprint_map[file_hash] = fps
                     except Exception as e:
                         log.error(f"[Task {task_id}] Indexing failed for {filename}: {e}")
                 log.info(f"[Task {task_id}] Indexed {success_count}/{len(files_to_index)} files successfully")
         
         elapsed = time.time() - start_time
-        log.info(f"[Task {task_id}] Finished indexing fingerprints in {elapsed:.2f}s")
+        log.info(f"[Task {task_id}] Finished indexing fingerprints in {elapsed:.2f}s (map has {len(fingerprint_map)} entries)")
+        return fingerprint_map
     
     def find_intra_task_pairs(
         self, 
         files: List[Dict], 
         language: str, 
-        task_id: str
+        task_id: str,
+        fingerprint_map: Optional[Dict[str, List[Dict[str, Any]]]] = None
     ) -> List[Tuple[dict, dict]]:
         """
         Generate candidate pairs among files within the same task.
@@ -217,11 +238,15 @@ class ProcessorService:
             files: List of file info dicts in the task
             language: Programming language
             task_id: Task ID for logging
+            fingerprint_map: Optional dict mapping file_hash -> fingerprints.
+                If provided, skips cache lookups and recomputation.
+                Obtained from ensure_files_indexed().
             
         Returns:
             List of (file_a, file_b) tuples representing pairs to analyze
         """
         pairs = []
+        seen_pairs: Set[frozenset] = set()
         log.info(f"[Task {task_id}] Generating intra-task pairs using inverted index...")
         
         for file_a in files:
@@ -232,8 +257,12 @@ class ProcessorService:
                 continue
             
             try:
-                # Get fingerprints from cache or generate
-                fingerprints = self.cache.get_fingerprints(file_a_hash)
+                # Get fingerprints from pre-computed map, cache, or generate
+                fingerprints = None
+                if fingerprint_map:
+                    fingerprints = fingerprint_map.get(file_a_hash)
+                if fingerprints is None:
+                    fingerprints = self.cache.get_fingerprints(file_a_hash)
                 if fingerprints is None:
                     fp_result = self.plagiarism_service.safe_run_cli_fingerprint(file_a_path, language)
                     fingerprints = [
@@ -262,12 +291,16 @@ class ProcessorService:
                 ]
                 
                 for file_b in intra_candidates:
-                    pairs.append((file_a, file_b))
+                    file_b_hash = file_b.get('hash') or file_b.get('file_hash')
+                    pair_key = frozenset([file_a_hash, file_b_hash])
+                    if pair_key not in seen_pairs:
+                        seen_pairs.add(pair_key)
+                        pairs.append((file_a, file_b))
                     
             except Exception as e:
                 log.warning(f"[Task {task_id}] Error finding intra-task candidates for {file_a.get('filename')}: {e}")
         
-        log.info(f"[Task {task_id}] Intra-task pairs: {len(pairs)}")
+        log.info(f"[Task {task_id}] Intra-task pairs: {len(pairs)} unique pairs")
         return pairs
     
     def find_cross_task_pairs(
@@ -275,7 +308,8 @@ class ProcessorService:
         new_files: List[Dict], 
         existing_files: List[Dict], 
         language: str, 
-        task_id: str
+        task_id: str,
+        fingerprint_map: Optional[Dict[str, List[Dict[str, Any]]]] = None
     ) -> List[Tuple[dict, dict]]:
         """
         Generate candidate pairs between new files and existing files from other tasks.
@@ -285,6 +319,9 @@ class ProcessorService:
             existing_files: List of existing file info dicts from other tasks
             language: Programming language
             task_id: Task ID for logging
+            fingerprint_map: Optional dict mapping file_hash -> fingerprints.
+                If provided, skips cache lookups and recomputation.
+                Obtained from ensure_files_indexed().
             
         Returns:
             List of (new_file, existing_file) tuples representing pairs to analyze
@@ -301,8 +338,12 @@ class ProcessorService:
                 continue
             
             try:
-                # Get or generate fingerprints for new file
-                fingerprints = self.cache.get_fingerprints(new_file_hash)
+                # Get fingerprints from pre-computed map, cache, or generate
+                fingerprints = None
+                if fingerprint_map:
+                    fingerprints = fingerprint_map.get(new_file_hash)
+                if fingerprints is None:
+                    fingerprints = self.cache.get_fingerprints(new_file_hash)
                 if fingerprints is None:
                     lock_acquired = False
                     if self.cache.is_connected:
