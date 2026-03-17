@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
@@ -311,3 +311,19 @@ async def get_plagiarism_result(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+@router.get("/{task_id}/histogram")
+async def get_task_histogram(
+    task_id: str,
+    bins: int = Query(200, ge=5, le=1000),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Get histogram data for a task's similarity distribution.
+    
+    Returns uniform bins across 0-100%. Uses optimized GROUP BY query.
+    """
+    from fastapi import Query
+    
+    result_service = ResultService(db)
+    return await result_service.get_task_histogram(task_id, bins)

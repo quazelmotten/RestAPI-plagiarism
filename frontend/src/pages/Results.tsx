@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
-  Heading,
   Card,
   CardBody,
   Text,
@@ -12,14 +11,16 @@ import {
   Spinner,
   Alert,
   AlertIcon,
+  Badge,
   useColorModeValue,
 } from '@chakra-ui/react';
-import { 
-  FiCheckCircle, 
-  FiAlertCircle, 
+import {
+  FiCheckCircle,
+  FiAlertCircle,
   FiActivity,
   FiLayers,
-  FiRefreshCw
+  FiRefreshCw,
+  FiChevronDown,
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router';
 import api, { API_ENDPOINTS } from '../services/api';
@@ -30,6 +31,7 @@ import SimilarityDistribution from '../components/Results/SimilarityDistribution
 import HeatmapView from '../components/Results/HeatmapView';
 import ResultsList from '../components/Results/ResultsList';
 import ErrorBoundary from '../components/ErrorBoundary';
+import TaskPickerModal from '../components/Results/TaskPickerModal';
 
 const getSimilarityColor = (similarity: number) => {
   if (similarity >= 0.8) return 'red';
@@ -58,64 +60,86 @@ const getStatusIcon = (status: string) => {
   }
 };
 
+const getStatusColorScheme = (status: string) => {
+  return status === 'completed' ? 'green' : status === 'processing' ? 'orange' : 'yellow';
+};
+
 const Results: React.FC = () => {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+   const [isTaskPickerOpen, setIsTaskPickerOpen] = useState(false);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'heatmap'>('cards');
   const [selectedTaskDetails, setSelectedTaskDetails] = useState<TaskDetails | null>(null);
   const [loadingTaskDetails, setLoadingTaskDetails] = useState(false);
-  const [loadingMoreResults, setLoadingMoreResults] = useState(false);
-  
-  // Use a ref to capture the initial selectedTaskId to avoid triggering re-fetch
-  const initialSelectedTaskIdRef = useRef(selectedTaskId);
-  
+
    const loadTasks = useCallback(async () => {
-     try {
-       setLoading(true);
-       const response = await api.get<TaskListItem[]>(API_ENDPOINTS.TASKS);
-       const taskList = response.data;
+      try {
+        setLoading(true);
+        const response = await api.get<TaskListItem[]>(API_ENDPOINTS.TASKS);
+        const taskList = response.data;
 
-       if (!Array.isArray(taskList)) {
-         console.error('Expected array from /plagiarism/tasks, got:', typeof taskList, taskList);
-         setError('Invalid data format received from server');
-         setTasks([]);
-         return;
-       }
+        if (!Array.isArray(taskList)) {
+          console.error('Expected array from /plagiarism/tasks, got:', typeof taskList, taskList);
+          setError('Invalid data format received from server');
+          setTasks([]);
+          return;
+        }
 
-       setTasks(taskList);
+        // Sort by created_at descending (most recent first)
+        taskList.sort((a, b) => {
+          const dateA = new Date(a.created_at || 0).getTime();
+          const dateB = new Date(b.created_at || 0).getTime();
+          return dateB - dateA;
+        });
 
-       if (taskList.length > 0 && !initialSelectedTaskIdRef.current) {
-         setSelectedTaskId(taskList[0].task_id);
-       }
-     } catch (err) {
-       setError('Failed to fetch plagiarism tasks');
-       console.error(err);
-     } finally {
-       setLoading(false);
-     }
-   }, []);
+        setTasks(taskList);
+      } catch (err) {
+        setError('Failed to fetch plagiarism tasks');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }, []);
 
    useEffect(() => {
      loadTasks();
-   }, [loadTasks]);
-  
-    const fetchTaskDetails = useCallback(async (offset: number, isLoadMore: boolean = false) => {
+    }, [loadTasks]);
+
+    // Auto-select most recent task when tasks load
+    useEffect(() => {
+      if (tasks.length > 0) {
+        const currentExists = tasks.find(t => t.task_id === selectedTaskId);
+        if (!selectedTaskId || !currentExists) {
+          setSelectedTaskId(tasks[0].task_id);
+        }
+      } else {
+        setSelectedTaskId('');
+      }
+    }, [tasks, selectedTaskId]);
+
+   // Load tasks when modal opens (lazy loading)
+   useEffect(() => {
+     if (isTaskPickerOpen && tasks.length === 0) {
+       loadTasks();
+     }
+   }, [isTaskPickerOpen, tasks.length, loadTasks]);
+
+    const fetchTaskDetails = useCallback(async () => {
       if (!selectedTaskId) return;
       try {
-        if (!isLoadMore) {
-          setLoadingTaskDetails(true);
-          setSelectedTaskDetails(null);
-        } else {
-          setLoadingMoreResults(true);
-        }
-        
+        setLoadingTaskDetails(true);
+        setSelectedTaskDetails(null);
+
+        // Fetch only top 50 results for performance
+        const limitToUse = 50;
+
         const response = await api.get<TaskDetails>(API_ENDPOINTS.TASK_DETAILS(selectedTaskId), {
           params: {
-            limit: 50,
-            offset
+            limit: limitToUse,
+            offset: 0
           }
         });
         const data = response.data;
@@ -135,25 +159,18 @@ const Results: React.FC = () => {
           overall_stats: data.overall_stats
         };
 
-       if (offset === 0) {
-          setSelectedTaskDetails(taskDetails);
-        } else {
-          setSelectedTaskDetails((prev: TaskDetails | null) => prev ? { ...prev, results: [...prev.results, ...data.results] } : null);
-        }
-     } catch (err) {
-       console.error('Failed to fetch task details:', err);
-     } finally {
-       if (!isLoadMore) {
-         setLoadingTaskDetails(false);
-       } else {
-         setLoadingMoreResults(false);
-       }
-     }
-   }, [selectedTaskId]);
+        setSelectedTaskDetails(taskDetails);
+      } catch (err) {
+        console.error('Failed to fetch task details:', err);
+      } finally {
+        setLoadingTaskDetails(false);
+      }
+     }, [selectedTaskId]);
 
-   useEffect(() => {
+
+    useEffect(() => {
      if (selectedTaskId) {
-       fetchTaskDetails(0);
+       fetchTaskDetails();
      } else {
        setSelectedTaskDetails(null);
      }
@@ -162,32 +179,32 @@ const Results: React.FC = () => {
   const selectedTaskListItem = tasks.find(t => t.task_id === selectedTaskId);
   const selectedTask = selectedTaskDetails;
 
-  const getStats = () => {
-    if (!selectedTask) return { high: 0, medium: 0, low: 0, avg: 0 };
-    
-    // Use overall_stats from API if available (accurate for whole task)
-    if (selectedTask.overall_stats) {
-      return {
-        high: selectedTask.overall_stats.high,
-        medium: selectedTask.overall_stats.medium,
-        low: selectedTask.overall_stats.low,
-        avg: selectedTask.overall_stats.avg_similarity
-      };
-    }
-    
-    // Fallback: compute from loaded results only (partial)
-    if (!selectedTask.results) return { high: 0, medium: 0, low: 0, avg: 0 };
-    
-     const similarities = selectedTask.results.map((r: PlagiarismResult) => r.ast_similarity || 0);
-     const high = similarities.filter(s => s >= 0.8).length;
-     const medium = similarities.filter(s => s >= 0.5 && s < 0.8).length;
-     const low = similarities.filter(s => s < 0.5).length;
-    const avg = similarities.length > 0 
-      ? similarities.reduce((a, b) => a + b, 0) / similarities.length 
-      : 0;
-    
-    return { high, medium, low, avg };
-  };
+   const getStats = () => {
+     if (!selectedTask) return { high: 0, medium: 0, low: 0, avg: 0 };
+     
+     // Use overall_stats from API if available (accurate for whole task)
+     if (selectedTask.overall_stats) {
+       return {
+         high: selectedTask.overall_stats.high,
+         medium: selectedTask.overall_stats.medium,
+         low: selectedTask.overall_stats.low,
+         avg: selectedTask.overall_stats.avg_similarity
+       };
+     }
+     
+     // Fallback: compute from loaded results only (partial)
+     if (!selectedTask.results) return { high: 0, medium: 0, low: 0, avg: 0 };
+     
+      const similarities = selectedTask.results.map((r: PlagiarismResult) => r.ast_similarity || 0);
+      const high = similarities.filter(s => s >= 0.5).length;
+      const medium = similarities.filter(s => s >= 0.25 && s < 0.5).length;
+      const low = similarities.filter(s => s < 0.25).length;
+     const avg = similarities.length > 0 
+       ? similarities.reduce((a, b) => a + b, 0) / similarities.length 
+       : 0;
+     
+     return { high, medium, low, avg };
+   };
   
    const stats = getStats();
    
@@ -201,15 +218,15 @@ const Results: React.FC = () => {
    const borderColor = useColorModeValue('gray.200', 'gray.700');
    const hoverBg = useColorModeValue('gray.50', 'gray.700');
   
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" h="400px">
-        <Spinner size="xl" color="blue.500" />
-      </Box>
-    );
-  }
-  
-  if (error) {
+   if (loading) {
+     return (
+       <Box display="flex" justifyContent="center" alignItems="center" h="400px">
+         <Spinner size="xl" color="blue.500" />
+       </Box>
+     );
+   }
+   
+   if (error) {
     return (
       <Alert status="error">
         <AlertIcon />
@@ -220,8 +237,6 @@ const Results: React.FC = () => {
   
   return (
     <Box>
-      <Heading mb={6}>Plagiarism Results</Heading>
-      
       {tasks.length === 0 ? (
         <Card bg={cardBg}>
           <CardBody>
@@ -238,17 +253,32 @@ const Results: React.FC = () => {
               <HStack justify="space-between" wrap="wrap" spacing={4}>
                 <HStack>
                   <Text fontWeight="semibold">Select Task:</Text>
-                  <Select
-                    value={selectedTaskId}
-                    onChange={(e) => setSelectedTaskId(e.target.value)}
-                    w="400px"
+                  <Button
+                    size="sm"
+                    rightIcon={<FiChevronDown />}
+                    onClick={() => setIsTaskPickerOpen(true)}
+                    minW="320px"
+                    variant="outline"
                   >
-                    {tasks.map((task) => (
-                      <option key={task.task_id} value={task.task_id}>
-                        {task.task_id.substring(0, 8)}... ({task.status}) - {task.progress?.display || `${task.total_pairs} pairs`}
-                      </option>
-                    ))}
-                  </Select>
+                    {selectedTaskListItem ? (
+                      <HStack spacing={2} isTruncated>
+                        {getStatusIcon(selectedTaskListItem.status)}
+                        <Text isTruncated fontSize="sm">
+                          {selectedTaskListItem.task_id.substring(0, 12)}...
+                        </Text>
+                        <Badge size="sm" colorScheme={getStatusColorScheme(selectedTaskListItem.status)}>
+                          {selectedTaskListItem.status}
+                        </Badge>
+                        {selectedTaskListItem.status === 'processing' && selectedTaskListItem.progress && (
+                          <Text fontSize="xs" color="gray.500">
+                            {selectedTaskListItem.progress.display}
+                          </Text>
+                        )}
+                      </HStack>
+                    ) : (
+                      'Select a task'
+                    )}
+                  </Button>
                   {selectedTaskListItem?.status === 'processing' && (
                     <Spinner size="sm" color="orange.500" speed="0.8s" />
                   )}
@@ -261,12 +291,12 @@ const Results: React.FC = () => {
                     Refresh
                   </Button>
                 </HStack>
-                
+
                 <HStack>
                   <Text fontWeight="semibold">View:</Text>
                   <Select
                     value={viewMode}
-                    onChange={(e) => setViewMode(e.target.value as 'cards' | 'heatmap')}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setViewMode(e.target.value as 'cards' | 'heatmap')}
                     w="150px"
                   >
                     <option value="cards">Cards</option>
@@ -276,6 +306,15 @@ const Results: React.FC = () => {
               </HStack>
             </CardBody>
           </Card>
+
+          <TaskPickerModal
+            isOpen={isTaskPickerOpen}
+            onClose={() => setIsTaskPickerOpen(false)}
+            onSelect={(task) => setSelectedTaskId(task.task_id)}
+            tasks={tasks}
+            selectedTaskId={selectedTaskId}
+            loading={loading}
+          />
           
            {selectedTask ? (
               <ErrorBoundary>
@@ -289,11 +328,13 @@ const Results: React.FC = () => {
                 
                 <TaskProgress selectedTask={selectedTask} cardBg={cardBg} />
                 
-                <SimilarityDistribution
-                  totalPairs={selectedTask.total_pairs}
-                  stats={stats}
-                  cardBg={cardBg}
-                />
+                 <SimilarityDistribution
+                   results={selectedTask.results}
+                   totalPairs={selectedTask.total_pairs}
+                   cardBg={cardBg}
+                   taskId={selectedTask.task_id}
+                   stats={stats}
+                 />
                 
                 {/* Results View */}
                 {viewMode === 'heatmap' && selectedTask.files.length > 1 ? (
@@ -311,8 +352,6 @@ const Results: React.FC = () => {
                     hoverBg={hoverBg}
                     getSimilarityColor={getSimilarityColor}
                     handleCompare={handleCompare}
-                    loadingMoreResults={loadingMoreResults}
-                    onLoadMore={() => fetchTaskDetails(selectedTask.results.length, true)}
                     cardBg={cardBg}
                   />
                 )}

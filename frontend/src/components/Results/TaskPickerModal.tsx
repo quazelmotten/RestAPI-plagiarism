@@ -1,0 +1,219 @@
+import React, { useState, useMemo } from 'react';
+import {
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton,
+  Button,
+  Input,
+  InputGroup,
+  InputLeftElement,
+  VStack,
+  HStack,
+  Text,
+  Badge,
+  Box,
+  SimpleGrid,
+  Tooltip,
+  Spinner,
+  useColorModeValue,
+} from '@chakra-ui/react';
+import { FiSearch, FiCheck, FiAlertCircle, FiActivity, FiLayers, FiClock, FiCheckCircle } from 'react-icons/fi';
+import type { TaskListItem } from '../../types';
+
+interface TaskPickerModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSelect: (task: TaskListItem) => void;
+  tasks: TaskListItem[];
+  selectedTaskId?: string;
+  loading?: boolean;
+}
+
+const formatDate = (dateString?: string) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  const datePart = date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+  const timePart = date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return `${datePart} ${timePart}`;
+};
+
+const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
+  isOpen,
+  onClose,
+  onSelect,
+  tasks,
+  selectedTaskId,
+  loading,
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const cardBg = useColorModeValue('white', 'gray.700');
+  const selectedBg = useColorModeValue('blue.50', 'blue.900');
+  const hoverBg = useColorModeValue('gray.100', 'gray.600');
+
+  const filteredTasks = useMemo(() => {
+    if (!searchQuery.trim()) return tasks;
+    const query = searchQuery.toLowerCase();
+    return tasks.filter(task => task.task_id.toLowerCase().includes(query));
+  }, [tasks, searchQuery]);
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return <FiCheckCircle color="#48bb78" />;
+      case 'failed':
+        return <FiAlertCircle color="#f56565" />;
+      case 'processing':
+        return <FiActivity color="#ed8936" />;
+      default:
+        return <FiLayers color="#a0aec0" />;
+    }
+  };
+
+  const getStatusColorScheme = (status: string) => {
+    return status === 'completed' ? 'green' : status === 'processing' ? 'orange' : 'yellow';
+  };
+
+  const handleSelect = (task: TaskListItem) => {
+    onSelect(task);
+    onClose();
+    setSearchQuery('');
+  };
+
+  const isEmpty = filteredTasks.length === 0;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="lg" scrollBehavior="inside">
+      <ModalOverlay />
+      <ModalContent maxH="80vh" display="flex" flexDir="column">
+        <ModalHeader>Select Task</ModalHeader>
+        <ModalCloseButton />
+
+         <ModalBody flex={1} overflowY="auto" px={6} py={4}>
+           <VStack spacing={4} align="stretch">
+             <InputGroup size="sm">
+               <InputLeftElement pointerEvents="none">
+                 <FiSearch color="gray.400" />
+               </InputLeftElement>
+               <Input
+                 placeholder="Search by task ID..."
+                 value={searchQuery}
+                 onChange={(e) => setSearchQuery(e.target.value)}
+                 autoFocus
+               />
+             </InputGroup>
+
+             {loading && tasks.length === 0 ? (
+               <Box textAlign="center" py={8}>
+                 <Spinner />
+               </Box>
+             ) : isEmpty ? (
+              <Box textAlign="center" py={8}>
+                <Text color="gray.500">
+                  {searchQuery ? 'No tasks match your search' : 'No tasks available'}
+                </Text>
+              </Box>
+            ) : (
+              <VStack spacing={2} align="stretch">
+                {filteredTasks.map((task) => {
+                  const isSelected = task.task_id === selectedTaskId;
+                  return (
+                    <Tooltip
+                      key={task.task_id}
+                      label={`Task ${task.task_id} - Created: ${formatDate(task.created_at)}`}
+                      placement="left"
+                      hasArrow
+                    >
+                      <Box
+                        bg={isSelected ? selectedBg : cardBg}
+                        borderLeft="4px solid"
+                        borderLeftColor={
+                          isSelected ? 'blue.500' : 
+                          task.status === 'completed' ? 'green.500' :
+                          task.status === 'processing' ? 'orange.500' : 'yellow.500'
+                        }
+                        px={4}
+                        py={3}
+                        cursor="pointer"
+                        onClick={() => handleSelect(task)}
+                        _hover={{ bg: isSelected ? selectedBg : hoverBg }}
+                        transition="background 0.15s"
+                        borderRadius="md"
+                      >
+                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={2} alignItems="center">
+                          <HStack spacing={3}>
+                            {getStatusIcon(task.status)}
+                            <Box flex={1} minW={0}>
+                              <Text fontWeight="semibold" fontSize="sm" isTruncated title={task.task_id}>
+                                {task.task_id}
+                              </Text>
+                              <HStack mt={1} spacing={2}>
+                                <Badge size="sm" colorScheme={getStatusColorScheme(task.status)}>
+                                  {task.status}
+                                </Badge>
+                                <HStack spacing={1}>
+                                  <FiClock />
+                                  <Text fontSize="xs" color="gray.500">
+                                    {formatDate(task.created_at)}
+                                  </Text>
+                                </HStack>
+                              </HStack>
+                            </Box>
+                          </HStack>
+
+                          <HStack spacing={3} justify="flex-end" wrap="wrap">
+                            <Badge size="sm" colorScheme="gray" variant="subtle">
+                              📁 {task.files_count || 0} files
+                            </Badge>
+                            <Badge size="sm" colorScheme="blue" variant="subtle">
+                              {task.total_pairs} pairs
+                            </Badge>
+                            {(task.high_similarity_count || 0) > 0 && (
+                              <Badge size="sm" colorScheme="red" variant="subtle">
+                                ⚠️ {task.high_similarity_count} high
+                              </Badge>
+                            )}
+                            {task.status === 'processing' && task.progress && (
+                              <Badge size="sm" colorScheme="purple" variant="subtle">
+                                {task.progress.display}
+                              </Badge>
+                            )}
+                            {isSelected && (
+                              <FiCheck color="blue.500" />
+                            )}
+                          </HStack>
+                        </SimpleGrid>
+                      </Box>
+                    </Tooltip>
+                  );
+                })}
+              </VStack>
+            )}
+          </VStack>
+        </ModalBody>
+
+        <ModalFooter pt={4} borderTopWidth="1px">
+          <HStack justify="flex-end" w="100%">
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+          </HStack>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  );
+};
+
+TaskPickerModal.displayName = 'TaskPickerModal';
+
+export default TaskPickerModal;

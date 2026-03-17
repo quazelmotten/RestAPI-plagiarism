@@ -60,6 +60,7 @@ export interface TaskListItem {
   };
   files_count?: number;
   high_similarity_count?: number;
+  created_at?: string;
 }
 
 export interface TaskDetails extends TaskListItem {

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Card, CardBody, HStack, Text, Badge, VStack, Box, Button } from '@chakra-ui/react';
+import React, { useMemo } from 'react';
+import { Card, CardBody, HStack, Text, Badge, VStack, Box } from '@chakra-ui/react';
 import type { PlagiarismResult } from '../../types';
 
 interface ResultsListProps {
@@ -9,8 +9,8 @@ interface ResultsListProps {
   hoverBg: string;
   getSimilarityColor: (similarity: number) => string;
   handleCompare: (result: PlagiarismResult) => void;
-  loadingMoreResults: boolean;
-  onLoadMore: () => void;
+  loadingMoreResults?: boolean;
+  onLoadMore?: () => void;
   cardBg?: string;
 }
 
@@ -21,10 +21,12 @@ const ResultsList: React.FC<ResultsListProps> = ({
   hoverBg,
   getSimilarityColor,
   handleCompare,
-  loadingMoreResults,
-  onLoadMore,
   cardBg,
 }) => {
+  // Cap at 50 results for Top Similarities view
+  const displayResults = useMemo(() => results.slice(0, 50), [results]);
+  const showingCount = displayResults.length;
+
   return (
     <Card bg={cardBg}>
       <CardBody>
@@ -32,15 +34,13 @@ const ResultsList: React.FC<ResultsListProps> = ({
           <Text fontSize="md" fontWeight="bold">Top Similarities</Text>
           <HStack>
             <Text color="gray.500" fontSize="sm">
-              {results.length} pairs analyzed
+              Showing {showingCount} of {totalPairs} pairs
             </Text>
           </HStack>
         </HStack>
 
         <VStack align="stretch" spacing={2}>
-          {results
-            .sort((a, b) => (b.ast_similarity || 0) - (a.ast_similarity || 0))
-            .map((result, idx) => (
+          {displayResults.map((result, idx) => (
               <HStack
                 key={idx}
                 p={3}
@@ -73,15 +73,11 @@ const ResultsList: React.FC<ResultsListProps> = ({
             ))}
         </VStack>
 
-        {results.length < totalPairs && (
-          <Box textAlign="center" mt={4}>
-            <Button
-              onClick={onLoadMore}
-              isLoading={loadingMoreResults}
-              loadingText="Loading..."
-            >
-              Load More Results
-            </Button>
+        {totalPairs > 50 && (
+          <Box textAlign="center" mt={4} py={2} px={4} bg="gray.50" borderRadius="md">
+            <Text fontSize="sm" color="gray.600">
+              Full list contains {totalPairs} pairs. Explore histogram for distribution analysis.
+            </Text>
           </Box>
         )}
       </CardBody>

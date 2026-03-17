@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func, case, or_
+from sqlalchemy import select, desc, func, case, or_, Integer
 
 from models.models import PlagiarismTask, File as FileModel, SimilarityResult
 from schemas.result import (
@@ -158,8 +158,8 @@ class ResultService:
             agg_query = select(
                 func.count().label('total'),
                 func.coalesce(func.avg(SimilarityResult.ast_similarity), 0).label('avg_similarity'),
-                func.sum(case((SimilarityResult.ast_similarity >= 0.8, 1), else_=0)).label('high_count'),
-                func.sum(case((SimilarityResult.ast_similarity >= 0.5, 1), else_=0)).label('medium_or_high'),
+                func.sum(case((SimilarityResult.ast_similarity >= 0.5, 1), else_=0)).label('high_count'),
+                func.sum(case((SimilarityResult.ast_similarity >= 0.25, 1), else_=0)).label('medium_or_high'),
                 func.sum(case((SimilarityResult.ast_similarity.is_(None), 1), else_=0)).label('null_count')
             ).where(SimilarityResult.task_id == task_id)
             
@@ -229,3 +229,57 @@ class ResultService:
             matches=sr.matches or [],
             created_at=str(sr.created_at) if sr.created_at else None
         )
+
+    async def get_task_histogram(self, task_id: str, bins: int = 200) -> dict:
+        """Get histogram data for a task's similarity distribution.
+        
+        Uses raw SQL with GROUP BY for optimal performance and to avoid ORM bugs.
+        Returns uniform bins from 0-100%.
+        """
+        from sqlalchemy import text
+        
+        # Clamp bins to reasonable range
+        bins = max(10, min(1000, bins))
+        
+        # Simple GROUP BY query using FLOOR to bucket scores
+        sql = text(f"""
+            SELECT 
+                FLOOR(ast_similarity * :bins) AS bin_index,
+                COUNT(*) AS count
+            FROM similarity_results
+            WHERE task_id = :task_id 
+              AND ast_similarity IS NOT NULL
+            GROUP BY bin_index
+            ORDER BY bin_index
+        """)
+        
+        result = await self.db.execute(sql, {'bins': bins, 'task_id': task_id})
+        rows = result.all()
+        
+        # Build full histogram array (fill missing bins with 0)
+        histogram = []
+        total = 0
+        
+        # Create dict of bin_index -> count, capping any overflow (similarity=1.0 gives index=bins)
+        counts_dict = {}
+        for row in rows:
+            idx = int(row.bin_index)
+            if idx >= bins:
+                idx = bins - 1
+            counts_dict[idx] = counts_dict.get(idx, 0) + int(row.count)
+        
+        # Generate all bins
+        for i in range(bins):
+            count = counts_dict.get(i, 0)
+            total += count
+            lower_pct = round((i / bins) * 100)
+            upper_pct = round(((i + 1) / bins) * 100)
+            histogram.append({
+                'range': f'{lower_pct}-{upper_pct}%',
+                'count': count
+            })
+        
+        return {
+            'histogram': histogram,
+            'total': total
+        }
