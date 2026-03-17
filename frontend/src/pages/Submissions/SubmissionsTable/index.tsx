@@ -19,7 +19,7 @@ import {
   getSortedRowModel,
   flexRender,
 } from '@tanstack/react-table';
-import type { ColumnDef, ColumnSort, SortingState, CellContext } from '@tanstack/react-table';
+import type { ColumnDef, ColumnSort, SortingState } from '@tanstack/react-table';
 import type { FileSubmission } from '../types';
 import { formatDate, formatSimilarity, getStatusColor } from '../utils/formatters';
 import { useNavigate } from 'react-router';

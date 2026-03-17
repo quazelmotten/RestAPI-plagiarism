@@ -17,7 +17,7 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import { FiFileText, FiClock, FiAlertCircle, FiActivity, FiLayers } from 'react-icons/fi';
-import api from '../services/api';
+import api, { API_ENDPOINTS } from '../services/api';
 
 interface Task {
   task_id: string;
@@ -94,25 +94,25 @@ const Overview: React.FC = () => {
     fetchTasks();
   }, []);
   
-  const fetchTasks = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get('/plagiarism/tasks');
-      
-      if (!Array.isArray(response.data)) {
-        console.error('Expected array from /plagiarism/tasks, got:', typeof response.data);
-        setTasks([]);
-        return;
-      }
-      
-      // Backend now includes files_count and high_similarity_count in TaskListResponse
-      setTasks(response.data);
-    } catch (err) {
-      console.error('Failed to fetch tasks:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+   const fetchTasks = async () => {
+     try {
+       setLoading(true);
+       const response = await api.get(API_ENDPOINTS.TASKS);
+       
+       if (!Array.isArray(response.data)) {
+         console.error('Expected array from /plagiarism/tasks, got:', typeof response.data);
+         setTasks([]);
+         return;
+       }
+       
+       // Backend now includes files_count and high_similarity_count in TaskListResponse
+       setTasks(response.data);
+     } catch (err) {
+       console.error('Failed to fetch tasks:', err);
+     } finally {
+       setLoading(false);
+     }
+   };
   
   // Calculate statistics using aggregated counts from backend
   const totalSubmissions = tasks.length;

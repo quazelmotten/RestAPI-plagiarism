@@ -1,0 +1,27 @@
+/**
+ * API Endpoints
+ * Centralized constant definitions for all API routes
+ */
+
+export const API_ENDPOINTS = {
+  // Authentication
+  LOGIN: '/auth/login',
+  ME: '/auth/me',
+
+  // Plagiarism checks
+  CHECK: '/plagiarism/check',
+  TASKS: '/plagiarism/tasks',
+  TASK_DETAILS: (taskId: string) => `/plagiarism/${taskId}/results`,
+  FILE_PAIR: '/plagiarism/file-pair',
+  FILE_PAIR_ANALYZE: '/plagiarism/file-pair/analyze',
+  FILES_LIST: '/plagiarism/files/list',
+  FILES: '/plagiarism/files',
+  FILE_CONTENT: (fileId: string) => `/plagiarism/files/${fileId}/content`,
+  FILE_SIMILARITIES: (fileId: string) => `/plagiarism/files/${fileId}/similarities`,
+
+  // Health & version
+  HEALTH: '/health',
+  VERSION: '/version',
+} as const;
+
+export default API_ENDPOINTS;

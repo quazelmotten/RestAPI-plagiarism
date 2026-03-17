@@ -110,6 +110,8 @@ curl http://localhost:8000/health
 
 The frontend is built with React and TypeScript.
 
+**Prerequisites**: Node.js 20.19+ or 22.12+ is required.
+
 ```bash
 cd frontend
 npm install

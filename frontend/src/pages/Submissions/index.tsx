@@ -9,7 +9,6 @@ import {
   Button,
   VStack,
 } from '@chakra-ui/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useSubmissions } from './hooks/useSubmissions';
 import { useSubmissionsMetadata } from './hooks/useSubmissionsMetadata';
 import { PaginationControls } from './PaginationControls';
@@ -17,15 +16,6 @@ import { SubmissionsFilters } from './SubmissionsFilters';
 import { SubmissionsTable } from './SubmissionsTable';
 import type { Filters, PaginationInfo } from './types';
 import { ALL_STATUSES } from './utils/formatters';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
 
 const SubmissionsContent: React.FC = () => {
   const [filters, setFilters] = useState<Filters>({
@@ -38,7 +28,6 @@ const SubmissionsContent: React.FC = () => {
   });
   const [offset, setOffset] = useState(0);
   const [pageSize, setPageSize] = useState(50);
-  const [goToPage, setGoToPage] = useState('');
 
   const { data: metadata } = useSubmissionsMetadata();
   const { data: submissionsData, isLoading, error, refetch } = useSubmissions({
@@ -83,19 +72,9 @@ const SubmissionsContent: React.FC = () => {
       const newSize = parseInt(e.target.value, 10);
       setPageSize(newSize);
       setOffset(0);
-      setGoToPage('');
     },
     []
   );
-
-  const handleGoToPage = useCallback(() => {
-    const pageNum = parseInt(goToPage, 10);
-    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
-      const newOffset = (pageNum - 1) * pageSize;
-      setOffset(newOffset);
-      setGoToPage('');
-    }
-  }, [goToPage, totalPages, pageSize]);
 
   if (error) {
     return (
@@ -145,11 +124,9 @@ const SubmissionsContent: React.FC = () => {
 
 const SubmissionsPage: React.FC = () => {
   return (
-    <QueryClientProvider client={queryClient}>
-      <VStack spacing={4} align="stretch" flex="1" p={4}>
-        <SubmissionsContent />
-      </VStack>
-    </QueryClientProvider>
+    <VStack spacing={4} align="stretch" flex="1" p={4}>
+      <SubmissionsContent />
+    </VStack>
   );
 };
 

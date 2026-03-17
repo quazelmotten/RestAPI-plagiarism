@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { fetchSubmissions } from '../utils/api';
 import type { Filters } from '../types';
 import { useDebounce } from './useDebounce';

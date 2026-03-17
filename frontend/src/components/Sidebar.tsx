@@ -29,6 +29,7 @@ const Sidebar: React.FC = () => {
   const location = useLocation();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const hoverBg = useColorModeValue('gray.100', 'gray.700');
   const [isBlinking, setIsBlinking] = useState(false);
 
   return (
@@ -80,9 +81,9 @@ const Sidebar: React.FC = () => {
               borderRadius="md"
               bg={location.pathname === item.path ? 'brand.500' : 'transparent'}
               color={location.pathname === item.path ? 'white' : 'inherit'}
-              _hover={{
-                bg: location.pathname === item.path ? 'brand.600' : useColorModeValue('gray.100', 'gray.700'),
-              }}
+               _hover={{
+                 bg: location.pathname === item.path ? 'brand.600' : hoverBg,
+               }}
               transition="all 0.2s"
             >
               <Icon as={item.icon} boxSize={5} mr={3} />

@@ -1,5 +1,11 @@
-import type { FileSubmission, SubmissionsResponse } from '../types';
-import api from '../../../services/api';
+import type { SubmissionsResponse } from '../types';
+import api, { API_ENDPOINTS } from '../../../services/api';
+
+interface FileMetadata {
+  task_id: string;
+  filename: string;
+  language: string;
+}
 
 export async function fetchSubmissions(
   offset: number,
@@ -46,14 +52,14 @@ export async function fetchSubmissions(
     params.submitted_before = filters.submittedAt;
   }
 
-  const response = await api.get<SubmissionsResponse>('/plagiarism/files', { params });
+  const response = await api.get<SubmissionsResponse>(API_ENDPOINTS.FILES, { params });
   return response.data;
 }
 
 export async function fetchSubmissionsMetadata(): Promise<{ taskIds: string[]; languages: string[] }> {
   try {
-    const response = await api.get<Array<{ task_id: string; filename: string; language: string }>>('/plagiarism/files/list');
-    const data = response.data as Array<{ task_id: string; filename: string; language: string }>;
+    const response = await api.get<FileMetadata[]>(API_ENDPOINTS.FILES_LIST);
+    const data = response.data;
     const taskIds = [...new Set(data.map((item) => item.task_id))].sort();
     const languages = [...new Set(data.map((item) => item.language))].sort();
     return { taskIds, languages };

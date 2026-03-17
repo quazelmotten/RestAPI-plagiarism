@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import cytoscape from 'cytoscape';
 import coseBilkent from 'cytoscape-cose-bilkent';
 import {
@@ -19,43 +19,17 @@ import {
   Alert,
   AlertIcon,
 } from '@chakra-ui/react';
-import api from '../services/api';
+import api, { API_ENDPOINTS } from '../services/api';
+import type { TaskListItem, TaskDetails } from '../types';
+type Task = TaskDetails;
 
 cytoscape.use(coseBilkent);
-
-interface File {
-  id: string;
-  filename: string;
-}
-
-interface Match {
-  file_a_start_line: number;
-  file_a_end_line: number;
-  file_b_start_line: number;
-  file_b_end_line: number;
-}
-
-interface SimilarityResult {
-  file_a: File;
-  file_b: File;
-  ast_similarity: number;
-  matches: Match[];
-  created_at: string;
-}
-
-interface Task {
-  task_id: string;
-  status: string;
-  total_pairs: number;
-  files: File[];
-  results: SimilarityResult[];
-}
 
 const PlagiarismGraph: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [similarityThreshold, setSimilarityThreshold] = useState(0.75);
   const [, setCy] = useState<cytoscape.Core | null>(null);
-  const [tasks, setTasks] = useState<Array<{task_id: string; status: string; total_pairs: number}>>([]);
+  const [tasks, setTasks] = useState<TaskListItem[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -67,14 +41,14 @@ const PlagiarismGraph: React.FC = () => {
   const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api.get('/plagiarism/tasks');
+      const response = await api.get<TaskListItem[]>(API_ENDPOINTS.TASKS);
       if (!Array.isArray(response.data)) {
         console.error('Expected array from /plagiarism/tasks, got:', typeof response.data, response.data);
         setError('Invalid data format received from server');
         setTasks([]);
         return;
       }
-      const taskList = response.data as Array<{task_id: string; status: string; total_pairs: number}>;
+      const taskList = response.data;
       setTasks(taskList);
       // Select the first completed task with results by default (only once)
       if (!hasSetInitialTask) {
@@ -98,29 +72,30 @@ const PlagiarismGraph: React.FC = () => {
     fetchTasks();
   }, [fetchTasks]);
 
-  // Fetch details for selected task
-  useEffect(() => {
-    if (selectedTaskId) {
-      fetchTaskDetails();
-    } else {
-      setSelectedTaskDetails(null);
-    }
-  }, [selectedTaskId]);
+   // Fetch details for selected task
+   useEffect(() => {
+     if (!selectedTaskId) {
+       setSelectedTaskDetails(null);
+       return;
+     }
 
-  const fetchTaskDetails = async () => {
-    try {
-      setLoadingDetails(true);
-      const response = await api.get(`/plagiarism/${selectedTaskId}/results`, {
-        params: { limit: 500 } // load up to 500 highest similarity results for graph
-      });
-      setSelectedTaskDetails(response.data as Task);
-    } catch (err) {
-      console.error('Failed to fetch task details:', err);
-      setSelectedTaskDetails(null);
-    } finally {
-      setLoadingDetails(false);
-    }
-  };
+     const fetchTaskDetails = async () => {
+       try {
+         setLoadingDetails(true);
+         const response = await api.get<TaskDetails>(API_ENDPOINTS.TASK_DETAILS(selectedTaskId), {
+           params: { limit: 500 } // load up to 500 highest similarity results for graph
+         });
+         setSelectedTaskDetails(response.data);
+       } catch (err) {
+         console.error('Failed to fetch task details:', err);
+         setSelectedTaskDetails(null);
+       } finally {
+         setLoadingDetails(false);
+       }
+     };
+
+     fetchTaskDetails();
+   }, [selectedTaskId]);
 
   // Get selected task data
   const selectedTask = selectedTaskDetails;

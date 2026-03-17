@@ -1,6 +1,8 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import api from '../services/api';
+import api, { API_ENDPOINTS } from '../services/api';
+import type { ApiError } from '../types';
 
 interface User {
   id: string;
@@ -48,9 +50,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const fetchUser = async () => {
     try {
-      const response = await api.get('/auth/me');
+      const response = await api.get<User>(API_ENDPOINTS.ME);
       setUser(response.data);
-    } catch (error) {
+    } catch {
       localStorage.removeItem('token');
       delete api.defaults.headers.common['Authorization'];
     } finally {
@@ -59,53 +61,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const login = async (username: string, email: string, password: string) => {
-    console.log('=== LOGIN FUNCTION START ===');
-    console.log('API URL:', api.defaults.baseURL);
-    console.log('Attempting login with:', { username, email });
-    
     try {
-      const loginUrl = '/auth/login';
-      console.log('Making POST request to:', loginUrl);
-      
-      const response = await api.post(loginUrl, { username, email, password });
-      
-      console.log('Login response received:', response.status);
-      console.log('Login response data:', response.data);
-      
-      // Check if the response contains an error
-      if (response.data.detail) {
-        throw new Error(response.data.detail);
-      }
-      
+      const response = await api.post<{ access_token: string }>(API_ENDPOINTS.LOGIN, { username, email, password });
       const { access_token } = response.data;
-      
+
       if (!access_token) {
         throw new Error('No access token received');
       }
-      
+
       localStorage.setItem('token', access_token);
       api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-      
+
       await fetchUser();
       navigate('/dashboard');
-    } catch (error: any) {
-      console.error('=== LOGIN ERROR ===');
-      console.error('Error type:', error.constructor.name);
-      console.error('Error message:', error.message);
-      console.error('Error code:', error.code);
-      console.error('Error config:', error.config);
-      
-      if (error.response) {
-        console.error('Error response status:', error.response.status);
-        console.error('Error response data:', error.response.data);
-        console.error('Error response headers:', error.response.headers);
-      } else if (error.request) {
-        console.error('Error request:', error.request);
-      }
-      
-      throw new Error(error.response?.data?.detail || error.message || 'Invalid credentials');
-    } finally {
-      console.log('=== LOGIN FUNCTION END ===');
+    } catch (error: unknown) {
+      const apiError = error as ApiError;
+      throw new Error(apiError.response?.data?.detail || (error instanceof Error ? error.message : 'Invalid credentials'));
     }
   };
 

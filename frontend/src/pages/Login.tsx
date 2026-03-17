@@ -14,6 +14,7 @@ import {
   Card,
   CardBody,
 } from '@chakra-ui/react';
+import type { ApiError } from '../types';
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -26,9 +27,6 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    console.log('Form submitted - preventing default');
-    console.log('Values:', { username, email, password: '***' });
     
     if (!username || !email || !password) {
       toast({
@@ -43,20 +41,17 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      console.log('Calling login function...');
       await login(username, email, password);
-      console.log('Login successful');
       toast({
         title: 'Login successful',
         status: 'success',
         duration: 3000,
       });
-    } catch (error: any) {
-      console.error('Login error in component:', error);
-      console.error('Error message:', error.message);
+    } catch (error: unknown) {
+      const apiError = error as ApiError;
       toast({
         title: 'Login failed',
-        description: error.message || 'Invalid username or password',
+        description: apiError.response?.data?.detail || (error instanceof Error ? error.message : 'Invalid username or password'),
         status: 'error',
         duration: 5000,
       });

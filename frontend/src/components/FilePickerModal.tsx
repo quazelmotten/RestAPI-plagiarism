@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Modal,
   ModalOverlay,
@@ -24,37 +24,30 @@ import {
 } from '@chakra-ui/react';
 import { FiSearch, FiRefreshCw } from 'react-icons/fi';
 // Using simple scrollable list; results limited to 100
-import api from '../services/api';
-import { FiAlertCircle } from 'react-icons/fi';
+import api, { API_ENDPOINTS } from '../services/api';
+import type { FileInfo, ApiError } from '../types';
 
-interface FileResponse {
-  id: string;
-  filename: string;
-  language: string;
+interface FileResponse extends FileInfo {
   created_at?: string;
-  task_id: string;
-  status: string;
-  similarity?: number;
 }
 
 interface FilePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (fileA: FileResponse, fileB: FileResponse) => void;
+  onSelect: (fileA: FileInfo, fileB: FileInfo) => void;
   initialFileAId?: string;
   initialFileBId?: string;
 }
 
-const ITEM_HEIGHT = 70;
 const LIST_HEIGHT = 400;
 const SEARCH_DEBOUNCE_MS = 300;
 
 interface FileItemProps {
-  file: FileResponse;
+  file: FileInfo;
   isSelectedA: boolean;
   isSelectedB: boolean;
-  onSelectA: (file: FileResponse) => void;
-  onSelectB: (file: FileResponse) => void;
+  onSelectA: (file: FileInfo) => void;
+  onSelectB: (file: FileInfo) => void;
   column: 'A' | 'B';
 }
 
@@ -161,18 +154,18 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
     setError('');
 
     try {
-      const response = await api.get('/plagiarism/files', {
+      const response = await api.get<{ files: FileInfo[] }>(API_ENDPOINTS.FILES, {
         params: {
           filename: query,
           limit: 100,
         },
       });
-      const data = response.data;
-      const files = data.files || [];
+      const files = response.data.files || [];
       setResults(files);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiError = err as ApiError;
       console.error(`Error fetching files for column ${column}:`, err);
-      setError(err.response?.data?.detail || 'Failed to load files');
+       setError(apiError.response?.data?.detail || 'Failed to load files');
     } finally {
       setLoading(false);
     }
@@ -199,42 +192,42 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
     }
   }, [isOpen, initialFileAId, initialFileBId]);
 
-  // Load initial selections if provided
-  useEffect(() => {
-    if (isOpen && initialFileAId && !selectedFileA) {
-      // Could pre-fetch file details for display
-      api.get(`/plagiarism/files/list`).then(res => {
-        const fileA = res.data.find((f: any) => f.id === initialFileAId);
-        if (fileA) setSelectedFileA(fileA);
-      });
-    }
-    if (isOpen && initialFileBId && !selectedFileB) {
-      api.get(`/plagiarism/files/list`).then(res => {
-        const fileB = res.data.find((f: any) => f.id === initialFileBId);
-        if (fileB) setSelectedFileB(fileB);
-      });
-    }
-  }, [isOpen, initialFileAId, initialFileBId, selectedFileA, selectedFileB]);
+   // Load initial selections if provided
+   useEffect(() => {
+     if (isOpen && initialFileAId && !selectedFileA) {
+       // Could pre-fetch file details for display
+       api.get<FileInfo[]>(API_ENDPOINTS.FILES_LIST).then(res => {
+         const fileA = res.data.find((f) => f.id === initialFileAId);
+         if (fileA) setSelectedFileA(fileA);
+       });
+     }
+     if (isOpen && initialFileBId && !selectedFileB) {
+       api.get<FileInfo[]>(API_ENDPOINTS.FILES_LIST).then(res => {
+         const fileB = res.data.find((f) => f.id === initialFileBId);
+         if (fileB) setSelectedFileB(fileB);
+       });
+     }
+   }, [isOpen, initialFileAId, initialFileBId, selectedFileA, selectedFileB]);
 
-  // Fetch similarities for selected File A to compare against
-  useEffect(() => {
-    if (selectedFileA) {
-      api.get(`/plagiarism/files/${selectedFileA.id}/similarities`)
-        .then(res => {
-          const map: Record<string, number> = {};
-          res.data.forEach((item: any) => {
-            map[item.id] = item.similarity;
-          });
-          setSimilaritiesMap(map);
-        })
-        .catch(err => {
-          console.error('Failed to fetch similarities for selected File A', err);
-          setSimilaritiesMap({});
-        });
-    } else {
-      setSimilaritiesMap({});
-    }
-  }, [selectedFileA]);
+   // Fetch similarities for selected File A to compare against
+   useEffect(() => {
+     if (selectedFileA) {
+       api.get<Array<{ id: string; similarity: number }>>(API_ENDPOINTS.FILE_SIMILARITIES(selectedFileA.id))
+         .then(res => {
+           const map: Record<string, number> = {};
+           res.data.forEach((item) => {
+             map[item.id] = item.similarity;
+           });
+           setSimilaritiesMap(map);
+         })
+         .catch(err => {
+           console.error('Failed to fetch similarities for selected File A', err);
+           setSimilaritiesMap({});
+         });
+     } else {
+       setSimilaritiesMap({});
+     }
+   }, [selectedFileA]);
 
   const handleSelectA = (file: FileResponse) => {
     setSelectedFileA(file);
@@ -256,10 +249,12 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
   const isCompareDisabled = !selectedFileA || !selectedFileB || selectedFileA.id === selectedFileB.id;
 
   const columnBg = useColorModeValue('gray.50', 'gray.700');
+  const listBg = useColorModeValue('white', 'gray.700');
+  const listBorderColor = useColorModeValue('gray.200', 'gray.600');
 
-  const columnA = useMemo(() => ({
+  const columnA = useMemo<ColumnConfig>(() => ({
     title: 'File A',
-    colorScheme: 'blue' as const,
+    colorScheme: 'blue',
     search: fileASearch,
     onSearchChange: setFileASearch,
     results: [...fileAResults]
@@ -272,7 +267,7 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
     columnKey: 'A',
   }), [fileASearch, fileAResults, loadingA, selectedFileA, selectedFileB, errors.a]);
 
-  const columnB = useMemo(() => {
+  const columnB = useMemo<ColumnConfig>(() => {
     // Filter out selected File A
     let results = fileBResults.filter(f => f.id !== selectedFileA?.id);
 
@@ -295,7 +290,7 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
 
     return {
       title: 'File B',
-      colorScheme: 'green' as const,
+      colorScheme: 'green',
       search: fileBSearch,
       onSearchChange: setFileBSearch,
       results,
@@ -307,7 +302,20 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
     };
   }, [fileBSearch, fileBResults, loadingB, selectedFileB, errors.b, selectedFileA, similaritiesMap]);
 
-  const renderColumn = (col: any) => (
+  interface ColumnConfig {
+    title: string;
+    colorScheme: 'blue' | 'green';
+    search: string;
+    onSearchChange: (value: string) => void;
+    results: FileInfo[];
+    loading: boolean;
+    selected: FileInfo | null;
+    onSelect: (file: FileInfo) => void;
+    error: string | undefined;
+    columnKey: 'A' | 'B';
+  }
+
+  const renderColumn = (col: ColumnConfig) => (
     <VStack flex={1} spacing={3} align="stretch">
       <Box>
         <Text fontWeight="bold" color={`${col.colorScheme}.500`} mb={2}>
@@ -342,17 +350,17 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
             {col.search ? 'No files found' : 'Type to search files'}
           </Text>
         </Box>
-      ) : (
-        <VStack
-          spacing={0}
-          align="stretch"
-          maxH={LIST_HEIGHT}
-          overflowY="auto"
-          bg={useColorModeValue('white', 'gray.700')}
-          border="1px solid"
-          borderColor={useColorModeValue('gray.200', 'gray.600')}
-          borderRadius="md"
-        >
+       ) : (
+         <VStack
+           spacing={0}
+           align="stretch"
+           maxH={LIST_HEIGHT}
+           overflowY="auto"
+           bg={listBg}
+           border="1px solid"
+           borderColor={listBorderColor}
+           borderRadius="md"
+         >
           {col.results.map((file: FileResponse) => (
             <FileItem
               key={file.id}

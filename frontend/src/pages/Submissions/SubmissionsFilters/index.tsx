@@ -1,13 +1,12 @@
 import React from 'react';
 import {
-  HStack,
   Input,
   Select,
   Text,
   VStack,
   SimpleGrid,
 } from '@chakra-ui/react';
-import type { Filters, FileSubmission } from '../types';
+import type { Filters } from '../types';
 
 interface SubmissionsFiltersProps {
   filters: Filters;

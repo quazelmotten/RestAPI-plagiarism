@@ -18,7 +18,7 @@ import {
   useToast,
 } from '@chakra-ui/react';
 import { FiUploadCloud, FiFile, FiX } from 'react-icons/fi';
-import api from '../services/api';
+import api, { API_ENDPOINTS } from '../services/api';
 
 const Upload: React.FC = () => {
   const [files, setFiles] = useState<File[]>([]);
@@ -64,7 +64,7 @@ const Upload: React.FC = () => {
       });
       formData.append('language', language);
 
-      await api.post('/plagiarism/check', formData, {
+      await api.post(API_ENDPOINTS.CHECK, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -84,14 +84,14 @@ const Upload: React.FC = () => {
       });
 
       setFiles([]);
-    } catch (error) {
-      toast({
-        title: 'Upload failed',
-        description: 'There was an error uploading your files',
-        status: 'error',
-        duration: 5000,
-      });
-    } finally {
+     } catch {
+       toast({
+         title: 'Upload failed',
+         description: 'There was an error uploading your files',
+         status: 'error',
+         duration: 5000,
+       });
+     } finally {
       setIsUploading(false);
       setUploadProgress(0);
     }
