@@ -30,6 +30,21 @@ interface PlagiarismMatch {
   file_b_end_line: number;
 }
 
+interface RawMatch {
+  file1: { start_line: number; end_line: number; start_col?: number; end_col?: number };
+  file2: { start_line: number; end_line: number; start_col?: number; end_col?: number };
+}
+
+const transformMatches = (raw: any[]): PlagiarismMatch[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((m: RawMatch) => ({
+    file_a_start_line: m.file1?.start_line ?? 0,
+    file_a_end_line: m.file1?.end_line ?? 0,
+    file_b_start_line: m.file2?.start_line ?? 0,
+    file_b_end_line: m.file2?.end_line ?? 0,
+  }));
+};
+
 interface PairResult {
   id: string;
   file_a: FileInfo;
@@ -158,6 +173,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
             ref={scrollContainerRef}
             flex={1}
             overflowY="auto"
+            overflowX="auto"
             fontFamily="monospace"
             fontSize="sm"
             maxH="calc(100vh - 20rem)"
@@ -181,6 +197,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
                   cursor={matchInfo ? 'pointer' : 'default'}
                   role={matchInfo ? 'button' : undefined}
                   tabIndex={matchInfo ? 0 : undefined}
+                  minW="fit-content"
                   onKeyDown={(e) => {
                     if (matchInfo && (e.key === 'Enter' || e.key === ' ')) {
                       e.preventDefault();
@@ -208,8 +225,8 @@ const FileViewer: React.FC<FileViewerProps> = ({
                     pl={3}
                     py={0.5}
                     whiteSpace="pre"
-                    overflow="hidden"
                     color={textColor}
+                    minWidth={0}
                   >
                     {line || ' '}
                   </Box>
@@ -235,6 +252,7 @@ const PairComparison: React.FC = () => {
   const [loadingContent, setLoadingContent] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
   const [hoveredMatchIndex, setHoveredMatchIndex] = useState<number | null>(null);
+  const [analyzingMatches, setAnalyzingMatches] = useState(false);
 
   const fileAContainerRef = useRef<HTMLDivElement>(null);
   const fileBContainerRef = useRef<HTMLDivElement>(null);
@@ -295,7 +313,29 @@ const PairComparison: React.FC = () => {
       const response = await api.get('/plagiarism/file-pair', {
         params: { file_a: selectedFileAId, file_b: selectedFileBId }
       });
-      setCurrentPair(response.data);
+      const pairData = response.data;
+
+      // Transform matches from backend format to frontend format
+      const transformedMatches = transformMatches(pairData.matches);
+      pairData.matches = transformedMatches;
+
+      // If matches are empty, trigger on-demand analysis
+      if (!transformedMatches || transformedMatches.length === 0) {
+        setAnalyzingMatches(true);
+        try {
+          const analyzeResponse = await api.post('/plagiarism/file-pair/analyze', null, {
+            params: { file_a: selectedFileAId, file_b: selectedFileBId }
+          });
+          pairData.matches = transformMatches(analyzeResponse.data.matches);
+          pairData.ast_similarity = analyzeResponse.data.ast_similarity;
+        } catch (analyzeErr: any) {
+          console.error('On-demand analysis failed:', analyzeErr);
+        } finally {
+          setAnalyzingMatches(false);
+        }
+      }
+
+      setCurrentPair(pairData);
     } catch (err: any) {
       if (err.response?.status !== 404) {
         console.error('Error fetching file pair:', err);
@@ -463,6 +503,12 @@ const PairComparison: React.FC = () => {
           <Text fontSize="sm" color="gray.600" textAlign="center">
             Click any highlighted region to jump to the matching region in the other file
           </Text>
+          {analyzingMatches && (
+            <HStack justify="center" mt={2}>
+              <Spinner size="sm" />
+              <Text fontSize="sm" color="blue.500">Computing match details...</Text>
+            </HStack>
+          )}
           {contentError && (
             <Alert status="warning" mt={2}>
               <AlertIcon />

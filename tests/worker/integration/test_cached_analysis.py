@@ -19,11 +19,11 @@ class TestServiceIntegration:
         self.redis = redis_test_instance
         self.redis.flushdb()
         # Configure the top-level redis_cache.cache to use this mock Redis
-        import redis_cache
+        import worker.redis_cache as redis_cache
         redis_cache.cache._redis = self.redis
         redis_cache.cache._connected = True
         # Also configure inverted_index.redis to use this mock
-        import inverted_index
+        import worker.inverted_index as inverted_index
         inverted_index.redis = self.redis
         yield
         self.redis.flushdb()
@@ -67,7 +67,7 @@ class TestServiceIntegration:
         }):
             result = proc.index_file_fingerprints(file_info, 'python', 'test_task')
 
-        assert result is True
+        assert result  # Returns fingerprints list on success
 
         # Verify cached fingerprints can be retrieved
         cached_fps = proc.cache.get_fingerprints(file_info['file_hash'])
@@ -108,13 +108,13 @@ class TestServiceIntegration:
                 'tokens': []
             }):
                 result = proc.index_file_fingerprints(f, 'python', 'setup')
-                assert result is True
+                assert result  # Returns fingerprints list on success
 
         # Generate intra-task pairs
         pairs = proc.find_intra_task_pairs(files, 'python', 'test_task')
 
         assert len(pairs) > 0
-        for a, b in pairs:
+        for a, b, score in pairs:
             assert a in files and b in files
             assert a['id'] != b['id']
 
@@ -159,12 +159,12 @@ class TestServiceIntegration:
                 'tokens': []
             }):
                 result = proc.index_file_fingerprints(f, 'python', 'setup')
-                assert result is True
+                assert result  # Returns fingerprints list on success
 
         # Generate cross-task pairs
         pairs = proc.find_cross_task_pairs(new_files, existing_files, 'python', 'test_task')
 
         assert len(pairs) == len(new_files) * len(existing_files)
-        for new_file, old_file in pairs:
+        for new_file, old_file, score in pairs:
             assert new_file in new_files
             assert old_file in existing_files

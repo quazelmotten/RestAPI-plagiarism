@@ -1,6 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, or_
 
 from database import get_async_session
 from services.task_service import TaskService
@@ -136,6 +137,97 @@ async def get_file_pair(
     if not result:
         raise HTTPException(status_code=404, detail="File pair result not found")
     return result
+
+
+@router.post("/file-pair/analyze", response_model=ResultItem)
+async def analyze_file_pair(
+    file_a: str,
+    file_b: str,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Run full plagiarism analysis on-demand for a file pair. Updates DB with matches."""
+    from models.models import File as FileModel, SimilarityResult
+    from uuid import uuid4
+    from datetime import datetime, timezone
+
+    # Fetch file info from DB
+    file_a_result = await db.execute(select(FileModel).where(FileModel.id == file_a))
+    file_a_model = file_a_result.scalar_one_or_none()
+    if not file_a_model:
+        raise HTTPException(status_code=404, detail="File A not found")
+
+    file_b_result = await db.execute(select(FileModel).where(FileModel.id == file_b))
+    file_b_model = file_b_result.scalar_one_or_none()
+    if not file_b_model:
+        raise HTTPException(status_code=404, detail="File B not found")
+
+    # Run full analysis using CLI analyzer
+    import sys
+    import os
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if os.path.join(project_root, 'worker') not in sys.path:
+        sys.path.insert(0, os.path.join(project_root, 'worker'))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    from cli.analyzer import analyze_plagiarism_cached
+    from redis_cache import cache
+
+    similarity, matches, metrics = analyze_plagiarism_cached(
+        file_a_model.file_path,
+        file_b_model.file_path,
+        file_a_model.file_hash,
+        file_b_model.file_hash,
+        cache=cache if cache.is_connected else None,
+        language=file_a_model.language,
+    )
+
+    # Transform matches from analyzer format to legacy format
+    legacy_matches = []
+    if matches:
+        for m in matches:
+            legacy_matches.append({
+                "file_a_start_line": m["file1"]["start_line"],
+                "file_a_end_line": m["file1"]["end_line"],
+                "file_b_start_line": m["file2"]["start_line"],
+                "file_b_end_line": m["file2"]["end_line"],
+            })
+
+    # Find or create similarity result, update with matches
+    existing = await db.execute(
+        select(SimilarityResult).where(
+            or_(
+                (SimilarityResult.file_a_id == file_a) & (SimilarityResult.file_b_id == file_b),
+                (SimilarityResult.file_a_id == file_b) & (SimilarityResult.file_b_id == file_a)
+            )
+        )
+    )
+    sr = existing.scalar_one_or_none()
+
+    if sr:
+        sr.ast_similarity = similarity
+        sr.matches = legacy_matches
+    else:
+        sr = SimilarityResult(
+            id=uuid4(),
+            task_id=file_a_model.task_id,
+            file_a_id=file_a,
+            file_b_id=file_b,
+            ast_similarity=similarity,
+            matches=legacy_matches,
+        )
+        db.add(sr)
+
+    await db.commit()
+    await db.refresh(sr)
+
+    now = datetime.now(timezone.utc).isoformat()
+    return ResultItem(
+        file_a={"id": str(file_a_model.id), "filename": file_a_model.filename},
+        file_b={"id": str(file_b_model.id), "filename": file_b_model.filename},
+        ast_similarity=similarity,
+        matches=legacy_matches,
+        created_at=now,
+    )
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

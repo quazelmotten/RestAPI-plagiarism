@@ -328,13 +328,39 @@ def _unused_stub():
         return '\n'.join(result)
     
     def generate_type4(self, source_code: str, clone_num: int = 1) -> List[str]:
+        """
+        Generate Type 4 clones: modified logic.
+        Uses a pool of semantic-preserving transformations applied stochastically.
+        """
         clones = []
         for _ in range(clone_num):
             code = source_code
-            code = self._convert_for_to_while(code)
-            code = self._convert_list_comprehension(code)
-            code = self._use_map_filter(code)
-            code = self._change_string_formatting(code)
+
+            # All available transformations (pick a random subset each time)
+            transformations = [
+                (self._convert_for_to_while, 0.7),
+                (self._convert_while_to_for, 0.4),
+                (self._convert_list_comprehension, 0.6),
+                (self._convert_listcomp_to_loop, 0.5),
+                (self._use_map_filter, 0.4),
+                (self._change_string_formatting, 0.6),
+                (self._shuffle_commutative_ops, 0.5),
+                (self._swap_if_else_negation, 0.4),
+                (self._change_comparison_operators, 0.5),
+                (self._convert_dict_comprehension, 0.5),
+                (self._convert_lambda_to_def, 0.4),
+                (self._split_compound_conditions, 0.4),
+                (self._merge_conditions, 0.3),
+                (self._change_augmented_assignment, 0.4),
+            ]
+
+            # Randomly select and apply a subset (3-6 transformations)
+            selected = random.sample(transformations, min(len(transformations), random.randint(3, 6)))
+            for transform, _ in selected:
+                try:
+                    code = transform(code)
+                except Exception:
+                    pass
 
             clones.append(code)
         return clones
@@ -455,6 +481,238 @@ def _unused_stub():
         
         return pattern.sub(replacer, code)
 
+    def _swap_if_else_negation(self, code: str) -> str:
+        """
+        Swap if/else branches by negating the condition.
+        e.g., `if x > 0: a()` → `if x <= 0: pass else: a()` (inverted)
+        """
+        # Simple pattern: if COND:\n    BODY\nelse:\n    ELSE_BODY
+        pattern = re.compile(
+            r'^([ \t]*)if\s+([^\n:]+):\s*\n'
+            r'((?:\1[ \t]+[^\n]*\n)+)'
+            r'\1else:\s*\n'
+            r'((?:\1[ \t]+[^\n]*\n?)+)',
+            re.MULTILINE
+        )
+
+        def replacer(match):
+            indent = match.group(1)
+            cond = match.group(2).strip()
+            if_body = match.group(3)
+            else_body = match.group(4)
+
+            # Negate the condition
+            negated = self._negate_condition(cond)
+            return f"{indent}if {negated}:\n{else_body}{indent}else:\n{if_body}"
+
+        return pattern.sub(replacer, code)
+
+    def _negate_condition(self, cond: str) -> str:
+        """Negate a simple boolean condition."""
+        # Handle common patterns
+        if cond.startswith('not '):
+            return cond[4:]
+        if ' == ' in cond:
+            return cond.replace(' == ', ' != ')
+        if ' != ' in cond:
+            return cond.replace(' != ', ' == ')
+        if ' > ' in cond:
+            return cond.replace(' > ', ' <= ')
+        if ' >= ' in cond:
+            return cond.replace(' >= ', ' < ')
+        if ' < ' in cond:
+            return cond.replace(' < ', ' >= ')
+        if ' <= ' in cond:
+            return cond.replace(' <= ', ' > ')
+        return f"not ({cond})"
+
+    def _change_comparison_operators(self, code: str) -> str:
+        """
+        Change comparison operators: == None → is None, != None → is not None.
+        """
+        code = re.sub(r'(\w+)\s*==\s*None', r'\1 is None', code)
+        code = re.sub(r'(\w+)\s*!=\s*None', r'\1 is not None', code)
+        code = re.sub(r'None\s*==\s*(\w+)', r'None is \1', code)
+        code = re.sub(r'None\s*!=\s*(\w+)', r'None is not \1', code)
+        return code
+
+    def _convert_dict_comprehension(self, code: str) -> str:
+        """
+        Convert dict comprehensions to explicit loop.
+        {k: v for k, v in iterable} → result = {}; for k, v in iterable: result[k] = v
+        """
+        pattern = re.compile(
+            r'\{(\w+)\s*:\s*(\w+)\s+for\s+(\w+)\s*,\s*(\w+)\s+in\s+([^\{\}]+?)\}'
+        )
+
+        def replacer(match):
+            k, v, k_var, v_var, iterable = match.groups()
+            tmp = f"_dict_{k_var}"
+            return (
+                f"(lambda: (lambda _d: "
+                f"[_d.__setitem__({k_var}, {v_var}) "
+                f"for {k_var}, {v_var} in {iterable}] and _d)({{}}))()"
+            )
+
+        return pattern.sub(replacer, code)
+
+    def _convert_lambda_to_def(self, code: str) -> str:
+        """
+        Convert lambda expressions to named functions.
+        lambda x: x + 1 → def _fn(x): return x + 1
+        """
+        lambda_pattern = re.compile(
+            r'lambda\s+([\w\s,]+):\s*([^\n,\)]+)'
+        )
+        counter = [0]
+
+        def replacer(match):
+            args = match.group(1).strip()
+            body = match.group(2).strip()
+            fn_name = f"_lambda_fn_{counter[0]}"
+            counter[0] += 1
+            # Return the function name (definition is prepended)
+            return fn_name
+
+        # This is complex to do safely with regex; use a simpler approach
+        # Only transform lambdas in assignment context
+        assign_pattern = re.compile(
+            r'^([ \t]*)(\w+)\s*=\s*lambda\s+([\w\s,]+):\s*([^\n]+)',
+            re.MULTILINE
+        )
+
+        def assign_replacer(match):
+            indent = match.group(1)
+            var_name = match.group(2)
+            args = match.group(3).strip()
+            body = match.group(4).strip()
+            return (
+                f"{indent}def {var_name}({args}):\n"
+                f"{indent}    return {body}"
+            )
+
+        return assign_pattern.sub(assign_replacer, code)
+
+    def _split_compound_conditions(self, code: str) -> str:
+        """
+        Split compound conditions into nested ifs.
+        if a and b: BODY → if a:\n    if b: BODY
+        """
+        pattern = re.compile(
+            r'^([ \t]*)if\s+(\w+)\s+and\s+(\w+):\s*\n'
+            r'((?:\1[ \t]+[^\n]*\n?)+)',
+            re.MULTILINE
+        )
+
+        def replacer(match):
+            indent = match.group(1)
+            a, b = match.group(2), match.group(3)
+            body = match.group(4)
+            inner_indent = indent + "    "
+            indented_body = body.replace('\n' + inner_indent, '\n' + inner_indent + "    ")
+            # Only apply 50% of the time
+            if self.rng.random() < 0.5:
+                return match.group(0)
+            return f"{indent}if {a}:\n{inner_indent}if {b}:\n{inner_indent}    {body.lstrip()}"
+
+        return pattern.sub(replacer, code)
+
+    def _merge_conditions(self, code: str) -> str:
+        """
+        Merge nested if statements into compound conditions.
+        if a:\n    if b: BODY → if a and b: BODY
+        """
+        pattern = re.compile(
+            r'^([ \t]*)if\s+(\w+):\s*\n'
+            r'\1[ \t]+if\s+(\w+):\s*\n'
+            r'((?:\1[ \t]+[^\n]*\n?)+)',
+            re.MULTILINE
+        )
+
+        def replacer(match):
+            indent = match.group(1)
+            a, b = match.group(2), match.group(3)
+            body = match.group(4)
+            if self.rng.random() < 0.5:
+                return match.group(0)
+            return f"{indent}if {a} and {b}:\n{body}"
+
+        return pattern.sub(replacer, code)
+
+    def _change_augmented_assignment(self, code: str) -> str:
+        """
+        Change augmented assignment forms.
+        x += 1 ↔ x = x + 1
+        """
+        ops = [('+', '+='), ('-', '-='), ('*', '*='), ('/', '/=')]
+        for op, aug in ops:
+            # x = x + y → x += y
+            pattern = re.compile(
+                rf'^([ \t]*)(\w+)\s*=\s*\2\s*{re.escape(op)}\s*(\w+)',
+                re.MULTILINE
+            )
+            if self.rng.random() < 0.5:
+                code = pattern.sub(rf'\1\2 {aug} \3', code)
+        return code
+
+    def generate_type5(self, source_code: str, clone_num: int = 1) -> List[str]:
+        """
+        Generate Type 5 clones: mixed transformations (T1+T2+T3+T4 combined).
+        Applies a combination of all transformation types for maximum variety.
+        """
+        clones = []
+        for _ in range(clone_num):
+            code = source_code
+
+            # T1: Lexical changes (always applied, mild)
+            code = self._normalize_whitespace(code)
+            if self.rng.random() < 0.6:
+                code = self._inject_comments(code)
+            if self.rng.random() < 0.5:
+                code = self._random_blank_lines(code)
+
+            # T2: Identifier renaming (70% chance)
+            if self.rng.random() < 0.7:
+                tree = self.parse(code)
+                identifiers = self._extract_identifiers(tree.root_node, code)
+                if identifiers:
+                    rename_map = self._create_rename_map(identifiers)
+                    code = self._apply_rename(code, rename_map)
+
+            # T3: Structural changes (60% chance each)
+            if self.rng.random() < 0.6:
+                code = self._remove_dead_code(code)
+            if self.rng.random() < 0.5:
+                code = self._reorder_functions(code)
+            if self.rng.random() < 0.4:
+                code = self._inline_variables(code)
+            if self.rng.random() < 0.3:
+                code = self._add_stub_functions(code)
+
+            # T4: Logic changes (pick 2-4 random transformations)
+            t4_transforms = [
+                self._convert_for_to_while,
+                self._convert_while_to_for,
+                self._convert_list_comprehension,
+                self._convert_listcomp_to_loop,
+                self._use_map_filter,
+                self._change_string_formatting,
+                self._shuffle_commutative_ops,
+                self._swap_if_else_negation,
+                self._change_comparison_operators,
+                self._convert_lambda_to_def,
+                self._change_augmented_assignment,
+            ]
+            selected = random.sample(t4_transforms, min(len(t4_transforms), random.randint(2, 4)))
+            for transform in selected:
+                try:
+                    code = transform(code)
+                except Exception:
+                    pass
+
+            clones.append(code)
+        return clones
+
 
 def generate_dataset(
     source_dir: str,
@@ -496,6 +754,8 @@ def generate_dataset(
                 clones = generator.generate_type3(source_code, n)
             elif type_num == 4:
                 clones = generator.generate_type4(source_code, n)
+            elif type_num == 5:
+                clones = generator.generate_type5(source_code, n)
             else:
                 continue
             
@@ -526,8 +786,8 @@ def main():
     parser.add_argument('--n', type=int, default=1, help='Number of clones per type per file')
     parser.add_argument('--start', type=int, default=0, help='Starting file index')
     parser.add_argument('--end', type=int, default=100, help='Ending file index')
-    parser.add_argument('--types', type=int, nargs='+', default=[1, 2, 3, 4], 
-                        help='Clone types to generate (1-4)')
+    parser.add_argument('--types', type=int, nargs='+', default=[1, 2, 3, 4, 5], 
+                        help='Clone types to generate (1-5)')
     
     args = parser.parse_args()
     

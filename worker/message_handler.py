@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from pika.adapters.blocking_connection import BlockingChannel
     from pika.spec import Basic, BasicProperties
 
-from services.task_orchestrator import TaskOrchestrator
+from worker.services.task_orchestrator import TaskOrchestrator
 
 log = logging.getLogger(__name__)
 

@@ -21,4 +21,4 @@ COPY ./cli /app/cli
 ENV PYTHONPATH=/app/src:/app
 
 
-CMD ["python3", "worker.py"]
+CMD ["python3", "-m", "worker.main"]

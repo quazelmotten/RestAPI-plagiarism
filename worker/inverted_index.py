@@ -5,12 +5,31 @@ Uses Redis to store hash -> files mappings for efficient similarity candidate lo
 
 import logging
 from typing import List, Dict, Set, Optional, Any
-from collections import Counter
 
-from redis_client import get_redis
-from config import settings
+import redis
+from worker.config import settings
 
 logger = logging.getLogger(__name__)
+
+_redis_instance: Optional[redis.Redis] = None
+
+
+def get_redis() -> redis.Redis:
+    """Get or create a Redis client instance (singleton)."""
+    global _redis_instance
+    if _redis_instance is None:
+        _redis_instance = redis.Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=settings.redis_db,
+            password=settings.redis_password,
+            ssl=settings.redis_use_ssl,
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_timeout=5,
+            health_check_interval=30,
+        )
+    return _redis_instance
 
 
 class InvertedIndex:
@@ -70,55 +89,71 @@ class InvertedIndex:
         logger.debug(f"Added {len(hash_values)} fingerprints to inverted index for file {file_hash[:16]}...")
     
     def find_candidate_files(self, fingerprints: List[Dict[str, Any]],
-                            language: str = "python") -> Set[str]:
+                             language: str = "python") -> Dict[str, float]:
         """
-        Find candidate files that share fingerprints with the query file.
-        Uses overlap count threshold to filter out non-viable candidates.
+        Find candidate files and compute overlap percentages (Jaccard on fingerprint sets).
 
         Args:
             fingerprints: List of fingerprint dicts from the query file
             language: Programming language of the query file
 
         Returns:
-            Set of file hashes that meet the overlap threshold
+            Dict mapping file_hash -> overlap_percentage (0.0 to 1.0)
+            where overlap% = |shared_unique_hashes| / (|A_unique_hashes| + |B_unique_hashes| - |shared_unique_hashes|)
         """
         if not fingerprints:
-            return set()
+            return {}
 
-        # Count overlaps for each candidate file
-        overlap_counter = Counter()
+        # Track unique query hashes and which candidates share each hash
+        query_hashes = set()
+        candidate_to_hashes: Dict[str, set] = {}  # candidate_file_hash -> set of shared hash values
 
-        # Use pipeline for batch SMEMBERS calls
         pipe = self.redis.pipeline()
-        hash_keys = []
         for fp in fingerprints:
             hash_val = str(fp['hash'])
+            query_hashes.add(hash_val)
             inv_key = f"{self.HASH_TO_FILES_PREFIX}:{language}:{hash_val}"
             pipe.smembers(inv_key)
-            hash_keys.append(inv_key)
 
-        # Execute all SMEMBERS commands in one round-trip
         results = pipe.execute()
 
-        # Process results
-        for files_with_hash in results:
+        for hash_val, files_with_hash in zip(query_hashes, results):
             for file_hash in files_with_hash:
-                overlap_counter[file_hash] += 1
+                if file_hash not in candidate_to_hashes:
+                    candidate_to_hashes[file_hash] = set()
+                candidate_to_hashes[file_hash].add(hash_val)
 
-        # Calculate minimum overlap threshold based on query file fingerprint count
-        total_query_fingerprints = len(fingerprints)
-        min_overlap = max(1, int(total_query_fingerprints * self.min_overlap_threshold))
+        query_count = len(query_hashes)
 
-        # Filter candidates that meet the threshold
-        candidates = {
-            file_hash for file_hash, overlap_count in overlap_counter.items()
-            if overlap_count >= min_overlap
-        }
+        # Filter by threshold
+        min_overlap = max(1, int(query_count * self.min_overlap_threshold))
+        candidates = {fh for fh, shared in candidate_to_hashes.items() if len(shared) >= min_overlap}
 
-        logger.info(f"Found {len(candidates)} candidate files from {len(overlap_counter)} "
-                   f"potential matches (min_overlap={min_overlap}, threshold={self.min_overlap_threshold:.0%})")
+        if not candidates:
+            return {}
 
-        return candidates
+        # Batch fetch candidate file fingerprint counts (unique hash count)
+        pipe2 = self.redis.pipeline()
+        candidate_list = list(candidates)
+        for candidate_hash in candidate_list:
+            file_key = f"{self.FILE_TO_HASHES_PREFIX}:{language}:{candidate_hash}"
+            pipe2.scard(file_key)
+        candidate_counts = pipe2.execute()
+
+        # Compute Jaccard overlap percentage using unique counts
+        result = {}
+        for candidate_hash, candidate_count in zip(candidate_list, candidate_counts):
+            if candidate_count is None or candidate_count == 0:
+                continue
+            overlap_count = len(candidate_to_hashes[candidate_hash])
+            union = query_count + candidate_count - overlap_count
+            if union > 0:
+                result[candidate_hash] = min(1.0, overlap_count / union)
+
+        logger.info(f"Found {len(result)} candidate files from {len(candidate_to_hashes)} "
+                    f"potential matches (min_overlap={min_overlap}, threshold={self.min_overlap_threshold:.0%})")
+
+        return result
     
     def get_file_fingerprints(self, file_hash: str, language: str = "python") -> Optional[Set[str]]:
         """

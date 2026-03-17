@@ -10,18 +10,12 @@ import sys
 from unittest.mock import MagicMock, patch
 import json
 
-# Setup paths for imports
+# Setup paths for imports (project root is set via pytest.ini pythonpath)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-worker_dir = os.path.join(project_root, 'worker')
-src_dir = os.path.join(project_root, 'src')
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-if worker_dir not in sys.path:
-    sys.path.insert(1, worker_dir)
-if src_dir not in sys.path:
-    sys.path.insert(2, src_dir)
 
-from config import settings  # noqa: F401
+from worker.config import settings  # noqa: F401
 
 
 class SimpleRedis:
@@ -80,6 +74,10 @@ class SimpleRedis:
         for m in members:
             self.sets[name].discard(m)
         result = before - len(self.sets[name])
+        return self._record(result)
+
+    def scard(self, name):
+        result = len(self.sets.get(name, set()))
         return self._record(result)
 
     def incr(self, name, amount=1):
@@ -186,17 +184,11 @@ def mock_redis():
 def redis_test_instance():
     """Provide a simple in-memory Redis mock for integration tests."""
     redis_mock = SimpleRedis()
-    # Reset RedisClient singleton to ensure fresh instance
-    try:
-        from redis_client import RedisClient
-        RedisClient._instance = None
-    except ImportError:
-        pass
     # Patch redis.Redis to return our mock
     with patch('redis.Redis', return_value=redis_mock):
         # Ensure inverted_index uses this mock if already imported
         try:
-            from inverted_index import inverted_index
+            from worker.inverted_index import inverted_index
             inverted_index.redis = redis_mock
         except ImportError:
             pass
@@ -236,7 +228,7 @@ def test_config():
 @pytest.fixture(autouse=True)
 def mock_get_session(monkeypatch, mock_db_session):
     """Patch get_session in crud module to return a mock sync context manager."""
-    import crud
+    import worker.crud as crud
     @contextlib.contextmanager
     def fake_get_session():
         yield mock_db_session

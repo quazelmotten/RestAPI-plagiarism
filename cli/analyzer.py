@@ -664,6 +664,123 @@ def analyze_plagiarism_cached(
     return ast_sim, matches, metrics
 
 
+def analyze_plagiarism_batch(
+    pairs_data: List[Dict[str, Any]],
+    ast_threshold: float = 0.30,
+) -> List[Tuple[float, List[Dict[str, Any]], Dict[str, Any]]]:
+    """
+    Batch-analyze multiple pairs using pre-fetched fingerprint/AST data.
+    All data is in-memory — no Redis or file I/O during analysis.
+
+    Args:
+        pairs_data: List of dicts, each containing:
+            - 'file_a_hash', 'file_b_hash': file hashes (for metrics only)
+            - 'fps_a', 'fps_b': pre-fetched fingerprint lists (or None)
+            - 'ast_a', 'ast_b': pre-fetched AST hash lists (or None)
+            - 'file_a_path', 'file_b_path': file paths (for cache miss fallback)
+            - 'index_a', 'index_b': pre-built fingerprint indexes (or None)
+        ast_threshold: Minimum AST similarity to trigger fragment building
+
+    Returns:
+        List of (ast_similarity, matches, metrics) tuples, one per pair
+    """
+    results = []
+
+    for pair in pairs_data:
+        fps_a = pair.get('fps_a')
+        fps_b = pair.get('fps_b')
+        ast_a = pair.get('ast_a')
+        ast_b = pair.get('ast_b')
+        index_a = pair.get('index_a')
+        index_b = pair.get('index_b')
+        file_a_path = pair.get('file_a_path')
+        file_b_path = pair.get('file_b_path')
+
+        # Build index if fingerprints exist but index doesn't
+        if fps_a and index_a is None:
+            index_a = index_fingerprints(fps_a)
+        if fps_b and index_b is None:
+            index_b = index_fingerprints(fps_b)
+
+        # Handle cache misses by parsing files
+        if fps_a is None or ast_a is None:
+            try:
+                tree_a = None
+                if fps_a is None:
+                    tokens_a = tokenize_with_tree_sitter(file_a_path)
+                    fps_a = winnow_fingerprints(compute_fingerprints(tokens_a))
+                    index_a = index_fingerprints(fps_a)
+                if ast_a is None:
+                    ast_a = extract_ast_hashes(file_a_path, 'python', min_depth=3)
+            except Exception:
+                results.append((0.0, [], {
+                    'left_covered': 0, 'right_covered': 0,
+                    'left_total': 0, 'right_total': 0,
+                    'similarity': 0.0, 'longest_fragment': 0,
+                }))
+                continue
+
+        if fps_b is None or ast_b is None:
+            try:
+                tree_b = None
+                if fps_b is None:
+                    tokens_b = tokenize_with_tree_sitter(file_b_path)
+                    fps_b = winnow_fingerprints(compute_fingerprints(tokens_b))
+                    index_b = index_fingerprints(fps_b)
+                if ast_b is None:
+                    ast_b = extract_ast_hashes(file_b_path, 'python', min_depth=3)
+            except Exception:
+                results.append((0.0, [], {
+                    'left_covered': 0, 'right_covered': 0,
+                    'left_total': 0, 'right_total': 0,
+                    'similarity': 0.0, 'longest_fragment': 0,
+                }))
+                continue
+
+        # AST similarity (in-memory, no Redis)
+        ast_sim = ast_similarity(ast_a, ast_b)
+
+        if ast_sim < ast_threshold:
+            total_left = len(fps_a) if fps_a else 0
+            total_right = len(fps_b) if fps_b else 0
+            results.append((ast_sim, [], {
+                'left_covered': 0, 'right_covered': 0,
+                'left_total': total_left, 'right_total': total_right,
+                'similarity': 0.0, 'longest_fragment': 0,
+            }))
+            continue
+
+        # Fragment building (CPU-intensive, only for above-threshold pairs)
+        if index_a is None or index_b is None:
+            # No fingerprints available — can't build fragments
+            total_left = len(fps_a) if fps_a else 0
+            total_right = len(fps_b) if fps_b else 0
+            results.append((ast_sim, [], {
+                'left_covered': 0, 'right_covered': 0,
+                'left_total': total_left, 'right_total': total_right,
+                'similarity': 0.0, 'longest_fragment': 0,
+            }))
+            continue
+
+        occurrences = find_paired_occurrences(index_a, index_b)
+        fragments = build_fragments(occurrences, minimum_occurrences=1)
+        total_left = len(fps_a) if fps_a else 0
+        total_right = len(fps_b) if fps_b else 0
+        metrics = compute_similarity_metrics(occurrences, total_left, total_right)
+
+        matches = []
+        for frag in fragments:
+            matches.append({
+                'file1': frag.left_selection,
+                'file2': frag.right_selection,
+                'kgram_count': len(frag.pairs)
+            })
+
+        results.append((ast_sim, matches, metrics))
+
+    return results
+
+
 class Analyzer:
     def Start(self, file1: str, file2: str, language: str) -> dict:
         similarity, matches, metrics = analyze_plagiarism(

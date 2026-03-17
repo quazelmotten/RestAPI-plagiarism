@@ -152,3 +152,85 @@ class TestRedisCache:
         mock_cache._redis.delete.return_value = 1
         assert mock_cache.unlock_fingerprint_computation("hash123") is True
         mock_cache._redis.delete.assert_called_with("fp_lock:hash123")
+
+    def test_get_file_data_batch_fetches_all(self, mock_cache):
+        """Test batch fetch of fingerprints and AST hashes via pipeline."""
+        import json
+        # exists: 1 for token, 1 for ast per file (2 files = 4 exists calls)
+        mock_cache._redis.pipeline.return_value.execute.side_effect = [
+            [True, True, True, True],  # exists results
+            # fetch results: token1 hashes, token1 positions, ast1 hashes,
+            #                token2 hashes, token2 positions, ast2 hashes
+            [
+                {"123", "456"}, {"123": json.dumps({"start": [0,0], "end": [1,0]}),
+                                 "456": json.dumps({"start": [2,0], "end": [3,0]})},
+                {"100", "200"},
+                {"789"}, {"789": json.dumps({"start": [0,0], "end": [0,5]})},
+                {"300"},
+            ]
+        ]
+
+        result = mock_cache.get_file_data_batch(["hash_a", "hash_b"])
+
+        assert "hash_a" in result
+        assert "hash_b" in result
+        assert result["hash_a"]["fingerprints"] is not None
+        assert len(result["hash_a"]["fingerprints"]) == 2
+        assert result["hash_a"]["ast_hashes"] is not None
+        assert len(result["hash_a"]["ast_hashes"]) == 2
+        assert result["hash_b"]["fingerprints"] is not None
+        assert len(result["hash_b"]["fingerprints"]) == 1
+
+    def test_get_file_data_batch_empty(self, mock_cache):
+        """Test batch fetch with empty list returns empty dict."""
+        result = mock_cache.get_file_data_batch([])
+        assert result == {}
+
+    def test_get_file_data_batch_not_connected(self):
+        """Test batch fetch when not connected returns None values."""
+        cache = PlagiarismCache()
+        result = cache.get_file_data_batch(["hash_a"])
+        assert result["hash_a"]["fingerprints"] is None
+        assert result["hash_a"]["ast_hashes"] is None
+
+    def test_get_cached_similarities_batch(self, mock_cache):
+        """Test batch fetch of cached similarities via pipeline."""
+        import json
+        mock_cache._redis.pipeline.return_value.execute.return_value = [
+            {"ast_similarity": "0.75", "matches": "[]"},
+            {},  # cache miss
+        ]
+
+        result = mock_cache.get_cached_similarities_batch([
+            ("h1", "h2"), ("h3", "h4")
+        ])
+
+        assert result[("h1", "h2")]["ast_similarity"] == 0.75
+        assert result[("h1", "h2")]["matches"] == []
+        assert result[("h3", "h4")] is None
+
+    def test_get_cached_similarities_batch_empty(self, mock_cache):
+        """Test batch fetch with empty list returns empty dict."""
+        result = mock_cache.get_cached_similarities_batch([])
+        assert result == {}
+
+    def test_cache_similarities_batch(self, mock_cache):
+        """Test batch cache write of similarities via pipeline."""
+        mock_cache.cache_similarities_batch([
+            ("h1", "h2", 0.8, [{"file1": {"start_line": 1}}]),
+            ("h3", "h4", 0.5, []),
+        ])
+
+        # Verify pipeline was called
+        mock_cache._redis.pipeline.assert_called()
+        pipe = mock_cache._redis.pipeline.return_value
+        # 2 pairs × 2 calls (hset + expire) = 4 calls
+        assert pipe.hset.call_count == 2
+        assert pipe.expire.call_count == 2
+        pipe.execute.assert_called()
+
+    def test_cache_similarities_batch_empty(self, mock_cache):
+        """Test batch cache write with empty list does nothing."""
+        mock_cache.cache_similarities_batch([])
+        # Pipeline should not have been called for empty batch
+        mock_cache._redis.pipeline.assert_not_called()

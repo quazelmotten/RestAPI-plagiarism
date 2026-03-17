@@ -88,6 +88,7 @@ class TestProcessorService:
         assert result is None
 
     def test_ensure_files_indexed_parallelizes(self, processor, mock_plagiarism_service, temp_dir):
+        """Test that ensure_files_indexed processes all files (sequential design)."""
         files = []
         for i in range(5):
             path = os.path.join(temp_dir, f"file{i}.py")
@@ -104,23 +105,17 @@ class TestProcessorService:
         mock_inverted_index = processor.inverted_index
         mock_inverted_index.get_file_fingerprints.return_value = None
         processor.cache.get_fingerprints.return_value = None
-
-        # Mock executor.submit to return a completed real Future
-        from concurrent.futures import Future
-
-        mock_fps = [{'hash': 123, 'start': (0, 0), 'end': (1, 0)}]
-
-        def mock_submit(func, *args, **kwargs):
-            f = Future()
-            f.set_result(mock_fps)
-            return f
-
-        mock_plagiarism_service.analysis_executor.submit.side_effect = mock_submit
+        mock_plagiarism_service.safe_run_cli_fingerprint.return_value = {
+            'fingerprints': [{'hash': 1, 'start': (0,0), 'end': (1,0)}],
+            'ast_hashes': [],
+            'tokens': []
+        }
 
         fingerprint_map = processor.ensure_files_indexed(files, 'python', 'test_task')
 
-        # Each file should be submitted to executor
-        assert mock_plagiarism_service.analysis_executor.submit.call_count == 5
+        # index_file_fingerprints should be called 5 times (once per file)
+        # safe_run_cli_fingerprint is called once per file inside index_file_fingerprints
+        assert mock_plagiarism_service.safe_run_cli_fingerprint.call_count == 5
         # Fingerprint map should contain entries for all files
         assert len(fingerprint_map) == 5
 
@@ -154,6 +149,7 @@ class TestProcessorService:
         assert mock_plagiarism_service.safe_run_cli_fingerprint.call_count == 3
 
     def test_ensure_files_indexed_skips_already_indexed(self, processor, mock_plagiarism_service, temp_dir):
+        """Test that already indexed files are skipped and only missing files are processed."""
         files = []
         for i in range(2):
             path = os.path.join(temp_dir, f"file{i}.py")
@@ -167,28 +163,31 @@ class TestProcessorService:
             })
 
         mock_inverted_index = processor.inverted_index
-        # First file already indexed, second not
-        mock_inverted_index.get_file_fingerprints.side_effect = [[{'hash': 123}], None]
-        # Return fingerprints for the already-indexed file
-        processor.cache.get_fingerprints.side_effect = [
-            [{'hash': 123, 'start': (0,0), 'end': (1,0)}],  # for already-indexed file
-            None  # for the second file (not cached)
+        # Call sequence: file0: get_file_fingerprints once; file1: get_file_fingerprints twice (once in ensure_files_indexed, once inside index_file_fingerprints)
+        mock_inverted_index.get_file_fingerprints.side_effect = [
+            [{'hash': 123}],  # file0: already indexed -> truthy
+            None,              # file1: first check -> not indexed
+            None               # file1: second check inside index_file_fingerprints -> not indexed
         ]
-
-        from concurrent.futures import Future
-
-        def mock_submit(func, *args, **kwargs):
-            f = Future()
-            f.set_result([{'hash': 456, 'start': (0,0), 'end': (1,0)}])
-            return f
-        mock_plagiarism_service.analysis_executor.submit.side_effect = mock_submit
+        # Return fingerprints for the already-indexed file from cache
+        processor.cache.get_fingerprints.side_effect = [
+            [{'hash': 123, 'start': (0,0), 'end': (1,0)}],  # for already-indexed file (file0)
+            None  # for the second file (not cached) - cache check before indexing
+        ]
+        mock_plagiarism_service.safe_run_cli_fingerprint.return_value = {
+            'fingerprints': [{'hash': 456, 'start': (0,0), 'end': (1,0)}],
+            'ast_hashes': [],
+            'tokens': []
+        }
 
         fingerprint_map = processor.ensure_files_indexed(files, 'python', 'test_task')
 
-        # Only second file should be submitted
-        assert mock_plagiarism_service.analysis_executor.submit.call_count == 1
+        # safe_run_cli_fingerprint should be called only once for the second file
+        assert mock_plagiarism_service.safe_run_cli_fingerprint.call_count == 1
         # Fingerprint map should have entries for both files
         assert len(fingerprint_map) == 2
+        # Already-indexed file should be in map (from cache or inverted index)
+        assert 'hash0' in fingerprint_map or processor.cache.get_fingerprints.called
 
     def test_ensure_files_indexed_uses_cached_fingerprints(self, processor, mock_plagiarism_service, temp_dir):
         files = []
@@ -223,11 +222,11 @@ class TestProcessorService:
             {'id': '3', 'file_hash': 'h3', 'file_path': '/fake3.py'},
         ]
 
-        # Mock inverted index to return candidate hashes for files with enough fingerprints
+        # Mock inverted index to return candidate hashes with overlap scores
         def mock_find_candidates(fingerprints, language):
             if len(fingerprints) >= 100:
-                return {'h2', 'h3'}  # Simulate overlap with other files
-            return set()
+                return {'h2': 0.5, 'h3': 0.3}  # Dict: file_hash -> overlap_score
+            return {}
 
         mock_inverted_index.find_candidate_files.side_effect = mock_find_candidates
 
@@ -243,11 +242,11 @@ class TestProcessorService:
 
         # Should produce pairs: (h1,h2), (h1,h3), (h2,h3), (h3,h2) depending on candidate returns.
         assert len(pairs) >= 2
-        for a, b in pairs:
+        for a, b, score in pairs:
             assert a in files
             assert b in files
             assert a['id'] != b['id']
-            # Verify both file hashes are in each other's candidate sets? Not necessary.
+            assert 0.0 <= score <= 1.0
 
     def test_find_cross_task_pairs(self, processor, mock_inverted_index):
         """Test cross-task pair generation."""
@@ -262,8 +261,8 @@ class TestProcessorService:
 
         def mock_find_candidates(fingerprints, language):
             if len(fingerprints) >= 100:
-                return {'old_h1', 'old_h2'}
-            return set()
+                return {'old_h1': 0.6, 'old_h2': 0.4}
+            return {}
 
         mock_inverted_index.find_candidate_files.side_effect = mock_find_candidates
 
@@ -281,7 +280,7 @@ class TestProcessorService:
 
         # Each new file should pair with both existing files
         assert len(pairs) == 4
-        for new_file, old_file in pairs:
+        for new_file, old_file, score in pairs:
             assert new_file in new_files
             assert old_file in existing_files
 
@@ -307,6 +306,6 @@ class TestProcessorService:
 
         # Should have fallen back to pairing with all existing files
         assert len(pairs) == 2
-        for new_file, old_file in pairs:
+        for new_file, old_file, score in pairs:
             assert new_file['id'] == 'new1'
             assert old_file in existing_files

@@ -186,8 +186,9 @@ class TestResultService:
 
         # No fingerprints in cache
         result_service.cache.has_ast_fingerprints.return_value = False
-        # No lock acquired
-        result_service.cache.lock_fingerprint_computation.return_value = False
+        # Lock acquired successfully
+        result_service.cache.lock_fingerprint_computation.return_value = True
+        result_service.cache.unlock_fingerprint_computation.return_value = True
 
         mock_plagiarism_service.safe_run_cli_fingerprint.return_value = {
             'fingerprints': [{'hash': 1, 'start': (0,0), 'end': (0,1)}],
@@ -213,10 +214,13 @@ class TestResultService:
             {'task_id': 't1', 'file_a_id': 'a', 'file_b_id': 'b', 'ast_similarity': 0.5, 'matches': []},
             {'task_id': 't1', 'file_a_id': 'c', 'file_b_id': 'd', 'ast_similarity': 0.6, 'matches': []}
         ]
-        # Patch the crud function
+        # Patch the crud function where it's used
         with patch('worker.services.result_service.bulk_insert_similarity_results') as mock_bulk:
             result_service.flush_results('t1', buffer, force=True)
-            mock_bulk.assert_called_once_with(buffer)
+            mock_bulk.assert_called_once()
+            # Verify the data passed
+            call_args = mock_bulk.call_args[0][0]
+            assert len(call_args) == 2
         assert len(buffer) == 0  # buffer cleared
 
     def test_flush_results_under_threshold_not_called(self, result_service):

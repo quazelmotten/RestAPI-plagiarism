@@ -1,26 +1,24 @@
+"""
+Database connection and session management for the worker.
+"""
+
 from contextlib import contextmanager
+
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import QueuePool
 
-from config import settings
+from worker.config import settings
 
-DATABASE_URL = (
-    f"postgresql+psycopg2://{settings.db_user}:{settings.db_pass}@"
-    f"{settings.db_host}:{settings.db_port}/{settings.db_name}"
-)
 Base = declarative_base()
 
-# Use connection pool for concurrent access
-# Pool size should be >= max_workers * threads_per_worker
 engine = create_engine(
-    DATABASE_URL,
+    settings.db_sync_url,
     poolclass=QueuePool,
-    pool_size=getattr(settings, 'db_pool_size', 10),
-    max_overflow=getattr(settings, 'db_max_overflow', 20),
-    pool_timeout=getattr(settings, 'db_pool_timeout', 30),
-    pool_pre_ping=True,  # Check connections before using
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_timeout=settings.db_pool_timeout,
+    pool_pre_ping=True,
 )
 Session = sessionmaker(engine)
 

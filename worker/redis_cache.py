@@ -5,12 +5,12 @@ Uses Redis Set operations (SINTER) for efficient AST similarity calculations.
 
 import json
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 import redis
 from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
 
-from config import settings
+from worker.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -331,6 +331,154 @@ class PlagiarismCache:
         except RedisError as e:
             logger.warning(f"Failed to get cached similarity: {e}")
             return None
+
+    def get_file_data_batch(
+        self, file_hashes: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Batch-fetch fingerprints and AST hashes for multiple files in a single pipeline.
+
+        Args:
+            file_hashes: List of file hashes to fetch
+
+        Returns:
+            Dict mapping file_hash -> {'fingerprints': [...], 'ast_hashes': [...]}
+            Files not in cache have None for their values.
+        """
+        result: Dict[str, Dict[str, Any]] = {
+            h: {'fingerprints': None, 'ast_hashes': None}
+            for h in file_hashes
+        }
+        if not self.is_connected or not file_hashes:
+            return result
+
+        try:
+            pipe = self._redis.pipeline()
+            index_map = []  # (file_hash, 'fingerprints'/'ast_hashes', command_index)
+
+            for fh in file_hashes:
+                token_key = self._get_token_key(fh)
+                ast_key = self._get_ast_key(fh)
+                pipe.exists(f"{token_key}:hashes")
+                index_map.append((fh, 'token_exists'))
+                pipe.exists(f"{ast_key}:hashes")
+                index_map.append((fh, 'ast_exists'))
+
+            exists_results = pipe.execute()
+
+            # Second pass: only fetch data for files that exist
+            pipe2 = self._redis.pipeline()
+            fetch_map = []
+            for i, (fh, key_type) in enumerate(index_map):
+                exists = exists_results[i]
+                if key_type == 'token_exists' and exists:
+                    token_key = self._get_token_key(fh)
+                    pipe2.smembers(f"{token_key}:hashes")
+                    pipe2.hgetall(f"{token_key}:positions")
+                    fetch_map.append((fh, 'fingerprints'))
+                elif key_type == 'ast_exists' and exists:
+                    ast_key = self._get_ast_key(fh)
+                    pipe2.smembers(f"{ast_key}:hashes")
+                    fetch_map.append((fh, 'ast_hashes'))
+
+            if fetch_map:
+                fetch_results = pipe2.execute()
+                ri = 0
+                for fh, data_type in fetch_map:
+                    if data_type == 'fingerprints':
+                        hashes = fetch_results[ri]
+                        positions_raw = fetch_results[ri + 1]
+                        ri += 2
+                        fingerprints = []
+                        for h in hashes:
+                            pos_json = positions_raw.get(h)
+                            if pos_json:
+                                pos = json.loads(pos_json)
+                                fingerprints.append({
+                                    'hash': int(h) if h.isdigit() else h,
+                                    'start': pos['start'],
+                                    'end': pos['end']
+                                })
+                        result[fh]['fingerprints'] = fingerprints if fingerprints else None
+                    elif data_type == 'ast_hashes':
+                        hash_strings = fetch_results[ri]
+                        ri += 1
+                        ast_hashes = []
+                        for h in hash_strings:
+                            try:
+                                ast_hashes.append(int(h))
+                            except ValueError:
+                                ast_hashes.append(h)
+                        result[fh]['ast_hashes'] = ast_hashes if ast_hashes else None
+
+        except RedisError as e:
+            logger.warning(f"Failed to batch-fetch file data: {e}")
+
+        return result
+
+    def get_cached_similarities_batch(
+        self, pairs: List[Tuple[str, str]]
+    ) -> Dict[Tuple[str, str], Optional[Dict[str, Any]]]:
+        """
+        Batch-fetch cached similarity results for multiple pairs in a single pipeline.
+
+        Args:
+            pairs: List of (file_a_hash, file_b_hash) tuples
+
+        Returns:
+            Dict mapping (hash_a, hash_b) -> similarity result or None if not cached
+        """
+        result: Dict[Tuple[str, str], Optional[Dict[str, Any]]] = {
+            (a, b): None for a, b in pairs
+        }
+        if not self.is_connected or not pairs:
+            return result
+
+        try:
+            pipe = self._redis.pipeline()
+            pair_keys = []
+            for a, b in pairs:
+                key = self._get_similarity_key(a, b)
+                pipe.hgetall(key)
+                pair_keys.append((a, b))
+
+            all_data = pipe.execute()
+
+            for (a, b), data in zip(pair_keys, all_data):
+                if data:
+                    result[(a, b)] = {
+                        'ast_similarity': float(data.get('ast_similarity', 0)),
+                        'matches': json.loads(data.get('matches', '[]'))
+                    }
+        except RedisError as e:
+            logger.warning(f"Failed to batch-fetch similarities: {e}")
+
+        return result
+
+    def cache_similarities_batch(
+        self, results: List[Tuple[str, str, float, List[Dict[str, Any]]]]
+    ) -> None:
+        """
+        Batch-cache similarity results for multiple pairs in a single pipeline.
+
+        Args:
+            results: List of (file_a_hash, file_b_hash, ast_similarity, matches) tuples
+        """
+        if not self.is_connected or not results:
+            return
+
+        try:
+            pipe = self._redis.pipeline()
+            for a, b, sim, matches in results:
+                key = self._get_similarity_key(a, b)
+                pipe.hset(key, mapping={
+                    'ast_similarity': sim,
+                    'matches': json.dumps(matches),
+                })
+                pipe.expire(key, self.ttl)
+            pipe.execute()
+        except RedisError as e:
+            logger.warning(f"Failed to batch-cache similarities: {e}")
 
     def delete_fingerprints(self, file_hash: str) -> bool:
         """Delete all cached data for a file."""
