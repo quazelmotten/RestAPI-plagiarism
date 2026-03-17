@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 
 from database import get_async_session
+from models.models import SimilarityResult, File as FileModel, PlagiarismTask
 from services.task_service import TaskService
 from services.file_service import FileService
 from services.result_service import ResultService
@@ -96,6 +97,77 @@ async def get_file_list(db: AsyncSession = Depends(get_async_session)):
     return await file_service.get_all_file_info()
 
 
+@router.get("/files/{file_id}/similarities")
+async def get_file_similarities(
+    file_id: str,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Get all similarity results involving this file, with details of the other file."""
+    stmt = select(
+        SimilarityResult.file_a_id,
+        SimilarityResult.file_b_id,
+        SimilarityResult.ast_similarity,
+        SimilarityResult.task_id,
+    ).where(
+        (SimilarityResult.file_a_id == file_id) |
+        (SimilarityResult.file_b_id == file_id)
+    )
+    results = await db.execute(stmt)
+    rows = results.all()
+    if not rows:
+        return []
+    
+    other_file_data = []
+    task_ids = set()
+    for row in rows:
+        if str(row.file_a_id) == file_id:
+            other_id = str(row.file_b_id)
+        else:
+            other_id = str(row.file_a_id)
+        other_file_data.append((other_id, row.ast_similarity, str(row.task_id)))
+        task_ids.add(row.task_id)
+    
+    other_ids = list(set(fid for fid, _, _ in other_file_data))
+    if not other_ids:
+        return []
+    
+    # Get file details and join with tasks for status
+    file_stmt = select(
+        FileModel.id,
+        FileModel.filename,
+        FileModel.language,
+        FileModel.task_id,
+        PlagiarismTask.status,
+    ).join(PlagiarismTask, FileModel.task_id == PlagiarismTask.id).where(
+        FileModel.id.in_(other_ids)
+    )
+    file_results = await db.execute(file_stmt)
+    files_map = {}
+    for row in file_results.all():
+        files_map[str(row.id)] = {
+            "filename": row.filename,
+            "language": row.language,
+            "task_id": str(row.task_id),
+            "status": row.status,
+        }
+    
+    response = []
+    for fid, sim, task_id in other_file_data:
+        file_info = files_map.get(fid)
+        if file_info:
+            response.append({
+                "id": fid,
+                "filename": file_info["filename"],
+                "language": file_info["language"],
+                "task_id": file_info["task_id"],
+                "status": file_info["status"],
+                "similarity": sim,
+            })
+    
+    response.sort(key=lambda x: x["similarity"], reverse=True)
+    return response
+
+
 @router.get("/files/{file_id}/content", response_model=FileContentResponse)
 async def get_file_content(
     file_id: str,
@@ -164,13 +236,11 @@ async def analyze_file_pair(
     # Run full analysis using CLI analyzer
     import sys
     import os
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    if os.path.join(project_root, 'worker') not in sys.path:
-        sys.path.insert(0, os.path.join(project_root, 'worker'))
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
     from cli.analyzer import analyze_plagiarism_cached
-    from redis_cache import cache
+    from worker.redis_cache import cache
 
     similarity, matches, metrics = analyze_plagiarism_cached(
         file_a_model.file_path,

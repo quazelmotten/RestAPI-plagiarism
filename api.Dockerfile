@@ -23,6 +23,10 @@ RUN apt update && pip install --upgrade pip && pip3 install -r requirements.txt
 # Copy Python source
 COPY ./src ./
 
+# Copy additional required modules
+COPY ./cli ./cli
+COPY ./worker ./worker
+
 # Copy built frontend from previous stage
 COPY --from=frontend-build /frontend/dist ./frontend/dist
 

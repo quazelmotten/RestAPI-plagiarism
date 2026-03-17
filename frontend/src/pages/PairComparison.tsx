@@ -8,19 +8,31 @@ import {
   Alert,
   AlertIcon,
   HStack,
+  VStack,
   Text,
   Card,
   CardBody,
   useColorModeValue,
   Flex,
-  Select,
 } from '@chakra-ui/react';
+import { FiFolder } from 'react-icons/fi';
 import api from '../services/api';
+import FilePickerModal from '../components/FilePickerModal';
+import { useSearchParams } from 'react-router';
 
 interface FileInfo {
   id: string;
   filename: string;
   language: string;
+}
+
+interface FilePickerFile {
+  id: string;
+  filename: string;
+  language: string;
+  task_id: string;
+  status: string;
+  similarity?: number;
 }
 
 interface PlagiarismMatch {
@@ -30,18 +42,14 @@ interface PlagiarismMatch {
   file_b_end_line: number;
 }
 
-interface RawMatch {
-  file1: { start_line: number; end_line: number; start_col?: number; end_col?: number };
-  file2: { start_line: number; end_line: number; start_col?: number; end_col?: number };
-}
-
-const transformMatches = (raw: any[]): PlagiarismMatch[] => {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((m: RawMatch) => ({
-    file_a_start_line: m.file1?.start_line ?? 0,
-    file_a_end_line: m.file1?.end_line ?? 0,
-    file_b_start_line: m.file2?.start_line ?? 0,
-    file_b_end_line: m.file2?.end_line ?? 0,
+// Matches are already in the correct format from the API
+const transformMatches = (matches: any[]): PlagiarismMatch[] => {
+  if (!Array.isArray(matches)) return [];
+  return matches.map(m => ({
+    file_a_start_line: m.file_a_start_line,
+    file_a_end_line: m.file_a_end_line,
+    file_b_start_line: m.file_b_start_line,
+    file_b_end_line: m.file_b_end_line,
   }));
 };
 
@@ -162,8 +170,8 @@ const FileViewer: React.FC<FileViewerProps> = ({
   }, [scrollContainerRef, onJumpToMatch, isFileA]);
 
   return (
-    <Card flex={1}>
-      <CardBody p={0}>
+    <Card flex={1} display="flex" flexDirection="column">
+      <CardBody p={0} flex={1} display="flex" flexDirection="column">
         <Flex direction="column" h="100%">
           <HStack p={3} borderBottomWidth={1} borderColor={borderColor} justify="space-between">
             <Text fontWeight="bold">{fileName}</Text>
@@ -176,7 +184,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
             overflowX="auto"
             fontFamily="monospace"
             fontSize="sm"
-            maxH="calc(100vh - 20rem)"
+            minW={0}
           >
             {lines.map((line, idx) => {
               const lineNumber = idx + 1;
@@ -220,16 +228,17 @@ const FileViewer: React.FC<FileViewerProps> = ({
                   >
                     {lineNumber}
                   </Box>
-                  <Box
-                    flex={1}
-                    pl={3}
-                    py={0.5}
-                    whiteSpace="pre"
-                    color={textColor}
-                    minWidth={0}
-                  >
-                    {line || ' '}
-                  </Box>
+                   <Box
+                     flex={1}
+                     pl={3}
+                     py={0.5}
+                     whiteSpace="pre-wrap"
+                     wordBreak="break-word"
+                     color={textColor}
+                     minWidth={0}
+                   >
+                     {line || ' '}
+                   </Box>
                 </Flex>
               );
             })}
@@ -241,18 +250,19 @@ const FileViewer: React.FC<FileViewerProps> = ({
 };
 
 const PairComparison: React.FC = () => {
-  const [files, setFiles] = useState<FileInfo[]>([]);
   const [currentPair, setCurrentPair] = useState<PairResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedFileAId, setSelectedFileAId] = useState<string>('');
-  const [selectedFileBId, setSelectedFileBId] = useState<string>('');
+  const [selectedFileA, setSelectedFileA] = useState<FilePickerFile | null>(null);
+  const [selectedFileB, setSelectedFileB] = useState<FilePickerFile | null>(null);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [fileAContent, setFileAContent] = useState<FileContent | null>(null);
   const [fileBContent, setFileBContent] = useState<FileContent | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
   const [hoveredMatchIndex, setHoveredMatchIndex] = useState<number | null>(null);
   const [analyzingMatches, setAnalyzingMatches] = useState(false);
+
+  // Read URL query params for initial file selection
+  const [searchParams] = useSearchParams();
 
   const fileAContainerRef = useRef<HTMLDivElement>(null);
   const fileBContainerRef = useRef<HTMLDivElement>(null);
@@ -261,71 +271,62 @@ const PairComparison: React.FC = () => {
 
   const bgColor = useColorModeValue('white', 'gray.800');
 
-  const uniqueFiles = useMemo(() => files, [files]);
-
   const currentPairMemo = useMemo(() => currentPair, [currentPair]);
 
   const isFileAInPair = useMemo(() => {
     if (!currentPairMemo) return false;
-    return currentPairMemo.file_a.id === selectedFileAId;
-  }, [currentPairMemo, selectedFileAId]);
+    return currentPairMemo.file_a.id === selectedFileA?.id;
+  }, [currentPairMemo, selectedFileA?.id]);
 
-  // Fetch file list on mount
+  // Load file IDs from URL query params on mount
   useEffect(() => {
-    fetchFileList();
-  }, []);
-
-  const fetchFileList = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await api.get('/plagiarism/files/list');
-      if (Array.isArray(response.data)) {
-        setFiles(response.data);
-        // Auto-select first two files if available
-        if (response.data.length >= 2 && !selectedFileAId && !selectedFileBId) {
-          setSelectedFileAId(response.data[0].id);
-          setSelectedFileBId(response.data[1].id);
-        }
-      } else {
-        setError('Invalid file list format');
-        setFiles([]);
-      }
-    } catch (err: any) {
-      console.error('Error fetching file list:', err);
-      setError(err.response?.data?.detail || err.message || 'Failed to load file list');
-    } finally {
-      setLoading(false);
+    const fileAId = searchParams.get('file_a');
+    const fileBId = searchParams.get('file_b');
+    if (fileAId && fileBId && !selectedFileA && !selectedFileB) {
+      // Fetch files list to get full file objects
+      api.get('/plagiarism/files/list')
+        .then(res => {
+          const fileA = res.data.find((f: any) => f.id === fileAId);
+          const fileB = res.data.find((f: any) => f.id === fileBId);
+          if (fileA && fileB) {
+            setSelectedFileA(fileA);
+            setSelectedFileB(fileB);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load files from URL params', err);
+        });
     }
-  };
+  }, [searchParams, selectedFileA, selectedFileB]);
 
   // Fetch specific file pair when selection changes
   useEffect(() => {
-    if (selectedFileAId && selectedFileBId) {
+    if (selectedFileA && selectedFileB) {
       fetchFilePair();
     } else {
       setCurrentPair(null);
     }
-  }, [selectedFileAId, selectedFileBId]);
+  }, [selectedFileA, selectedFileB]);
 
-  const fetchFilePair = async () => {
-    try {
-      const response = await api.get('/plagiarism/file-pair', {
-        params: { file_a: selectedFileAId, file_b: selectedFileBId }
-      });
-      const pairData = response.data;
+   const fetchFilePair = async () => {
+     if (!selectedFileA || !selectedFileB) return;
+     try {
+       const response = await api.get('/plagiarism/file-pair', {
+         params: { file_a: selectedFileA.id, file_b: selectedFileB.id }
+       });
+       const pairData = response.data;
 
-      // Transform matches from backend format to frontend format
-      const transformedMatches = transformMatches(pairData.matches);
-      pairData.matches = transformedMatches;
+       // Transform matches from backend format to frontend format
+       const transformedMatches = transformMatches(pairData.matches);
+       pairData.matches = transformedMatches;
 
-      // If matches are empty, trigger on-demand analysis
-      if (!transformedMatches || transformedMatches.length === 0) {
-        setAnalyzingMatches(true);
-        try {
-          const analyzeResponse = await api.post('/plagiarism/file-pair/analyze', null, {
-            params: { file_a: selectedFileAId, file_b: selectedFileBId }
-          });
+       // If matches are empty, trigger on-demand analysis
+       if (!transformedMatches || transformedMatches.length === 0) {
+         setAnalyzingMatches(true);
+         try {
+           const analyzeResponse = await api.post('/plagiarism/file-pair/analyze', null, {
+             params: { file_a: selectedFileA.id, file_b: selectedFileB.id }
+           });
           pairData.matches = transformMatches(analyzeResponse.data.matches);
           pairData.ast_similarity = analyzeResponse.data.ast_similarity;
         } catch (analyzeErr: any) {
@@ -345,7 +346,7 @@ const PairComparison: React.FC = () => {
   };
 
   const loadFileContent = useCallback(async () => {
-    if (!selectedFileAId || !selectedFileBId) return;
+    if (!selectedFileA || !selectedFileB) return;
     setLoadingContent(true);
     setFileAContent(null);
     setFileBContent(null);
@@ -355,8 +356,8 @@ const PairComparison: React.FC = () => {
 
     try {
       const [fileAResponse, fileBResponse] = await Promise.all([
-        api.get(`/plagiarism/files/${selectedFileAId}/content`),
-        api.get(`/plagiarism/files/${selectedFileBId}/content`)
+        api.get(`/plagiarism/files/${selectedFileA.id}/content`),
+        api.get(`/plagiarism/files/${selectedFileB.id}/content`)
       ]);
       setFileAContent(fileAResponse.data);
       setFileBContent(fileBResponse.data);
@@ -366,13 +367,13 @@ const PairComparison: React.FC = () => {
     } finally {
       setLoadingContent(false);
     }
-  }, [selectedFileAId, selectedFileBId]);
+  }, [selectedFileA, selectedFileB]);
 
   useEffect(() => {
-    if (selectedFileAId && selectedFileBId) {
+    if (selectedFileA && selectedFileB) {
       loadFileContent();
     }
-  }, [selectedFileAId, selectedFileBId, loadFileContent]);
+  }, [selectedFileA, selectedFileB, loadFileContent]);
 
   const getLineRef = useCallback((fileA: boolean) => (lineIndex: number, el: HTMLDivElement | null) => {
     if (el) {
@@ -417,114 +418,70 @@ const PairComparison: React.FC = () => {
     targetContainer.scrollTop = Math.max(0, Math.min(newScrollTop, maxScrollTop));
   }, [currentPairMemo]);
 
-  const handleFileAChange = (fileId: string) => {
-    setSelectedFileAId(fileId);
-    setHoveredMatchIndex(null);
-    fileALineRefs.current.clear();
-    fileBLineRefs.current.clear();
-  };
-
-  const handleFileBChange = (fileId: string) => {
-    setSelectedFileBId(fileId);
-    setHoveredMatchIndex(null);
-    fileALineRefs.current.clear();
-    fileBLineRefs.current.clear();
-  };
-
-  if (loading) {
-    return (
-      <Box p={8} textAlign="center">
-        <Spinner size="xl" color="blue.500" thickness="4px" />
-        <Text mt={4}>Loading file list...</Text>
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box p={8}>
-        <Alert status="error" mb={4}>
-          <AlertIcon />
-          {error}
-        </Alert>
-        <Button onClick={fetchFileList}>Retry</Button>
-      </Box>
-    );
-  }
-
   return (
-    <Box>
-      <Heading mb={4}>Pair Comparison</Heading>
+    <Box minH="100vh" display="flex" flexDir="column">
 
       <Card mb={4} bg={bgColor}>
         <CardBody>
-          <Flex align="center" gap={4} mb={3}>
-            <Select
-              value={selectedFileAId}
-              onChange={(e) => handleFileAChange(e.target.value)}
-              flex={1}
-              size="lg"
-            >
-              {uniqueFiles.map((file) => (
-                <option key={file.id} value={file.id}>
-                  {file.filename}
-                </option>
-              ))}
-            </Select>
-            <Text fontSize="lg" fontWeight="bold">vs</Text>
-            <Select
-              value={selectedFileBId}
-              onChange={(e) => handleFileBChange(e.target.value)}
-              flex={1}
-              size="lg"
-            >
-              {uniqueFiles.map((file) => (
-                <option key={file.id} value={file.id}>
-                  {file.filename}
-                </option>
-              ))}
-            </Select>
-            {currentPair && (
-              <Box
-                px={6}
-                py={3}
-                borderRadius="lg"
-                bg={getSimilarityGradient(currentPair.ast_similarity || 0)}
-                color="white"
-                textAlign="center"
-                minW="120px"
+          <VStack spacing={4}>
+            <HStack spacing={4} w="100%" justify="center">
+              <Button
+                leftIcon={<FiFolder />}
+                size="lg"
+                variant="outline"
+                flex={1}
+                onClick={() => setIsPickerOpen(true)}
+                title="Select files to compare"
               >
-                <Text fontSize="xl" fontWeight="bold">
-                  {((currentPair.ast_similarity || 0) * 100).toFixed(1)}%
-                </Text>
-              </Box>
-            )}
-          </Flex>
-          <Text fontSize="sm" color="gray.600" textAlign="center">
-            Click any highlighted region to jump to the matching region in the other file
-          </Text>
-          {analyzingMatches && (
-            <HStack justify="center" mt={2}>
-              <Spinner size="sm" />
-              <Text fontSize="sm" color="blue.500">Computing match details...</Text>
+                {selectedFileA && selectedFileB
+                  ? `${selectedFileA.filename} vs ${selectedFileB.filename}`
+                  : 'Select Files to Compare'}
+              </Button>
+              {currentPair && (
+                <Box
+                  px={6}
+                  py={3}
+                  borderRadius="lg"
+                  bg={getSimilarityGradient(currentPair.ast_similarity || 0)}
+                  color="white"
+                  textAlign="center"
+                  minW="120px"
+                >
+                  <Text fontSize="xl" fontWeight="bold">
+                    {((currentPair.ast_similarity || 0) * 100).toFixed(1)}%
+                  </Text>
+                </Box>
+              )}
             </HStack>
-          )}
-          {contentError && (
-            <Alert status="warning" mt={2}>
-              <AlertIcon />
-              {contentError}
-            </Alert>
-          )}
+
+            <Text fontSize="sm" color="gray.600" textAlign="center">
+              Click any highlighted region to jump to the matching region in the other file
+            </Text>
+
+            {analyzingMatches && (
+              <HStack justify="center">
+                <Spinner size="sm" />
+                <Text fontSize="sm" color="blue.500">Computing match details...</Text>
+              </HStack>
+            )}
+
+            {contentError && (
+              <Alert status="warning">
+                <AlertIcon />
+                {contentError}
+              </Alert>
+            )}
+          </VStack>
         </CardBody>
       </Card>
 
       {loadingContent ? (
-        <Box textAlign="center" py={8}>
+        <Box flex={1} display="flex" alignItems="center" justifyContent="center" py={8}>
           <Spinner size="lg" />
           <Text mt={2}>Loading file contents...</Text>
         </Box>
       ) : (
-        <Flex gap={4} align="stretch">
+        <Flex flex={1} gap={4} align="stretch" py={4} px={2}>
           <FileViewer
             content={fileAContent?.content || ''}
             fileName={fileAContent?.filename || 'File A'}
@@ -550,10 +507,24 @@ const PairComparison: React.FC = () => {
             scrollContainerRef={fileBContainerRef}
             getLineRef={getLineRef(false)}
           />
-        </Flex>
-      )}
-    </Box>
-  );
-};
+         </Flex>
+       )}
+
+       <FilePickerModal
+         isOpen={isPickerOpen}
+         onClose={() => setIsPickerOpen(false)}
+         onSelect={(fileA, fileB) => {
+           setSelectedFileA(fileA);
+           setSelectedFileB(fileB);
+           setHoveredMatchIndex(null);
+           fileALineRefs.current.clear();
+           fileBLineRefs.current.clear();
+         }}
+         initialFileAId={selectedFileA?.id}
+         initialFileBId={selectedFileB?.id}
+       />
+     </Box>
+   );
+ };
 
 export default PairComparison;
