@@ -21,7 +21,7 @@ import api, { API_ENDPOINTS } from '../services/api';
 
 interface Task {
   task_id: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'indexing' | 'finding_pairs' | 'processing' | 'completed' | 'failed';
   total_pairs: number;
   files: { id: string; filename: string }[];
   results: Array<{
@@ -49,6 +49,8 @@ const getStatusColor = (status: string): string => {
   switch (status) {
     case 'completed': return 'green';
     case 'processing': return 'orange';
+    case 'indexing': return 'blue';
+    case 'finding_pairs': return 'purple';
     case 'pending': return 'yellow';
     case 'failed': return 'red';
     default: return 'gray';
@@ -60,6 +62,8 @@ const getStatusIcon = (status: string) => {
     case 'completed':
       return <FiFileText />;
     case 'processing':
+    case 'indexing':
+    case 'finding_pairs':
       return <FiActivity />;
     case 'failed':
       return <FiAlertCircle />;
@@ -116,7 +120,8 @@ const Overview: React.FC = () => {
   
   // Calculate statistics using aggregated counts from backend
   const totalSubmissions = tasks.length;
-  const pendingChecks = tasks.filter(t => t.status === 'pending' || t.status === 'processing').length;
+  const activeStatuses = ['pending', 'indexing', 'finding_pairs', 'processing'];
+  const pendingChecks = tasks.filter(t => activeStatuses.includes(t.status)).length;
   const highSimilarity = tasks.reduce((sum, task) => sum + (task.high_similarity_count || 0), 0);
   const totalFiles = tasks.reduce((sum, task) => sum + (task.files_count || 0), 0);
   

@@ -75,13 +75,47 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
         return <FiAlertCircle color="#f56565" />;
       case 'processing':
         return <FiActivity color="#ed8936" />;
+      case 'indexing':
+        return <FiLayers color="#4299e1" />;
+      case 'finding_pairs':
+        return <FiLayers color="#9f7aea" />;
       default:
         return <FiLayers color="#a0aec0" />;
     }
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'green.500';
+      case 'failed':
+        return 'red.500';
+      case 'processing':
+        return 'orange.500';
+      case 'indexing':
+        return 'blue.500';
+      case 'finding_pairs':
+        return 'purple.500';
+      default:
+        return 'gray.500';
+    }
+  };
+
   const getStatusColorScheme = (status: string) => {
-    return status === 'completed' ? 'green' : status === 'processing' ? 'orange' : 'yellow';
+    switch (status) {
+      case 'completed':
+        return 'green';
+      case 'failed':
+        return 'red';
+      case 'processing':
+        return 'orange';
+      case 'indexing':
+        return 'blue';
+      case 'finding_pairs':
+        return 'purple';
+      default:
+        return 'gray';
+    }
   };
 
   const handleSelect = (task: TaskListItem) => {
@@ -134,22 +168,21 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
                       placement="left"
                       hasArrow
                     >
-                      <Box
-                        bg={isSelected ? selectedBg : cardBg}
-                        borderLeft="4px solid"
-                        borderLeftColor={
-                          isSelected ? 'blue.500' : 
-                          task.status === 'completed' ? 'green.500' :
-                          task.status === 'processing' ? 'orange.500' : 'yellow.500'
-                        }
-                        px={4}
-                        py={3}
-                        cursor="pointer"
-                        onClick={() => handleSelect(task)}
-                        _hover={{ bg: isSelected ? selectedBg : hoverBg }}
-                        transition="background 0.15s"
-                        borderRadius="md"
-                      >
+                       <Box
+                         bg={isSelected ? selectedBg : cardBg}
+                         borderLeft="4px solid"
+                         borderLeftColor={
+                           isSelected ? 'blue.500' : 
+                           getStatusColor(task.status)
+                         }
+                         px={4}
+                         py={3}
+                         cursor="pointer"
+                         onClick={() => handleSelect(task)}
+                         _hover={{ bg: isSelected ? selectedBg : hoverBg }}
+                         transition="background 0.15s"
+                         borderRadius="md"
+                       >
                         <SimpleGrid columns={{ base: 1, md: 2 }} spacing={2} alignItems="center">
                           <HStack spacing={3}>
                             {getStatusIcon(task.status)}

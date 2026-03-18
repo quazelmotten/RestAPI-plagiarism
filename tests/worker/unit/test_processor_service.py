@@ -20,6 +20,11 @@ class TestProcessorService:
         return ps
 
     @pytest.fixture
+    def mock_similarity_service(self):
+        ss = MagicMock()
+        return ss
+
+    @pytest.fixture
     def mock_cache(self):
         cache = MagicMock()
         cache.is_connected = True
@@ -31,10 +36,10 @@ class TestProcessorService:
         return ii
 
     @pytest.fixture
-    def processor(self, mock_plagiarism_service, mock_cache, mock_inverted_index):
+    def processor(self, mock_plagiarism_service, mock_similarity_service, mock_cache, mock_inverted_index):
         with patch('worker.services.processor_service.cache', mock_cache), \
              patch('worker.services.processor_service.inverted_index', mock_inverted_index):
-            yield ProcessorService(mock_plagiarism_service)
+            yield ProcessorService(mock_plagiarism_service, mock_similarity_service)
 
     def test_index_file_fingerprints_success(self, processor, mock_plagiarism_service, mock_inverted_index, temp_dir):
         file_path = os.path.join(temp_dir, "test.py")
@@ -214,7 +219,7 @@ class TestProcessorService:
         assert mock_inverted_index.add_file_fingerprints.call_count == 2
         mock_plagiarism_service.safe_run_cli_fingerprint.assert_not_called()
 
-    def test_find_intra_task_pairs_uses_inverted_index(self, processor, mock_inverted_index):
+    def test_find_intra_task_pairs_uses_inverted_index(self, processor, mock_similarity_service):
         """Test intra-task pair generation."""
         files = [
             {'id': '1', 'file_hash': 'h1', 'file_path': '/fake1.py'},
@@ -222,13 +227,16 @@ class TestProcessorService:
             {'id': '3', 'file_hash': 'h3', 'file_path': '/fake3.py'},
         ]
 
-        # Mock inverted index to return candidate hashes with overlap scores
-        def mock_find_candidates(fingerprints, language):
-            if len(fingerprints) >= 100:
-                return {'h2': 0.5, 'h3': 0.3}  # Dict: file_hash -> overlap_score
+        # Mock similarity service to return candidate scores
+        def mock_get_candidate_scores(file_hash, language, task_id=None):
+            if file_hash == 'h1':
+                return {'h2': 0.5, 'h3': 0.3}
+            if file_hash == 'h2':
+                return {'h1': 0.5, 'h3': 0.2}
+            if file_hash == 'h3':
+                return {'h1': 0.3, 'h2': 0.2}
             return {}
-
-        mock_inverted_index.find_candidate_files.side_effect = mock_find_candidates
+        mock_similarity_service.get_candidate_scores.side_effect = mock_get_candidate_scores
 
         # Setup cache to return fingerprints for these file hashes
         fps_100 = [{'hash': i} for i in range(100)]
@@ -240,15 +248,17 @@ class TestProcessorService:
 
         pairs = processor.find_intra_task_pairs(files, 'python', 'test_task')
 
-        # Should produce pairs: (h1,h2), (h1,h3), (h2,h3), (h3,h2) depending on candidate returns.
-        assert len(pairs) >= 2
+        # Should produce multiple pairs
+        assert len(pairs) >= 4  # (h1,h2), (h1,h3), (h2,h1), (h2,h3), (h3,h1), (h3,h2) but deduped by frozenset, so should be 3 pairs: (h1,h2), (h1,h3), (h2,h3)
+        # Actually pairs are deduped so we expect 3
+        assert len(pairs) == 3
         for a, b, score in pairs:
             assert a in files
             assert b in files
             assert a['id'] != b['id']
             assert 0.0 <= score <= 1.0
 
-    def test_find_cross_task_pairs(self, processor, mock_inverted_index):
+    def test_find_cross_task_pairs(self, processor, mock_similarity_service):
         """Test cross-task pair generation."""
         new_files = [
             {'id': 'new1', 'file_hash': 'new_h1', 'file_path': '/n1.py', 'filename': 'n1.py'},
@@ -259,12 +269,11 @@ class TestProcessorService:
             {'id': 'old2', 'file_hash': 'old_h2', 'file_path': '/o2.py', 'filename': 'o2.py'},
         ]
 
-        def mock_find_candidates(fingerprints, language):
-            if len(fingerprints) >= 100:
+        def mock_get_candidate_scores(file_hash, language, task_id=None):
+            if file_hash in ['new_h1', 'new_h2']:
                 return {'old_h1': 0.6, 'old_h2': 0.4}
             return {}
-
-        mock_inverted_index.find_candidate_files.side_effect = mock_find_candidates
+        mock_similarity_service.get_candidate_scores.side_effect = mock_get_candidate_scores
 
         # Setup cache to return fingerprints for all files
         fps_100 = [{'hash': i} for i in range(100)]
@@ -284,15 +293,15 @@ class TestProcessorService:
             assert new_file in new_files
             assert old_file in existing_files
 
-    def test_find_cross_task_pairs_fallback_on_error(self, processor, mock_inverted_index, mock_plagiarism_service):
+    def test_find_cross_task_pairs_fallback_on_error(self, processor, mock_similarity_service, mock_plagiarism_service):
         """Test that if candidate generation fails, falls back to all-existing pairs."""
         new_files = [{'id': 'new1', 'file_hash': 'new_h1', 'file_path': '/fake', 'filename': 'new1.py'}]
         existing_files = [{'id': 'old1', 'file_hash': 'old_h1'}, {'id': 'old2', 'file_hash': 'old_h2'}]
 
-        # inverted_index.find_candidate_files raises an exception
-        mock_inverted_index.find_candidate_files.side_effect = RuntimeError("index error")
-        # safe_run_cli_fingerprint will be called to generate fingerprints; we'll let it succeed
-        mock_plagiarism_service.safe_run_cli_fingerprint.return_value = {
+        # similarity_service.get_candidate_scores raises an exception
+        mock_similarity_service.get_candidate_scores.side_effect = RuntimeError("similarity error")
+        # safe_generate_fingerprints will be called to generate fingerprints; we'll let it succeed
+        mock_plagiarism_service.safe_generate_fingerprints.return_value = {
             'fingerprints': [{'hash': 1, 'start': (0,0), 'end': (0,1)}],
             'ast_hashes': [],
             'tokens': []

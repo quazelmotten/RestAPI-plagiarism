@@ -24,8 +24,16 @@ inverted_index = global_inverted_index
 class ProcessorService:
     """Handles fingerprint indexing and candidate pair generation."""
 
-    def __init__(self, plagiarism_service):
-        self.plagiarism_service = plagiarism_service
+    def __init__(self, analysis_service, similarity_service):
+        """
+        Initialize processor service.
+        
+        Args:
+            analysis_service: Service for full AST analysis and fingerprint generation
+            similarity_service: Service for quick similarity calculations
+        """
+        self.analysis_service = analysis_service
+        self.similarity_service = similarity_service
 
     @property
     def cache(self):
@@ -63,7 +71,7 @@ class ProcessorService:
                 lock_acquired = self.cache.lock_fingerprint_computation(file_hash)
 
             try:
-                fp_result = self.plagiarism_service.safe_run_cli_fingerprint(file_path, language)
+                fp_result = self.analysis_service.generate_fingerprints(file_path, language)
                 fingerprints = fp_result.get("fingerprints", [])
                 ast_hashes = fp_result.get("ast_hashes", [])
 
@@ -99,7 +107,7 @@ class ProcessorService:
 
             try:
                 start_fp = time.time()
-                fp_result = self.plagiarism_service.safe_run_cli_fingerprint(file_path, language)
+                fp_result = self.analysis_service.generate_fingerprints(file_path, language)
                 fingerprints = fp_result.get("fingerprints", [])
                 ast_hashes = fp_result.get("ast_hashes", [])
                 fp_time = time.time() - start_fp
@@ -213,7 +221,7 @@ class ProcessorService:
                     log.debug(f"[Task {task_id}] No fingerprints for {filename_a}, skipping")
                     continue
 
-                candidate_scores = self.inverted_index.find_candidate_files(fingerprints, language)
+                candidate_scores = self.similarity_service.get_candidate_scores(file_a_hash, language, task_id)
                 if not candidate_scores:
                     if idx % 100 == 0:
                         log.debug(f"[Task {task_id}] Processed {idx}/{len(files)} files, no candidates yet")
@@ -274,7 +282,7 @@ class ProcessorService:
                     log.debug(f"[Task {task_id}] No fingerprints for new file {new_file_name}, skipping")
                     continue
 
-                candidate_scores = self.inverted_index.find_candidate_files(fingerprints, language)
+                candidate_scores = self.similarity_service.get_candidate_scores(new_file_hash, language, task_id)
                 if not candidate_scores:
                     if idx % 50 == 0:
                         log.debug(f"[Task {task_id}] Cross-task progress: {idx}/{len(new_files)} new files processed, no candidates yet")
@@ -330,7 +338,7 @@ class ProcessorService:
             lock_acquired = self.cache.lock_fingerprint_computation(file_hash)
         try:
             start = time.time()
-            fp_result = self.plagiarism_service.safe_run_cli_fingerprint(file_path, language)
+            fp_result = self.analysis_service.safe_generate_fingerprints(file_path, language)
             fingerprints = [
                 {"hash": fp["hash"], "start": tuple(fp["start"]), "end": tuple(fp["end"])}
                 for fp in fp_result.get("fingerprints", [])

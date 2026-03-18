@@ -13,7 +13,8 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from worker.worker_lifecycle import AsyncWorker
-from worker.services.plagiarism_service import PlagiarismService
+from worker.services.analysis_service import AnalysisService
+from worker.services.similarity_service import SimilarityService
 from worker.services.processor_service import ProcessorService
 from worker.services.result_service import ResultService
 from worker.services.task_orchestrator import TaskOrchestrator
@@ -26,12 +27,12 @@ def main():
     analysis_max_workers = max(8, settings.worker_concurrency * 4)
     analysis_executor = ThreadPoolExecutor(max_workers=analysis_max_workers)
 
-    plagiarism_service = PlagiarismService(analysis_executor=analysis_executor)
-    processor_service = ProcessorService(plagiarism_service)
-    result_service = ResultService(plagiarism_service)
+    analysis_service = AnalysisService(analysis_executor=analysis_executor)
+    similarity_service = SimilarityService()
+    processor_service = ProcessorService(analysis_service, similarity_service)
+    result_service = ResultService(analysis_service)
 
     task_orchestrator = TaskOrchestrator(
-        plagiarism_service=plagiarism_service,
         processor_service=processor_service,
         result_service=result_service
     )

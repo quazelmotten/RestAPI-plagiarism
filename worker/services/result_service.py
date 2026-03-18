@@ -18,8 +18,14 @@ cache = global_cache
 class ResultService:
     """Stores similarity results and tracks task progress."""
 
-    def __init__(self, plagiarism_service):
-        self.plagiarism_service = plagiarism_service
+    def __init__(self, analysis_service):
+        """
+        Initialize result service.
+        
+        Args:
+            analysis_service: Service for full AST analysis
+        """
+        self.analysis_service = analysis_service
 
     @property
     def cache(self):
@@ -58,16 +64,16 @@ class ResultService:
 
             # Try cached analysis
             try:
-                result = self.plagiarism_service.safe_run_cached_analyze(
-                    file_a_path, file_b_path, file_a_hash, file_b_hash, language
+                result = self.analysis_service.analyze_pair(
+                    file_a_path, file_b_path, language, file_a_hash, file_b_hash
                 )
                 return {
                     'ast_similarity': result['similarity_ratio'],
                     'matches': result['matches']
                 }
             except Exception:
-                # Fallback to full CLI analysis
-                result = self.plagiarism_service.safe_run_cli_analyze(
+                # Fallback to full analysis
+                result = self.analysis_service.analyze_pair_full(
                     file_a_path, file_b_path, language
                 )
                 return {
@@ -95,7 +101,7 @@ class ResultService:
                 return
 
         try:
-            result = self.plagiarism_service.safe_run_cli_fingerprint(file_path, language)
+            result = self.analysis_service.generate_fingerprints(file_path, language)
             fingerprints = result.get("fingerprints", [])
             ast_hashes = result.get("ast_hashes", [])
             fingerprints_for_index = [
@@ -133,15 +139,33 @@ class ResultService:
             })
             similarities.append(similarity)
 
-        if results:
-            bulk_insert_similarity_results(results)
-            if similarities:
-                avg_sim = sum(similarities) / len(similarities)
-                max_sim = max(similarities)
-                min_sim = min(similarities)
-                log.info(f"[Task {task_id}] Stored {len(results)} similarity percentages (min={min_sim:.3f}, avg={avg_sim:.3f}, max={max_sim:.3f})")
-            else:
-                log.info(f"[Task {task_id}] Stored {len(results)} similarity percentages")
+        if not results:
+            log.info(f"[Task {task_id}] No valid pairs to store")
+            return
+
+        # Insert in batches and update progress
+        batch_size = 100
+        total = len(results)
+        for i in range(0, total, batch_size):
+            batch = results[i:i+batch_size]
+            bulk_insert_similarity_results(batch)
+            processed = min(i + batch_size, total)
+            # Update progress after each batch
+            update_plagiarism_task(
+                task_id=task_id,
+                status="processing",
+                processed_pairs=processed
+            )
+            if processed % 500 == 0 or processed == total:
+                log.info(f"[Task {task_id}] Stored {processed}/{total} similarity percentages")
+
+        if similarities:
+            avg_sim = sum(similarities) / len(similarities)
+            max_sim = max(similarities)
+            min_sim = min(similarities)
+            log.info(f"[Task {task_id}] Stored all {total} similarity percentages (min={min_sim:.3f}, avg={avg_sim:.3f}, max={max_sim:.3f})")
+        else:
+            log.info(f"[Task {task_id}] Stored {total} similarity percentages")
 
     def flush_results(self, task_id: str, buffer: list, force: bool = False) -> None:
         """Flush accumulated results to the database."""

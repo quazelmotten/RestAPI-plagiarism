@@ -16,8 +16,14 @@ log = logging.getLogger(__name__)
 class TaskOrchestrator:
     """Orchestrates the plagiarism detection task workflow."""
 
-    def __init__(self, plagiarism_service, processor_service, result_service):
-        self.plagiarism_service = plagiarism_service
+    def __init__(self, processor_service, result_service):
+        """
+        Initialize task orchestrator.
+        
+        Args:
+            processor_service: Service for fingerprint indexing and pair generation
+            result_service: Service for storing results and tracking progress
+        """
         self.processor_service = processor_service
         self.result_service = result_service
 
@@ -50,13 +56,17 @@ class TaskOrchestrator:
                 )
                 raise ValueError("Need at least 2 files for plagiarism check")
 
-            update_plagiarism_task(task_id=task_id, status="processing")
-
-            # Fetch existing files from other tasks
+            # Phase 1: Indexing
+            update_plagiarism_task(
+                task_id=task_id,
+                status="indexing",
+                processed_pairs=0,
+                total_pairs=None
+            )
+            
             existing_files = get_all_files(exclude_task_id=task_id)
             log.info(f"[Task {task_id}] Found {len(existing_files)} existing files")
 
-            # Index fingerprints for all files
             index_start = time.time()
             fingerprint_map = self.processor_service.ensure_files_indexed(
                 files=files,
@@ -66,7 +76,14 @@ class TaskOrchestrator:
             )
             log.info(f"[Task {task_id}] Indexing took {time.time() - index_start:.2f}s")
 
-            # Generate candidate pairs
+            # Phase 2: Generating pairs
+            update_plagiarism_task(
+                task_id=task_id,
+                status="finding_pairs",
+                processed_pairs=0,
+                total_pairs=None
+            )
+            
             pair_start = time.time()
             intra_task_pairs = self.processor_service.find_intra_task_pairs(
                 files=files,
@@ -88,6 +105,7 @@ class TaskOrchestrator:
 
             log.info(f"[Task {task_id}] Total pairs: {total_pairs_count}")
 
+            # Phase 3: Storing similarity percentages (initial quick similarity)
             update_plagiarism_task(
                 task_id=task_id,
                 status="processing",
@@ -95,10 +113,9 @@ class TaskOrchestrator:
                 processed_pairs=0
             )
 
-            # Store overlap percentages
             self.result_service.store_similarity_percentages(task_id, all_pairs)
 
-            # Finalize task
+            # Finalize task (marks completed)
             self.result_service.finalize_task(
                 task_id=task_id,
                 total_pairs=total_pairs_count,

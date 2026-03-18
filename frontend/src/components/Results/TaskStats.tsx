@@ -7,14 +7,11 @@ interface TaskStatsProps {
   avgSimilarity: number;
   getSimilarityColor: (similarity: number) => string;
   getStatusIcon: (status: string) => React.ReactNode;
+  getStatusColorScheme: (status: string) => string;
   cardBg?: string;
 }
 
-const TaskStats: React.FC<TaskStatsProps> = ({ selectedTask, avgSimilarity, getSimilarityColor, getStatusIcon, cardBg }) => {
-  const getStatusColorScheme = (status: string) => {
-    return status === 'completed' ? 'green' : status === 'processing' ? 'orange' : 'yellow';
-  };
-
+const TaskStats: React.FC<TaskStatsProps> = ({ selectedTask, avgSimilarity, getSimilarityColor, getStatusIcon, getStatusColorScheme, cardBg }) => {
   return (
     <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
       <Card bg={cardBg}>

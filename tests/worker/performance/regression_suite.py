@@ -17,8 +17,10 @@ worker_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'worker')
 sys.path.insert(0, worker_dir)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
-from worker.services.plagiarism_service import PlagiarismService
+from worker.services.analysis_service import AnalysisService
+from worker.services.similarity_service import SimilarityService
 from worker.services.result_service import ResultService
+from worker.services.processor_service import ProcessorService
 from worker.redis_cache import cache
 from cli.analyzer import parse_file, tokenize_with_tree_sitter, \
     compute_fingerprints, winnow_fingerprints, extract_ast_hashes
@@ -45,13 +47,14 @@ def setup_test_env():
 
     # Create executor (use 4 workers for testing, consistent with default)
     executor = ProcessPoolExecutor(max_workers=4)
-    ps = PlagiarismService(analysis_executor=executor)
-    rs = ResultService(ps)
+    asvc = AnalysisService(analysis_executor=executor)
+    ssvc = SimilarityService()
+    rs = ResultService(asvc)
 
     # Create temp files
     tmpdir = tempfile.mkdtemp()
 
-    return ps, rs, tmpdir, executor
+    return asvc, ssvc, rs, tmpdir, executor
 
 
 def teardown(executor, tmpdir):
@@ -77,17 +80,17 @@ def generate_files(tmpdir, count=30):
     return files, tmpdir
 
 
-def precompute_fingerprints(ps, files):
+def precompute_fingerprints(analysis_service, similarity_service, files):
     """Pre-cache fingerprints for all files using processor."""
     from worker.services.processor_service import ProcessorService
-    proc = ProcessorService(ps)
+    proc = ProcessorService(analysis_service, similarity_service)
     # Clear inverted index first
     inverted_index.clear_all()
     proc.ensure_files_indexed(files, "python", "perf_test")
     return proc
 
 
-def test_similarity_accuracy(ps, rs, tmpdir):
+def test_similarity_accuracy(analysis_service, similarity_service, result_service, tmpdir):
     """Test 1: Verify cached analysis produces identical results to Analyzer.Start()."""
     print("\n[Test 1] Accuracy verification...")
     from cli.analyzer import Analyzer
@@ -115,7 +118,7 @@ def test_similarity_accuracy(ps, rs, tmpdir):
     file_a_info = {'id': '1', 'file_hash': hash1, 'file_path': file1, 'filename': 'a.py'}
     file_b_info = {'id': '2', 'file_hash': hash2, 'file_path': file2, 'filename': 'b.py'}
 
-    result_cached = rs.process_pair(file_a_info, file_b_info, "python", "accuracy_test")
+    result_cached = result_service.process_pair(file_a_info, file_b_info, "python", "accuracy_test")
 
     # Direct analyzer
     direct = Analyzer().Start(file1, file2, "python")
@@ -127,14 +130,14 @@ def test_similarity_accuracy(ps, rs, tmpdir):
     print(f"  ✓ Accuracy test passed (diff={diff:.6f})")
 
 
-def test_analysis_throughput(ps, rs, tmpdir):
+def test_analysis_throughput(analysis_service, similarity_service, result_service, tmpdir):
     """Test 2: Throughput should meet minimum threshold."""
     print("\n[Test 2] Analysis throughput...")
     n_pairs = 100
 
     # Generate files and pre-cache fingerprints
     files, _ = generate_files(tmpdir, count=n_pairs)
-    proc = precompute_fingerprints(ps, files)
+    proc = precompute_fingerprints(analysis_service, similarity_service, files)
 
     # Select 100 pairs (use first 50 files to create 100 pairs)
     pairs = []
@@ -149,12 +152,12 @@ def test_analysis_throughput(ps, rs, tmpdir):
 
     # Warm-up: run a few pairs to ensure everything is loaded
     for _ in range(5):
-        rs.process_pair(pairs[0][0], pairs[0][1], "python", "warmup")
+        result_service.process_pair(pairs[0][0], pairs[0][1], "python", "warmup")
 
     # Timed run
     start = time.time()
     for a, b in pairs:
-        result = rs.process_pair(a, b, "python", "throughput_test")
+        result = result_service.process_pair(a, b, "python", "throughput_test")
         assert result['ast_similarity'] is not None
     elapsed = time.time() - start
 
@@ -170,7 +173,7 @@ def test_analysis_throughput(ps, rs, tmpdir):
     print(f"  ✓ Throughput test passed")
 
 
-def test_indexing_performance(ps, tmpdir):
+def test_indexing_performance(analysis_service, similarity_service, tmpdir):
     """Test 3: Indexing 30 files should be fast."""
     print("\n[Test 3] Indexing performance...")
     files, _ = generate_files(tmpdir, count=30)
@@ -178,7 +181,7 @@ def test_indexing_performance(ps, tmpdir):
     # Clear index
     inverted_index.clear_all()
 
-    proc = precompute_fingerprints(ps, files)
+    proc = precompute_fingerprints(analysis_service, similarity_service, files)
 
     # Measure time for ensure_files_indexed (already called in precompute, so it's cached)
     # To test raw indexing, we need clear index and measure again
@@ -195,14 +198,14 @@ def test_indexing_performance(ps, tmpdir):
     print(f"  ✓ Indexing performance test passed")
 
 
-def test_pair_generation_efficiency(ps, tmpdir):
+def test_pair_generation_efficiency(analysis_service, similarity_service, tmpdir):
     """Test 4: Pair generation should scale reasonably."""
     print("\n[Test 4] Pair generation efficiency...")
     # Generate 50 files
     files, _ = generate_files(tmpdir, count=50)
 
     # Index them first
-    proc = precompute_fingerprints(ps, files)
+    proc = precompute_fingerprints(analysis_service, similarity_service, files)
 
     # Time intra-task pair generation
     start = time.time()
@@ -234,12 +237,12 @@ def main():
     print("Tests require a running Redis instance.\n")
 
     try:
-        ps, rs, tmpdir, executor = setup_test_env()
+        asvc, ssvc, rs, tmpdir, executor = setup_test_env()
 
-        test_similarity_accuracy(ps, rs, tmpdir)
-        test_analysis_throughput(ps, rs, tmpdir)
-        test_indexing_performance(ps, tmpdir)
-        test_pair_generation_efficiency(ps, tmpdir)
+        test_similarity_accuracy(asvc, ssvc, rs, tmpdir)
+        test_analysis_throughput(asvc, ssvc, rs, tmpdir)
+        test_indexing_performance(asvc, ssvc, tmpdir)
+        test_pair_generation_efficiency(asvc, ssvc, tmpdir)
 
         print("\n" + "=" * 70)
         print("ALL REGRESSION TESTS PASSED ✓")

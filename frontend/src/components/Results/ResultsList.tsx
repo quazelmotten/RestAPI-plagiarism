@@ -51,21 +51,37 @@ const ResultsList: React.FC<ResultsListProps> = ({
                 _hover={{ bg: hoverBg }}
                 onClick={() => handleCompare(result)}
                 justify="space-between"
+                align="center"
               >
-                <HStack flex={1} spacing={4}>
-                  <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="200px">
-                    {result.file_a.filename}
-                  </Text>
-                  <Text fontSize="xs" color="gray.500">vs</Text>
-                  <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="200px">
-                    {result.file_b.filename}
-                  </Text>
+                <HStack flex={1} spacing={2} align="center">
+                  <VStack align="start" spacing={0}>
+                    <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="200px">
+                      {result.file_a.filename}
+                    </Text>
+                    {result.file_a.task_id && (
+                      <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="120px">
+                        ({result.file_a.task_id.substring(0, 8)}...)
+                      </Text>
+                    )}
+                  </VStack>
+                  <Text fontSize="sm" color="gray.500" fontWeight="medium">vs</Text>
+                  <VStack align="start" spacing={0}>
+                    <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="200px">
+                      {result.file_b.filename}
+                    </Text>
+                    {result.file_b.task_id && (
+                      <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="120px">
+                        ({result.file_b.task_id.substring(0, 8)}...)
+                      </Text>
+                    )}
+                  </VStack>
                 </HStack>
                 <Badge
                   colorScheme={getSimilarityColor(result.ast_similarity || 0)}
                   fontSize="md"
                   px={3}
                   py={1}
+                  ml={4}
                 >
                   {((result.ast_similarity || 0) * 100).toFixed(1)}%
                 </Badge>

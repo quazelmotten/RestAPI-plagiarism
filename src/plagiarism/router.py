@@ -332,56 +332,69 @@ async def get_plagiarism_results(
     )
     results = results_result.scalars().all()
     
-    # Get all file IDs from the results (both file_a and file_b, which might be from different tasks for cross-task comparison)
-    file_ids = set()
-    for result in results:
-        file_ids.add(str(result.file_a_id))
-        file_ids.add(str(result.file_b_id))
-    
-    # Get all files that appear in results (across all tasks for cross-task comparison)
-    if file_ids:
-        files_result = await db.execute(
-            select(FileModel).where(FileModel.id.in_(file_ids))
-        )
-        all_files = files_result.scalars().all()
-        file_map = {str(f.id): f.filename for f in all_files}
-    else:
-        file_map = {}
-    
-    # Format results
-    formatted_results = []
-    for result in results:
-        formatted_results.append({
-            "file_a": {
-                "id": str(result.file_a_id),
-                "filename": file_map.get(str(result.file_a_id), "Unknown")
-            },
-            "file_b": {
-                "id": str(result.file_b_id),
-                "filename": file_map.get(str(result.file_b_id), "Unknown")
-            },
-            "ast_similarity": result.ast_similarity,
-            "matches": result.matches,
-            "created_at": str(result.created_at) if result.created_at else None
-        })
-    
-    # Use task.total_pairs if available, otherwise fall back to results count
-    actual_total_pairs = task.total_pairs if task.total_pairs else len(formatted_results)
-    
-    return {
-        "task_id": task_id,
-        "status": task.status,
-        "created_at": str(task.created_at) if task.created_at else None,
-        "progress": {
-            "completed": task.processed_pairs or len(formatted_results),
-            "total": actual_total_pairs,
-            "percentage": round(((task.processed_pairs or len(formatted_results)) / max(actual_total_pairs, 1)) * 100, 1),
-            "display": f"{task.processed_pairs or len(formatted_results)}/{actual_total_pairs}"
-        },
-        "total_pairs": actual_total_pairs,
-        "files": [{"id": str(f.id), "filename": f.filename} for f in files],
-        "results": formatted_results
-    }
+     # Get all file IDs from the results (both file_a and file_b, which might be from different tasks for cross-task comparison)
+     file_ids = set()
+     for result in results:
+         file_ids.add(str(result.file_a_id))
+         file_ids.add(str(result.file_b_id))
+     
+     # Get all files that appear in results (across all tasks for cross-task comparison)
+     if file_ids:
+         files_result = await db.execute(
+             select(FileModel).where(FileModel.id.in_(file_ids))
+         )
+         all_files = files_result.scalars().all()
+         # Store full file info including task_id
+         file_map = {}
+         for f in all_files:
+             file_map[str(f.id)] = {
+                 "id": str(f.id),
+                 "filename": f.filename,
+                 "task_id": str(f.task_id)
+             }
+     else:
+         file_map = {}
+     
+     # Format results
+     formatted_results = []
+     for result in results:
+         file_a_info = file_map.get(str(result.file_a_id), {"id": str(result.file_a_id), "filename": "Unknown", "task_id": None})
+         file_b_info = file_map.get(str(result.file_b_id), {"id": str(result.file_b_id), "filename": "Unknown", "task_id": None})
+         formatted_results.append({
+             "file_a": file_a_info,
+             "file_b": file_b_info,
+             "ast_similarity": result.ast_similarity,
+             "matches": result.matches,
+             "created_at": str(result.created_at) if result.created_at else None
+         })
+     
+     # Also include task_id in the files list (the files belonging to this task)
+     files_list = []
+     if files:
+         for f in files:
+             files_list.append({
+                 "id": str(f.id),
+                 "filename": f.filename,
+                 "task_id": str(f.task_id)
+             })
+     
+     # Use task.total_pairs if available, otherwise fall back to results count
+     actual_total_pairs = task.total_pairs if task.total_pairs else len(formatted_results)
+     
+     return {
+         "task_id": task_id,
+         "status": task.status,
+         "created_at": str(task.created_at) if task.created_at else None,
+         "progress": {
+             "completed": task.processed_pairs or len(formatted_results),
+             "total": actual_total_pairs,
+             "percentage": round(((task.processed_pairs or len(formatted_results)) / max(actual_total_pairs, 1)) * 100, 1),
+             "display": f"{task.processed_pairs or len(formatted_results)}/{actual_total_pairs}"
+         },
+         "total_pairs": actual_total_pairs,
+         "files": files_list,
+         "results": formatted_results
+     }
 
 
 @router.get("/files/{file_id}/content")

@@ -4,7 +4,7 @@ export interface FileSubmission {
   language: string;
   created_at: string;
   task_id: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed';
+  status: 'queued' | 'indexing' | 'finding_pairs' | 'processing' | 'completed' | 'failed';
   similarity: number | null;
 }
 

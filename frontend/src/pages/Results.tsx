@@ -55,13 +55,30 @@ const getStatusIcon = (status: string) => {
       return <FiAlertCircle color="#f56565" />;
     case 'processing':
       return <FiActivity color="#ed8936" />;
+    case 'indexing':
+      return <FiLayers color="#4299e1" />; // blue
+    case 'finding_pairs':
+      return <FiLayers color="#9f7aea" />; // purple
     default:
       return <FiLayers color="#a0aec0" />;
   }
 };
 
 const getStatusColorScheme = (status: string) => {
-  return status === 'completed' ? 'green' : status === 'processing' ? 'orange' : 'yellow';
+  switch (status) {
+    case 'completed':
+      return 'green';
+    case 'failed':
+      return 'red';
+    case 'processing':
+      return 'orange';
+    case 'indexing':
+      return 'blue';
+    case 'finding_pairs':
+      return 'purple';
+    default:
+      return 'gray';
+  }
 };
 
 const Results: React.FC = () => {
@@ -169,44 +186,51 @@ const Results: React.FC = () => {
 
 
     useEffect(() => {
-     if (selectedTaskId) {
-       fetchTaskDetails();
-     } else {
-       setSelectedTaskDetails(null);
-     }
-   }, [selectedTaskId, fetchTaskDetails]);
-  
-  const selectedTaskListItem = tasks.find(t => t.task_id === selectedTaskId);
-  const selectedTask = selectedTaskDetails;
+      if (selectedTaskId) {
+        fetchTaskDetails();
+      } else {
+        setSelectedTaskDetails(null);
+      }
+    }, [selectedTaskId, fetchTaskDetails]);
+   
+    const selectedTaskListItem = tasks.find(t => t.task_id === selectedTaskId);
+    const selectedTask = selectedTaskDetails;
 
-   const getStats = () => {
-     if (!selectedTask) return { high: 0, medium: 0, low: 0, avg: 0 };
-     
-     // Use overall_stats from API if available (accurate for whole task)
-     if (selectedTask.overall_stats) {
-       return {
-         high: selectedTask.overall_stats.high,
-         medium: selectedTask.overall_stats.medium,
-         low: selectedTask.overall_stats.low,
-         avg: selectedTask.overall_stats.avg_similarity
-       };
-     }
-     
-     // Fallback: compute from loaded results only (partial)
-     if (!selectedTask.results) return { high: 0, medium: 0, low: 0, avg: 0 };
-     
+    const handleRefresh = useCallback(async () => {
+      await loadTasks();
+      if (selectedTaskId) {
+        await fetchTaskDetails();
+      }
+    }, [loadTasks, fetchTaskDetails, selectedTaskId]);
+
+    const getStats = () => {
+      if (!selectedTask) return { high: 0, medium: 0, low: 0, avg: 0 };
+      
+      // Use overall_stats from API if available (accurate for whole task)
+      if (selectedTask.overall_stats) {
+        return {
+          high: selectedTask.overall_stats.high,
+          medium: selectedTask.overall_stats.medium,
+          low: selectedTask.overall_stats.low,
+          avg: selectedTask.overall_stats.avg_similarity
+        };
+      }
+      
+      // Fallback: compute from loaded results only (partial)
+      if (!selectedTask.results) return { high: 0, medium: 0, low: 0, avg: 0 };
+      
       const similarities = selectedTask.results.map((r: PlagiarismResult) => r.ast_similarity || 0);
       const high = similarities.filter(s => s >= 0.5).length;
       const medium = similarities.filter(s => s >= 0.25 && s < 0.5).length;
       const low = similarities.filter(s => s < 0.25).length;
-     const avg = similarities.length > 0 
-       ? similarities.reduce((a, b) => a + b, 0) / similarities.length 
-       : 0;
-     
-     return { high, medium, low, avg };
-   };
-  
-   const stats = getStats();
+      const avg = similarities.length > 0 
+        ? similarities.reduce((a, b) => a + b, 0) / similarities.length 
+        : 0;
+      
+      return { high, medium, low, avg };
+    };
+   
+    const stats = getStats();
    
     const handleCompare = (result: PlagiarismResult) => {
      // Navigate to pair comparison page with the selected files
@@ -279,17 +303,17 @@ const Results: React.FC = () => {
                       'Select a task'
                     )}
                   </Button>
-                  {selectedTaskListItem?.status === 'processing' && (
-                    <Spinner size="sm" color="orange.500" speed="0.8s" />
-                  )}
-                  <Button
-                    size="sm"
-                    leftIcon={<FiRefreshCw />}
-                    onClick={loadTasks}
-                    isLoading={loading}
-                  >
-                    Refresh
-                  </Button>
+                   {selectedTaskListItem && ['processing', 'indexing', 'finding_pairs'].includes(selectedTaskListItem.status) && (
+                     <Spinner size="sm" color="orange.500" speed="0.8s" />
+                   )}
+                   <Button
+                     size="sm"
+                     leftIcon={<FiRefreshCw />}
+                     onClick={handleRefresh}
+                     isLoading={loading}
+                   >
+                     Refresh
+                   </Button>
                 </HStack>
 
                 <HStack>
@@ -318,13 +342,14 @@ const Results: React.FC = () => {
           
            {selectedTask ? (
               <ErrorBoundary>
-                <TaskStats
-                  selectedTask={selectedTask}
-                  avgSimilarity={stats.avg}
-                  getSimilarityColor={getSimilarityColor}
-                  getStatusIcon={getStatusIcon}
-                  cardBg={cardBg}
-                />
+                 <TaskStats
+                   selectedTask={selectedTask}
+                   avgSimilarity={stats.avg}
+                   getSimilarityColor={getSimilarityColor}
+                   getStatusIcon={getStatusIcon}
+                   getStatusColorScheme={getStatusColorScheme}
+                   cardBg={cardBg}
+                 />
                 
                 <TaskProgress selectedTask={selectedTask} cardBg={cardBg} />
                 

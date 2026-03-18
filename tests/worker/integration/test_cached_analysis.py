@@ -30,7 +30,8 @@ class TestServiceIntegration:
 
     def test_processor_index_stores_fingerprints_in_cache_and_index(self, temp_dir):
         """Test that indexing a file stores fingerprints in both cache and inverted index."""
-        from worker.services.plagiarism_service import PlagiarismService
+        from worker.services.analysis_service import AnalysisService
+        from worker.services.similarity_service import SimilarityService
         from worker.services.processor_service import ProcessorService
 
         # Fake analyzer output (positions as lists for JSON serialization)
@@ -41,8 +42,9 @@ class TestServiceIntegration:
         fake_ast_hashes = [789]
         fake_tokens = [{'type': 'def', 'start': [0, 0], 'end': [0, 3]}]
 
-        ps = PlagiarismService(analysis_executor=None)
-        proc = ProcessorService(ps)
+        asvc = AnalysisService(analysis_executor=None)
+        ssvc = SimilarityService()
+        proc = ProcessorService(asvc, ssvc)
 
         # Debug: check cache._redis
         import sys
@@ -60,7 +62,7 @@ class TestServiceIntegration:
             f.write("def foo():\n    return 42\n")
 
         # Mock fingerprint generation
-        with patch.object(ps, 'safe_run_cli_fingerprint', return_value={
+        with patch.object(asvc, 'safe_generate_fingerprints', return_value={
             'fingerprints': fake_fingerprints,
             'ast_hashes': fake_ast_hashes,
             'tokens': fake_tokens
@@ -81,11 +83,13 @@ class TestServiceIntegration:
 
     def test_processor_find_intra_task_pairs(self, temp_dir):
         """Test that find_intra_task_pairs generates pairs using inverted index."""
-        from worker.services.plagiarism_service import PlagiarismService
+        from worker.services.analysis_service import AnalysisService
+        from worker.services.similarity_service import SimilarityService
         from worker.services.processor_service import ProcessorService
 
-        ps = PlagiarismService(analysis_executor=None)
-        proc = ProcessorService(ps)
+        asvc = AnalysisService(analysis_executor=None)
+        ssvc = SimilarityService()
+        proc = ProcessorService(asvc, ssvc)
 
         # Create 5 files
         files = []
@@ -102,7 +106,7 @@ class TestServiceIntegration:
 
         # Index all files with many fingerprints to ensure candidate generation
         for f in files:
-            with patch.object(ps, 'safe_run_cli_fingerprint', return_value={
+            with patch.object(asvc, 'safe_generate_fingerprints', return_value={
                 'fingerprints': [{'hash': j, 'start': [0,0], 'end': [1,0]} for j in range(100)],
                 'ast_hashes': list(range(100)),
                 'tokens': []
@@ -120,11 +124,13 @@ class TestServiceIntegration:
 
     def test_processor_find_cross_task_pairs(self, temp_dir):
         """Test cross-task pair generation."""
-        from worker.services.plagiarism_service import PlagiarismService
+        from worker.services.analysis_service import AnalysisService
+        from worker.services.similarity_service import SimilarityService
         from worker.services.processor_service import ProcessorService
 
-        ps = PlagiarismService(analysis_executor=None)
-        proc = ProcessorService(ps)
+        asvc = AnalysisService(analysis_executor=None)
+        ssvc = SimilarityService()
+        proc = ProcessorService(asvc, ssvc)
 
         # New files
         new_files = []
@@ -153,7 +159,7 @@ class TestServiceIntegration:
 
         # Index all files with many fingerprints
         for f in new_files + existing_files:
-            with patch.object(ps, 'safe_run_cli_fingerprint', return_value={
+            with patch.object(asvc, 'safe_generate_fingerprints', return_value={
                 'fingerprints': [{'hash': j, 'start': [0,0], 'end': [1,0]} for j in range(100)],
                 'ast_hashes': list(range(100)),
                 'tokens': []

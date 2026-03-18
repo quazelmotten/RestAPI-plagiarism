@@ -10,7 +10,7 @@ export interface Submission {
   fileName: string;
   language: string;
   createdAt: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'indexing' | 'finding_pairs' | 'processing' | 'completed' | 'failed';
   similarity?: number;
 }
 
@@ -25,10 +25,12 @@ export interface PlagiarismResult {
   file_a: {
     id: string;
     filename: string;
+    task_id?: string; // The task this file belongs to (may differ from selected task for cross-task)
   };
   file_b: {
     id: string;
     filename: string;
+    task_id?: string;
   };
   ast_similarity: number;
   matches: PlagiarismMatch[];
@@ -50,7 +52,7 @@ export interface PlagiarismNetwork {
 
 export interface TaskListItem {
   task_id: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'indexing' | 'finding_pairs' | 'processing' | 'completed' | 'failed';
   total_pairs: number;
   progress?: {
     completed: number;
@@ -67,6 +69,7 @@ export interface TaskDetails extends TaskListItem {
   files: Array<{
     id: string;
     filename: string;
+    task_id?: string; // Include task_id for each file (should match the task_id for intra-task files)
   }>;
   results: PlagiarismResult[];
   overall_stats?: {

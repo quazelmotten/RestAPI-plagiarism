@@ -34,12 +34,12 @@ class TestTaskOrchestrator:
         return rs
 
     @pytest.fixture
-    def orchestrator(self, mock_plagiarism_service, mock_processor_service, mock_result_service):
+    def orchestrator(self, mock_processor_service, mock_result_service):
         with patch('worker.services.task_orchestrator.update_plagiarism_task') as mock_update_task, \
              patch('worker.services.task_orchestrator.get_all_files') as mock_get_all_files:
             mock_update_task.return_value = None
             mock_get_all_files.return_value = []
-            orch = TaskOrchestrator(mock_plagiarism_service, mock_processor_service, mock_result_service)
+            orch = TaskOrchestrator(mock_processor_service, mock_result_service)
             orch._patched_update_task = mock_update_task
             orch._patched_get_all_files = mock_get_all_files
             yield orch

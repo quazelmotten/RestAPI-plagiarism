@@ -47,8 +47,8 @@ class TestResultService:
 
         assert result['ast_similarity'] == 0.85
         assert len(result['matches']) > 0
-        mock_plagiarism_service.safe_run_cached_analyze.assert_not_called()
-        mock_plagiarism_service.safe_run_cli_analyze.assert_not_called()
+        mock_plagiarism_service.safe_analyze.assert_not_called()
+        mock_plagiarism_service.safe_analyze_full.assert_not_called()
 
     def test_process_pair_calls_cached_analysis_on_miss(self, result_service, mock_plagiarism_service, temp_dir):
         file_a = {'id': 'a1', 'file_hash': 'hash_a', 'file_path': os.path.join(temp_dir, 'a.py')}
@@ -62,14 +62,14 @@ class TestResultService:
         # both files have fingerprints
         result_service.cache.has_ast_fingerprints.return_value = True
 
-        mock_plagiarism_service.safe_run_cached_analyze.return_value = {
+        mock_plagiarism_service.safe_analyze.return_value = {
             'similarity_ratio': 0.6,
             'matches': []
         }
 
         result = result_service.process_pair(file_a, file_b, 'python', 'task123')
 
-        mock_plagiarism_service.safe_run_cached_analyze.assert_called_once()
+        mock_plagiarism_service.safe_analyze.assert_called_once()
         assert result['ast_similarity'] == 0.6
 
     def test_process_pair_fallback_to_full_analysis(self, result_service, mock_plagiarism_service, temp_dir):
@@ -84,17 +84,17 @@ class TestResultService:
         result_service.cache.has_ast_fingerprints.return_value = True
 
         # Cached analysis fails
-        mock_plagiarism_service.safe_run_cached_analyze.side_effect = Exception("cached fail")
+        mock_plagiarism_service.safe_analyze.side_effect = RuntimeError("cached fail")
         # Full analysis succeeds
-        mock_plagiarism_service.safe_run_cli_analyze.return_value = {
+        mock_plagiarism_service.safe_analyze_full.return_value = {
             'similarity_ratio': 0.4,
             'matches': []
         }
 
         result = result_service.process_pair(file_a, file_b, 'python', 'task123')
 
-        mock_plagiarism_service.safe_run_cached_analyze.assert_called_once()
-        mock_plagiarism_service.safe_run_cli_analyze.assert_called_once()
+        mock_plagiarism_service.safe_analyze.assert_called_once()
+        mock_plagiarism_service.safe_analyze_full.assert_called_once()
         assert result['ast_similarity'] == 0.4
 
     def test_process_pair_ensures_fingerprints_if_missing(self, result_service, mock_plagiarism_service, temp_dir):
@@ -109,17 +109,17 @@ class TestResultService:
         # Both files lack fingerprints -> triggers _ensure_fingerprints_cached
         result_service.cache.has_ast_fingerprints.return_value = False
         # After ensuring, cached analysis succeeds
-        mock_plagiarism_service.safe_run_cached_analyze.return_value = {
+        mock_plagiarism_service.safe_analyze.return_value = {
             'similarity_ratio': 0.5,
             'matches': []
         }
 
         result = result_service.process_pair(file_a, file_b, 'python', 'task123')
 
-        # Should ensure fingerprints for both files (calls safe_run_cli_fingerprint twice)
-        assert mock_plagiarism_service.safe_run_cli_fingerprint.call_count == 2
+        # Should ensure fingerprints for both files (calls safe_generate_fingerprints twice)
+        assert mock_plagiarism_service.safe_generate_fingerprints.call_count == 2
         # Then cached analysis called once
-        mock_plagiarism_service.safe_run_cached_analyze.assert_called_once()
+        mock_plagiarism_service.safe_analyze.assert_called_once()
         assert result['ast_similarity'] == 0.5
 
     def test_process_pair_handles_missing_file_info(self, result_service):
@@ -140,17 +140,17 @@ class TestResultService:
         result_service.cache.has_ast_fingerprints.return_value = True
 
         # Cached analysis fails; fallback should succeed
-        mock_plagiarism_service = result_service.plagiarism_service
-        mock_plagiarism_service.safe_run_cached_analyze.side_effect = RuntimeError("cached fail")
-        mock_plagiarism_service.safe_run_cli_analyze.return_value = {
+        mock_plagiarism_service = result_service.analysis_service
+        mock_plagiarism_service.safe_analyze.side_effect = RuntimeError("cached fail")
+        mock_plagiarism_service.safe_analyze_full.return_value = {
             'similarity_ratio': 0.2,
             'matches': []
         }
 
         result = result_service.process_pair(file_a, file_b, 'python', 'task123')
 
-        mock_plagiarism_service.safe_run_cached_analyze.assert_called_once()
-        mock_plagiarism_service.safe_run_cli_analyze.assert_called_once()
+        mock_plagiarism_service.safe_analyze.assert_called_once()
+        mock_plagiarism_service.safe_analyze_full.assert_called_once()
         assert result['ast_similarity'] == 0.2
 
     def test_process_pair_handles_full_analysis_exception(self, result_service, temp_dir):
@@ -165,9 +165,9 @@ class TestResultService:
         result_service.cache.get_cached_similarity.return_value = None
         result_service.cache.has_ast_fingerprints.return_value = True
 
-        mock_plagiarism_service = result_service.plagiarism_service
-        mock_plagiarism_service.safe_run_cached_analyze.side_effect = RuntimeError("cached fail")
-        mock_plagiarism_service.safe_run_cli_analyze.side_effect = RuntimeError("full fail")
+        mock_plagiarism_service = result_service.analysis_service
+        mock_plagiarism_service.safe_analyze.side_effect = RuntimeError("cached fail")
+        mock_plagiarism_service.safe_analyze_full.side_effect = RuntimeError("full fail")
 
         result = result_service.process_pair(file_a, file_b, 'python', 'task123')
 
@@ -190,7 +190,7 @@ class TestResultService:
         result_service.cache.lock_fingerprint_computation.return_value = True
         result_service.cache.unlock_fingerprint_computation.return_value = True
 
-        mock_plagiarism_service.safe_run_cli_fingerprint.return_value = {
+        mock_plagiarism_service.safe_generate_fingerprints.return_value = {
             'fingerprints': [{'hash': 1, 'start': (0,0), 'end': (0,1)}],
             'ast_hashes': [123],
             'tokens': [{'type':'def', 'start':(0,0), 'end':(0,3)}]
@@ -198,7 +198,7 @@ class TestResultService:
 
         result_service._ensure_fingerprints_cached(file_info, 'python', 'task1')
 
-        mock_plagiarism_service.safe_run_cli_fingerprint.assert_called_once()
+        mock_plagiarism_service.safe_generate_fingerprints.assert_called_once()
         # Cache should be called to store fingerprints
         result_service.cache.cache_fingerprints.assert_called_once()
 
@@ -206,7 +206,7 @@ class TestResultService:
         file_info = {'id': '1', 'file_hash': 'hash1', 'file_path': '/fake.py'}
         result_service.cache.has_ast_fingerprints.return_value = True
         result_service._ensure_fingerprints_cached(file_info, 'python', 'task1')
-        result_service.plagiarism_service.safe_run_cli_fingerprint.assert_not_called()
+        result_service.analysis_service.safe_generate_fingerprints.assert_not_called()
         result_service.cache.cache_fingerprints.assert_not_called()
 
     def test_flush_results_bulk_insert(self, result_service):

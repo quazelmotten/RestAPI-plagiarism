@@ -221,6 +221,11 @@ async def analyze_file_pair(
     from models.models import File as FileModel, SimilarityResult
     from uuid import uuid4
     from datetime import datetime, timezone
+    from worker.services.analysis_service import AnalysisService
+    from worker.redis_cache import connect_cache
+
+    # Ensure Redis cache is connected
+    connect_cache()
 
     # Fetch file info from DB
     file_a_result = await db.execute(select(FileModel).where(FileModel.id == file_a))
@@ -233,34 +238,18 @@ async def analyze_file_pair(
     if not file_b_model:
         raise HTTPException(status_code=404, detail="File B not found")
 
-    # Run full analysis using CLI analyzer
-    import sys
-    import os
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-    from cli.analyzer import analyze_plagiarism_cached
-    from worker.redis_cache import cache
-
-    similarity, matches, metrics = analyze_plagiarism_cached(
+    # Run full analysis using AnalysisService
+    analysis_service = AnalysisService()
+    result = analysis_service.analyze_pair(
         file_a_model.file_path,
         file_b_model.file_path,
+        file_a_model.language,
         file_a_model.file_hash,
-        file_b_model.file_hash,
-        cache=cache if cache.is_connected else None,
-        language=file_a_model.language,
+        file_b_model.file_hash
     )
 
-    # Transform matches from analyzer format to legacy format
-    legacy_matches = []
-    if matches:
-        for m in matches:
-            legacy_matches.append({
-                "file_a_start_line": m["file1"]["start_line"],
-                "file_a_end_line": m["file1"]["end_line"],
-                "file_b_start_line": m["file2"]["start_line"],
-                "file_b_end_line": m["file2"]["end_line"],
-            })
+    similarity = result['similarity_ratio']
+    legacy_matches = result['matches']
 
     # Find or create similarity result, update with matches
     existing = await db.execute(

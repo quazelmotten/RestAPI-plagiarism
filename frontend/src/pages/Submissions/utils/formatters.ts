@@ -18,12 +18,16 @@ export function formatSimilarity(similarity: number | null): string {
   return `${(similarity * 100).toFixed(1)}%`;
 }
 
-export function getStatusColor(status: string): 'green' | 'yellow' | 'gray' | 'red' {
+export function getStatusColor(status: string): 'green' | 'yellow' | 'blue' | 'orange' | 'purple' | 'gray' | 'red' {
   switch (status) {
     case 'completed':
       return 'green';
     case 'processing':
-      return 'yellow';
+      return 'orange';
+    case 'indexing':
+      return 'blue';
+    case 'finding_pairs':
+      return 'purple';
     case 'queued':
       return 'gray';
     case 'failed':
@@ -33,6 +37,6 @@ export function getStatusColor(status: string): 'green' | 'yellow' | 'gray' | 'r
   }
 }
 
-const ALL_STATUSES = ['queued', 'processing', 'completed', 'failed'];
+const ALL_STATUSES = ['queued', 'indexing', 'finding_pairs', 'processing', 'completed', 'failed'];
 
 export { ALL_STATUSES };
