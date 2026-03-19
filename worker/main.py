@@ -24,7 +24,7 @@ from worker.config import settings
 
 def main():
     """Initialize and run the worker."""
-    analysis_max_workers = max(8, settings.worker_concurrency * 4)
+    analysis_max_workers = settings.worker_concurrency
     analysis_executor = ThreadPoolExecutor(max_workers=analysis_max_workers)
 
     analysis_service = AnalysisService(analysis_executor=analysis_executor)
