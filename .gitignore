@@ -75,3 +75,4 @@ tests/plagiarism/type*
 tests/tmp_synthetic
 
 *.prof
+test*.json

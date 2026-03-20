@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import pika
 
 from worker.config import settings
-from worker.redis_cache import connect_cache
+from worker.dependencies import get_redis_client
 
 log = logging.getLogger(__name__)
 
@@ -77,10 +77,12 @@ class AsyncWorker:
         self.configure_logging()
 
         log.info("Connecting to Redis cache...")
-        if connect_cache():
+        try:
+            client = get_redis_client()
+            client.ping()
             log.info("Redis cache connected")
-        else:
-            log.warning("Redis cache unavailable, running without caching")
+        except Exception as e:
+            log.warning(f"Redis cache unavailable: {e}. Caching disabled.")
 
         self.executor = ThreadPoolExecutor(max_workers=self.worker_concurrency)
         log.info(f"Thread pool started with {self.worker_concurrency} workers")

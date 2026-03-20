@@ -17,8 +17,12 @@ COPY ./src /app/src
 # Copy cli code for analyzer
 COPY ./cli /app/cli
 
-# Make src discoverable
-ENV PYTHONPATH=/app/src:/app
+# Copy new shared infrastructure modules
+COPY ./shared /app/shared
+COPY ./plagiarism_core /app/plagiarism_core
+
+# Make all relevant directories discoverable
+ENV PYTHONPATH=/app/src:/app/plagiarism_core:/app/shared:/app
 
 
 CMD ["python3", "-m", "worker.main"]

@@ -1,33 +1,41 @@
 """
-Service for full AST-based plagiarism analysis.
-Performs detailed comparison with match detection between file pairs.
+Analysis service - performs plagiarism analysis using core library.
+
+Thin wrapper around CoreAnalyzer with cache integration and timeout support.
 """
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Callable
 
-from worker.config import settings
-from worker.redis_cache import cache as global_cache
+from plagiarism_core.analyzer import Analyzer as CoreAnalyzer
+from shared.interfaces import FingerprintCache
 
-log = logging.getLogger(__name__)
-
-# Module-level reference for test patching compatibility
-cache = global_cache
+logger = logging.getLogger(__name__)
 
 
 class AnalysisService:
-    """Handles full plagiarism analysis with detailed match detection."""
+    """
+    Service for plagiarism analysis using the core library.
 
-    def __init__(self, analysis_executor: Optional[ThreadPoolExecutor] = None):
-        self.analysis_executor = analysis_executor or ThreadPoolExecutor(
-            max_workers=getattr(settings, 'worker_concurrency', 4)
-        )
+    Provides both cached and full analysis with optional timeout.
+    """
+
+    def __init__(
+        self,
+        cache: FingerprintCache,
+        analysis_executor: Optional[ThreadPoolExecutor] = None
+    ):
+        """
+        Initialize analysis service.
+
+        Args:
+            cache: Fingerprint cache implementation
+            analysis_executor: Optional thread pool for timeouts (None = sync)
+        """
         self.cache = cache
-
-    @property
-    def _cache(self):
-        return globals()['cache']
+        self.analysis_executor = analysis_executor
+        self.analyzer = CoreAnalyzer(ast_threshold=0.15)
 
     def analyze_pair(
         self,
@@ -40,42 +48,46 @@ class AnalysisService:
         threshold: float = 0.15
     ) -> Dict:
         """
-        Perform full plagiarism analysis between two files.
-        Uses cached fingerprints when available for efficiency.
-        
+        Analyze pair using cached fingerprints when available.
+
         Args:
-            file1_path: Path to first file
-            file2_path: Path to second file
+            file1_path, file2_path: File paths
             language: Programming language
-            file1_hash: SHA256 hash of file1
-            file2_hash: SHA256 hash of file2
-            timeout: Timeout in seconds (ignored if no executor)
-            threshold: AST similarity threshold (default 0.15)
-            
+            file1_hash, file2_hash: Content hashes
+            timeout: Timeout in seconds (only used if executor provided)
+            threshold: AST similarity threshold
+
         Returns:
-            Dict with 'similarity_ratio' (float) and 'matches' (list of match dicts)
+            Dict with 'similarity_ratio' and 'matches' list
         """
-        # If no executor, run directly
-        if self.analysis_executor is None:
-            return self._run_analysis_cached(
-                file1_path, file2_path, language,
-                file1_hash, file2_hash, threshold
+        # Define the analysis function
+        def do_analyze():
+            return self.analyzer.analyze_cached(
+                file1_path=file1_path,
+                file2_path=file2_path,
+                file1_hash=file1_hash,
+                file2_hash=file2_hash,
+                get_fingerprints=self._get_fingerprints,
+                get_ast_hashes=self._get_ast_hashes,
+                cache_fingerprints=self._cache_fingerprints,
+                language=language,
+                ast_threshold=threshold
             )
 
-        # Otherwise submit with timeout
-        future = self.analysis_executor.submit(
-            self._run_analysis_cached,
-            file1_path, file2_path, language,
-            file1_hash, file2_hash, threshold
-        )
-        try:
-            return future.result(timeout=timeout)
-        except TimeoutError:
-            future.cancel()
-            raise TimeoutError(f"Analysis timed out after {timeout}s for {file1_path} vs {file2_path}")
-        except Exception as e:
-            log.error(f"Error in analyze_pair: {e}")
-            raise
+        # Run with or without executor
+        if self.analysis_executor is None:
+            ast_sim, matches, _ = do_analyze()
+        else:
+            future = self.analysis_executor.submit(do_analyze)
+            try:
+                ast_sim, matches, _ = future.result(timeout=timeout)
+            except TimeoutError:
+                future.cancel()
+                raise TimeoutError(f"Analysis timed out after {timeout}s")
+            except Exception:
+                raise
+
+        return {'similarity_ratio': ast_sim, 'matches': matches}
 
     def analyze_pair_full(
         self,
@@ -85,34 +97,42 @@ class AnalysisService:
         timeout: int = 600
     ) -> Dict:
         """
-        Perform full analysis without relying on cached fingerprints.
-        Used as fallback when cached analysis fails.
-        
+        Full analysis without relying on cache (fallback).
+
         Args:
-            file1_path: Path to first file
-            file2_path: Path to second file
+            file1_path, file2_path: File paths
             language: Programming language
-            timeout: Timeout in seconds (ignored if no executor)
-            
+            timeout: Timeout in seconds (only used if executor provided)
+
         Returns:
             Dict with 'similarity_ratio' and 'matches'
         """
-        # If no executor, run directly
-        if self.analysis_executor is None:
-            return self._run_analysis_full(file1_path, file2_path, language)
+        def do_analyze():
+            result = self.analyzer.analyze(
+                file1_path, file2_path, language, ast_threshold=0.0
+            )
+            return {
+                'similarity_ratio': result.similarity_ratio,
+                'matches': [
+                    {
+                        'file1': m.file1,
+                        'file2': m.file2,
+                        'kgram_count': m.kgram_count
+                    }
+                    for m in result.matches
+                ]
+            }
 
-        # Otherwise submit with timeout
-        future = self.analysis_executor.submit(
-            self._run_analysis_full,
-            file1_path, file2_path, language
-        )
+        if self.analysis_executor is None:
+            return do_analyze()
+
+        future = self.analysis_executor.submit(do_analyze)
         try:
             return future.result(timeout=timeout)
         except TimeoutError:
             future.cancel()
-            raise TimeoutError(f"Full analysis timed out after {timeout}s for {file1_path} vs {file2_path}")
-        except Exception as e:
-            log.error(f"Error in analyze_pair_full: {e}")
+            raise TimeoutError(f"Full analysis timed out after {timeout}s")
+        except Exception:
             raise
 
     def generate_fingerprints(
@@ -122,196 +142,74 @@ class AnalysisService:
         timeout: int = 600
     ) -> Dict:
         """
-        Extract fingerprints and AST hashes from a file.
-        
-        Args:
-            file_path: Path to the file
-            language: Programming language
-            timeout: Timeout in seconds (ignored if no executor)
-            
-        Returns:
-            Dict with fingerprints, ast_hashes, tokens, and counts
-        """
-        # If no executor, run directly
-        if self.analysis_executor is None:
-            return self._run_generate_fingerprints(file_path, language)
+        Generate fingerprints and AST hashes for a file.
 
-        # Otherwise submit with timeout
-        future = self.analysis_executor.submit(
-            self._run_generate_fingerprints,
-            file_path, language
+        Args:
+            file_path: Path to file
+            language: Programming language
+            timeout: Timeout in seconds (only used if executor provided)
+
+        Returns:
+            Dict with 'fingerprints', 'ast_hashes', etc.
+        """
+        from plagiarism_core.fingerprints import (
+            tokenize_with_tree_sitter,
+            compute_fingerprints,
+            winnow_fingerprints
         )
+        from plagiarism_core.ast_hash import extract_ast_hashes
+
+        def do_generate():
+            tokens = tokenize_with_tree_sitter(file_path, language)
+            raw_fps = compute_fingerprints(tokens)
+            fps = winnow_fingerprints(raw_fps)
+            ast_hashes = extract_ast_hashes(file_path, language)
+
+            return {
+                'file': file_path,
+                'language': language,
+                'fingerprints': [
+                    {'hash': fp['hash'], 'start': list(fp['start']), 'end': list(fp['end'])}
+                    for fp in fps
+                ],
+                'ast_hashes': ast_hashes,
+                'token_count': len(tokens),
+                'fingerprint_count': len(fps),
+            }
+
+        if self.analysis_executor is None:
+            return do_generate()
+
+        future = self.analysis_executor.submit(do_generate)
         try:
             return future.result(timeout=timeout)
         except TimeoutError:
             future.cancel()
-            raise TimeoutError(f"Fingerprint generation timed out after {timeout}s for {file_path}")
-        except Exception as e:
-            log.error(f"Error in generate_fingerprints: {e}")
+            raise TimeoutError(f"Fingerprint generation timed out after {timeout}s")
+        except Exception:
             raise
 
-    def _run_analysis_cached(
+    # Cache helper methods
+    def _get_fingerprints(self, file_hash: str):
+        """Get fingerprints from cache."""
+        data = self.cache.batch_get([file_hash])
+        return data.get(file_hash, {}).get('fingerprints')
+
+    def _get_ast_hashes(self, file_hash: str):
+        """Get AST hashes from cache."""
+        data = self.cache.batch_get([file_hash])
+        return data.get(file_hash, {}).get('ast_hashes')
+
+    def _cache_fingerprints(
         self,
-        file1_path: str,
-        file2_path: str,
-        language: str,
-        file1_hash: str,
-        file2_hash: str,
-        threshold: float = 0.15
-    ) -> Dict:
-        """Internal: run cached analysis."""
-        from cli.analyzer import analyze_plagiarism_cached
-
-        ast_sim, matches, metrics = analyze_plagiarism_cached(
-            file1_path, file2_path, file1_hash, file2_hash,
-            cache=self._cache,
-            language=language,
-            ast_threshold=threshold
-        )
-
-        matches_data = []
-        if ast_sim >= threshold and matches:
-            matches_data = self._transform_matches(matches)
-
-        return {
-            "similarity_ratio": ast_sim,
-            "matches": matches_data,
-        }
-
-    def _run_analysis_full(
-        self,
-        file1_path: str,
-        file2_path: str,
-        language: str
-    ) -> Dict:
-        """Internal: run full analysis without cache."""
-        from cli.analyzer import Analyzer
-
-        analyzer = Analyzer()
-        result = analyzer.Start(file1_path, file2_path, language)
-        
-        return {
-            "similarity_ratio": result.get("similarity_ratio", 0.0),
-            "matches": result.get("matches", [])
-        }
-
-    def _run_generate_fingerprints(
-        self,
-        file_path: str,
-        language: str
-    ) -> Dict:
-        """Internal: generate fingerprints."""
-        from cli.analyzer import (
-            tokenize_with_tree_sitter,
-            winnow_fingerprints,
-            compute_fingerprints,
-            extract_ast_hashes,
-        )
-
-        tokens = tokenize_with_tree_sitter(file_path, language)
-        fingerprints = winnow_fingerprints(compute_fingerprints(tokens))
-        ast_hashes = extract_ast_hashes(file_path, language, min_depth=3)
-
-        return {
-            "file": file_path,
-            "language": language,
-            "fingerprints": [
-                {"hash": fp["hash"], "start": list(fp["start"]), "end": list(fp["end"])}
-                for fp in fingerprints
-            ],
-            "ast_hashes": ast_hashes,
-            "tokens": [
-                {"type": t[0], "start": list(t[1]), "end": list(t[2])}
-                for t in tokens
-            ],
-            "token_count": len(tokens),
-            "fingerprint_count": len(fingerprints),
-        }
-
-    def _transform_matches(self, matches: List[Dict]) -> List[Dict]:
-        """Transform matches from analyzer format to legacy DB format."""
-        return [
-            {
-                "file_a_start_line": m["file1"]["start_line"],
-                "file_a_end_line": m["file1"]["end_line"],
-                "file_b_start_line": m["file2"]["start_line"],
-                "file_b_end_line": m["file2"]["end_line"]
-            }
-            for m in matches
-        ]
-
-    # Backward compatibility aliases (deprecated - use safe_* methods)
-    def run_cached_analysis(
-        self,
-        file1_path: str,
-        file2_path: str,
-        file1_hash: str,
-        file2_hash: str,
-        language: str,
-        threshold: float = 0.15
-    ) -> Dict:
-        """[Deprecated] Use analyze_pair. Run cached analysis directly (no timeout)."""
-        return self._run_analysis_cached(
-            file1_path, file2_path, language,
-            file1_hash, file2_hash, threshold
-        )
-
-    def run_cli_analyze(
-        self,
-        file1_path: str,
-        file2_path: str,
-        language: str
-    ) -> Dict:
-        """[Deprecated] Use analyze_pair_full. Run full analysis directly (no timeout)."""
-        return self._run_analysis_full(file1_path, file2_path, language)
-
-    def run_cli_fingerprint(
-        self,
-        file_path: str,
-        language: str
-    ) -> Dict:
-        """[Deprecated] Use generate_fingerprints. Generate fingerprints directly (no timeout)."""
-        return self._run_generate_fingerprints(file_path, language)
-
-    def safe_run_cached_analyze(
-        self,
-        file1_path: str,
-        file2_path: str,
-        file1_hash: str,
-        file2_hash: str,
-        language: str,
-        timeout: int = 600
-    ) -> Dict:
-        """[Deprecated] Use analyze_pair. Run cached analysis with timeout."""
-        return self.analyze_pair(
-            file1_path, file2_path, language,
-            file1_hash, file2_hash, timeout
-        )
-
-    def safe_run_cli_analyze(
-        self,
-        file1_path: str,
-        file2_path: str,
-        language: str,
-        timeout: int = 600
-    ) -> Dict:
-        """[Deprecated] Use analyze_pair_full. Run full analysis with timeout."""
-        return self.analyze_pair_full(file1_path, file2_path, language, timeout)
-
-    def safe_run_cli_fingerprint(
-        self,
-        file_path: str,
-        language: str,
-        timeout: int = 600
-    ) -> Dict:
-        """[Deprecated] Use generate_fingerprints. Generate fingerprints with timeout."""
-        return self.generate_fingerprints(file_path, language, timeout)
-
-    def transform_matches_to_legacy_format(self, matches: List[Dict]) -> List[Dict]:
-        """[Deprecated] Use _transform_matches."""
-        return self._transform_matches(matches)
+        file_hash: str,
+        fingerprints: List[Dict],
+        ast_hashes: List[int]
+    ) -> None:
+        """Cache fingerprints and AST hashes."""
+        self.cache.batch_cache([(file_hash, fingerprints, ast_hashes)])
 
     def shutdown(self):
-        """Shutdown the analysis executor."""
+        """Shutdown the analysis executor if we own it."""
         if self.analysis_executor:
             self.analysis_executor.shutdown(wait=True)

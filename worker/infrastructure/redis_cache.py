@@ -1,0 +1,284 @@
+"""
+Fingerprint cache implementation using Redis.
+
+Only handles caching - no analysis logic, no similarity calculations.
+"""
+
+import json
+import logging
+from typing import List, Dict, Any, Optional, Tuple
+
+import redis
+from redis.exceptions import RedisError
+
+from shared.interfaces import FingerprintCache
+
+logger = logging.getLogger(__name__)
+
+
+class RedisFingerprintCache(FingerprintCache):
+    """Redis implementation of fingerprint cache."""
+
+    # Redis key prefixes
+    TOKEN_PREFIX = "fp:token"      # fp:token:{hash} -> fingerprints with positions
+    AST_PREFIX = "fp:ast"          # fp:ast:{hash} -> AST hashes
+
+    def __init__(self, redis_client: redis.Redis, ttl: int = 604800):
+        """
+        Initialize cache.
+
+        Args:
+            redis_client: Connected Redis client
+            ttl: Time-to-live for cached items in seconds (default 7 days)
+        """
+        self.redis = redis_client
+        self.ttl = ttl
+
+    def cache_fingerprints(
+        self,
+        file_hash: str,
+        fingerprints: List[Dict[str, Any]],
+        ast_hashes: List[int]
+    ) -> bool:
+        """
+        Cache fingerprints and AST hashes for a file.
+
+        Args:
+            file_hash: SHA256 hash of file content
+            fingerprints: List of fingerprint dicts with 'hash', 'start', 'end'
+            ast_hashes: List of AST subtree hash integers
+
+        Returns:
+            True if cached successfully, False otherwise
+        """
+        if not fingerprints and not ast_hashes:
+            logger.warning(f"Not caching empty data for {file_hash[:16]}...")
+            return False
+
+        try:
+            pipe = self.redis.pipeline()
+
+            # Cache fingerprints
+            token_key = f"{self.TOKEN_PREFIX}:{file_hash}"
+            if fingerprints:
+                pipe.hset(f"{token_key}:positions", mapping={
+                    str(fp['hash']): json.dumps({
+                        'start': list(fp['start']),
+                        'end': list(fp['end'])
+                    })
+                    for fp in fingerprints
+                })
+                pipe.sadd(f"{token_key}:hashes", *[str(fp['hash']) for fp in fingerprints])
+                pipe.expire(f"{token_key}:positions", self.ttl)
+                pipe.expire(f"{token_key}:hashes", self.ttl)
+
+            # Cache AST hashes
+            if ast_hashes:
+                ast_key = f"{self.AST_PREFIX}:{file_hash}"
+                pipe.sadd(f"{ast_key}:hashes", *[str(h) for h in ast_hashes])
+                pipe.expire(f"{ast_key}:hashes", self.ttl)
+
+            pipe.execute()
+            logger.debug(f"Cached data for {file_hash[:16]}...")
+            return True
+
+        except RedisError as e:
+            logger.warning(f"Failed to cache fingerprints for {file_hash[:16]}...: {e}")
+            return False
+
+    def get_fingerprints(self, file_hash: str) -> Optional[List[Dict[str, Any]]]:
+        """
+        Get cached fingerprints for a file.
+
+        Returns:
+            List of fingerprint dicts or None if not cached
+        """
+        try:
+            token_key = f"{self.TOKEN_PREFIX}:{file_hash}"
+            if not self.redis.exists(f"{token_key}:hashes"):
+                return None
+
+            hashes = self.redis.smembers(f"{token_key}:hashes")
+            positions_raw = self.redis.hgetall(f"{token_key}:positions")
+
+            fingerprints = []
+            for h in hashes:
+                pos_json = positions_raw.get(h)
+                if pos_json:
+                    pos = json.loads(pos_json)
+                    fingerprints.append({
+                        'hash': int(h) if h.isdigit() else h,
+                        'start': tuple(pos['start']),
+                        'end': tuple(pos['end'])
+                    })
+
+            return fingerprints if fingerprints else None
+
+        except RedisError as e:
+            logger.warning(f"Failed to get fingerprints for {file_hash[:16]}...: {e}")
+            return None
+
+    def get_ast_hashes(self, file_hash: str) -> Optional[List[int]]:
+        """
+        Get cached AST hashes for a file.
+
+        Returns:
+            List of AST hash integers or None if not cached
+        """
+        try:
+            ast_key = f"{self.AST_PREFIX}:{file_hash}"
+            if not self.redis.exists(f"{ast_key}:hashes"):
+                return None
+
+            hash_strings = self.redis.smembers(f"{ast_key}:hashes")
+            ast_hashes = []
+            for h in hash_strings:
+                try:
+                    ast_hashes.append(int(h))
+                except ValueError:
+                    ast_hashes.append(h)
+
+            return ast_hashes if ast_hashes else None
+
+        except RedisError as e:
+            logger.warning(f"Failed to get AST hashes for {file_hash[:16]}...: {e}")
+            return None
+
+    def has_fingerprints(self, file_hash: str) -> bool:
+        """Check if fingerprints are cached for a file."""
+        try:
+            token_key = f"{self.TOKEN_PREFIX}:{file_hash}"
+            return self.redis.exists(f"{token_key}:hashes") > 0
+        except RedisError:
+            return False
+
+    def batch_get(
+        self,
+        file_hashes: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Batch-fetch fingerprints and AST hashes.
+
+        Returns:
+            Dict mapping file_hash -> {'fingerprints': [...], 'ast_hashes': [...], 'fingerprint_count': int}
+        """
+        result = {fh: {'fingerprints': None, 'ast_hashes': None, 'fingerprint_count': 0} for fh in file_hashes}
+
+        if not file_hashes:
+            return result
+
+        try:
+            pipe = self.redis.pipeline()
+
+            # Check existence and fetch data
+            for fh in file_hashes:
+                token_key = f"{self.TOKEN_PREFIX}:{fh}"
+                ast_key = f"{self.AST_PREFIX}:{fh}"
+                pipe.exists(f"{token_key}:hashes")
+                pipe.exists(f"{ast_key}:hashes")
+
+            exists_results = pipe.execute()
+
+            # Second pass: fetch actual data for existing keys
+            pipe2 = self.redis.pipeline()
+            fetch_map = []
+
+            for i, fh in enumerate(file_hashes):
+                token_exists = exists_results[i * 2]
+                ast_exists = exists_results[i * 2 + 1]
+
+                if token_exists:
+                    token_key = f"{self.TOKEN_PREFIX}:{fh}"
+                    pipe2.smembers(f"{token_key}:hashes")
+                    pipe2.hgetall(f"{token_key}:positions")
+                    fetch_map.append((fh, 'token'))
+                if ast_exists:
+                    ast_key = f"{self.AST_PREFIX}:{fh}"
+                    pipe2.smembers(f"{ast_key}:hashes")
+                    fetch_map.append((fh, 'ast'))
+
+            if not fetch_map:
+                return result
+
+            fetch_results = pipe2.execute()
+            ri = 0
+
+            for fh, data_type in fetch_map:
+                if data_type == 'token':
+                    hashes = fetch_results[ri]
+                    positions_raw = fetch_results[ri + 1]
+                    ri += 2
+
+                    fps = []
+                    for h in hashes:
+                        pos_json = positions_raw.get(h)
+                        if pos_json:
+                            pos = json.loads(pos_json)
+                            fps.append({
+                                'hash': int(h) if h.isdigit() else h,
+                                'start': tuple(pos['start']),
+                                'end': tuple(pos['end'])
+                            })
+
+                    result[fh]['fingerprints'] = fps
+                    result[fh]['fingerprint_count'] = len(fps)
+
+                elif data_type == 'ast':
+                    hash_strings = fetch_results[ri]
+                    ri += 1
+
+                    ast_hashes = []
+                    for h in hash_strings:
+                        try:
+                            ast_hashes.append(int(h))
+                        except ValueError:
+                            ast_hashes.append(h)
+
+                    result[fh]['ast_hashes'] = ast_hashes
+
+            return result
+
+        except RedisError as e:
+            logger.warning(f"Failed to batch-get file data: {e}")
+            return result
+
+    def batch_cache(
+        self,
+        items: List[Tuple[str, List[Dict[str, Any]], List[int]]]
+    ) -> None:
+        """
+        Batch-cache fingerprints and AST hashes.
+
+        Args:
+            items: List of (file_hash, fingerprints, ast_hashes) tuples
+        """
+        if not items:
+            return
+
+        try:
+            pipe = self.redis.pipeline()
+
+            for file_hash, fingerprints, ast_hashes in items:
+                token_key = f"{self.TOKEN_PREFIX}:{file_hash}"
+
+                if fingerprints:
+                    pipe.hset(f"{token_key}:positions", mapping={
+                        str(fp['hash']): json.dumps({
+                            'start': list(fp['start']),
+                            'end': list(fp['end'])
+                        })
+                        for fp in fingerprints
+                    })
+                    pipe.sadd(f"{token_key}:hashes", *[str(fp['hash']) for fp in fingerprints])
+                    pipe.expire(f"{token_key}:positions", self.ttl)
+                    pipe.expire(f"{token_key}:hashes", self.ttl)
+
+                if ast_hashes:
+                    ast_key = f"{self.AST_PREFIX}:{file_hash}"
+                    pipe.sadd(f"{ast_key}:hashes", *[str(h) for h in ast_hashes])
+                    pipe.expire(f"{ast_key}:hashes", self.ttl)
+
+            pipe.execute()
+
+        except RedisError as e:
+            logger.warning(f"Failed to batch-cache fingerprints: {e}")

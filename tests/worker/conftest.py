@@ -35,16 +35,29 @@ class SimpleRedis:
         return value
 
     def hset(self, name, field=None, value=None, **kwargs):
-        if name not in self.hashes:
-            self.hashes[name] = {}
-        if isinstance(field, dict):
-            mapping = field
+        if 'mapping' in kwargs:
+            mapping = kwargs['mapping']
+            if name not in self.hashes:
+                self.hashes[name] = {}
             for f, v in mapping.items():
                 self.hashes[name][f] = v
             result = len(mapping)
-        else:
+            return self._record(result)
+        if isinstance(field, dict):
+            mapping = field
+            if name not in self.hashes:
+                self.hashes[name] = {}
+            for f, v in mapping.items():
+                self.hashes[name][f] = v
+            result = len(mapping)
+            return self._record(result)
+        if name not in self.hashes:
+            self.hashes[name] = {}
+        if field is not None:
             self.hashes[name][field] = value
             result = 1
+        else:
+            result = 0
         return self._record(result)
 
     def hget(self, name, field):
