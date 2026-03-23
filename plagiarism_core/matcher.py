@@ -105,8 +105,8 @@ def build_fragments(
 
     occurrences.sort(key=lambda x: (x.left_index, x.right_index))
 
-    fragment_start = {}
-    fragment_end = {}
+    fragment_start: Dict[str, Fragment] = {}
+    fragment_end: Dict[str, Fragment] = {}
 
     for i, occ in enumerate(occurrences):
         start_key = f"{occ.left_index}|{occ.right_index}"

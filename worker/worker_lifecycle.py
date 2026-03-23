@@ -9,7 +9,7 @@ import time
 import functools
 from typing import Optional
 
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 import pika
 
 from worker.config import settings
@@ -27,13 +27,11 @@ class AsyncWorker:
         self,
         message_handler,
         worker_concurrency: Optional[int] = None,
-        log_level: Optional[int] = None,
-        analysis_executor: Optional[ProcessPoolExecutor] = None
+        log_level: Optional[int] = None
     ):
         self.message_handler = message_handler
         self.worker_concurrency = worker_concurrency or getattr(settings, 'worker_concurrency', 4)
         self.log_level = log_level or self._parse_log_level(getattr(settings, 'log_level', 'INFO'))
-        self.analysis_executor = analysis_executor
 
         self._connection: Optional[pika.SelectConnection] = None
         self._channel: Optional[pika.channel.Channel] = None

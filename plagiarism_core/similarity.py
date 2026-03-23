@@ -19,14 +19,14 @@ def longest_common_subsequence(occurrences: List[Tuple[int, int]]) -> int:
     left_indices = [occ[0] for occ in sorted_occ]
     right_indices = [occ[1] for occ in sorted_occ]
 
-    left_to_right = {}
+    left_to_right: Dict[int, List[int]] = {}
     for occ in sorted_occ:
         if occ[0] not in left_to_right:
             left_to_right[occ[0]] = []
         left_to_right[occ[0]].append(occ[1])
 
     longest = 0
-    dp = {}
+    dp: Dict[Tuple[int, int], int] = {}
 
     for left_idx in left_indices:
         for right_idx in left_to_right.get(left_idx, []):

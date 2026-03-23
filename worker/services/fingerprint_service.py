@@ -13,8 +13,9 @@ from plagiarism_core.fingerprints import (
     tokenize_with_tree_sitter,
     compute_fingerprints,
     winnow_fingerprints,
+    parse_file_once,
+    tokenize_and_hash_ast,
 )
-from plagiarism_core.ast_hash import extract_ast_hashes
 from shared.interfaces import FingerprintCache
 
 logger = logging.getLogger(__name__)
@@ -66,11 +67,11 @@ class FingerprintService:
             logger.debug(f" fingerprints from cache for {file_hash[:16]}...")
             return fps
 
-        # Generate from file
-        tokens = tokenize_with_tree_sitter(file_path, language)
+        # Generate from file — single tree walk for both tokens and AST hashes
+        tree, _ = parse_file_once(file_path, language)
+        tokens, ast_hashes = tokenize_and_hash_ast(file_path, language, tree=tree)
         raw_fps = compute_fingerprints(tokens)
         fps = winnow_fingerprints(raw_fps)
-        ast_hashes = extract_ast_hashes(file_path, language)
 
         # Convert to expected format
         fps_for_storage = [

@@ -26,9 +26,13 @@ COPY ./src ./
 # Copy additional required modules
 COPY ./cli ./cli
 COPY ./worker ./worker
+COPY ./shared ./shared
+COPY ./plagiarism_core ./plagiarism_core
 
 # Copy built frontend from previous stage
 COPY --from=frontend-build /frontend/dist ./frontend/dist
+
+ENV PYTHONPATH=/app
 
 EXPOSE 8000
 

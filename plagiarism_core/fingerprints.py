@@ -42,13 +42,7 @@ def tokenize_with_tree_sitter(
     Returns list of (token_type, start_point, end_point).
     """
     if tree is None:
-        language = get_language(lang_code)
-        parser = Parser(language)
-
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            code = f.read()
-
-        tree = parser.parse(code.encode('utf-8'))
+        tree, _ = parse_file_once(file_path, lang_code)
 
     tokens = []
 
@@ -62,6 +56,51 @@ def tokenize_with_tree_sitter(
 
     visit(tree.root_node)
     return tokens
+
+
+def tokenize_and_hash_ast(
+    file_path: str,
+    lang_code: str = 'python',
+    tree: Any = None,
+    min_depth: int = 3,
+) -> Tuple[List[Tuple[str, Tuple[int, int], Tuple[int, int]]], List[int]]:
+    """
+    Tokenize and extract AST subtree hashes in a single tree walk.
+
+    Returns (tokens, ast_hashes) — avoids two separate traversals.
+    """
+    if tree is None:
+        tree, _ = parse_file_once(file_path, lang_code)
+
+    tokens = []
+    ast_hashes = []
+
+    def visit(node):
+        if node.type == 'comment':
+            return 0, ""
+
+        if not node.children:
+            tokens.append((node.type, node.start_point, node.end_point))
+            return 1, ""
+
+        child_results = [visit(c) for c in node.children]
+        child_depths = [d for d, _ in child_results if d > 0]
+        child_hashes = [h for _, h in child_results if h]
+
+        if not child_depths:
+            return 1, ""
+
+        depth = 1 + max(child_depths)
+        rep = node.type + "(" + ",".join(child_hashes) + ")"
+
+        h = stable_hash(rep)
+        if depth >= min_depth:
+            ast_hashes.append(h)
+
+        return depth, str(h)
+
+    visit(tree.root_node)
+    return tokens, ast_hashes
 
 
 def compute_fingerprints(
@@ -110,13 +149,34 @@ def winnow_fingerprints(
     """
     Apply winnowing algorithm: select minimum hash in each sliding window.
     """
-    winnowed = []
+    winnowed: List[Dict[str, Any]] = []
     for i in range(len(fingerprints) - window_size + 1):
         window = fingerprints[i:i + window_size]
         min_fp = min(window, key=lambda x: x['hash'])
         if not winnowed or min_fp['hash'] != winnowed[-1]['hash']:
             winnowed.append(min_fp.copy())
     return winnowed
+
+
+def parse_file_once(
+    file_path: str,
+    lang_code: str = 'python'
+) -> Tuple[Any, bytes]:
+    """
+    Parse a file once with tree-sitter, returning the tree and source bytes.
+
+    Use this to avoid re-parsing the same file for tokenization and AST hashing.
+    Pass the returned tree to tokenize_with_tree_sitter() and extract_ast_hashes().
+    """
+    language = get_language(lang_code)
+    parser = Parser(language)
+
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        code = f.read()
+
+    source_bytes = code.encode('utf-8')
+    tree = parser.parse(source_bytes)
+    return tree, source_bytes
 
 
 def index_fingerprints(

@@ -14,6 +14,8 @@ from plagiarism_core.fingerprints import (
     compute_fingerprints,
     winnow_fingerprints,
     index_fingerprints,
+    parse_file_once,
+    tokenize_and_hash_ast,
 )
 from plagiarism_core.ast_hash import (
     extract_ast_hashes,

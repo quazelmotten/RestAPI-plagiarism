@@ -76,3 +76,4 @@ tests/tmp_synthetic
 
 *.prof
 test*.json
+scripts/profiles

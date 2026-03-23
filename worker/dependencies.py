@@ -6,6 +6,7 @@ Uses singleton patterns for shared resources (Redis client, etc.).
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 
 import redis
@@ -95,6 +96,14 @@ def get_analyzer() -> CoreAnalyzer:
     return analyzer
 
 
+@lru_cache()
+def get_analysis_executor() -> ThreadPoolExecutor:
+    """Get or create singleton thread pool for analysis timeouts."""
+    executor = ThreadPoolExecutor(max_workers=worker_settings.worker_concurrency)
+    logger.info(f"Analysis executor initialized with {worker_settings.worker_concurrency} workers")
+    return executor
+
+
 def get_fingerprint_service() -> 'FingerprintService':
     """Create fingerprint service with dependencies."""
     from worker.services.fingerprint_service import FingerprintService
@@ -122,12 +131,13 @@ def get_analysis_service() -> 'AnalysisService':
     """Create analysis service with dependencies."""
     from worker.services.analysis_service import AnalysisService
     cache = get_cache()
-    return AnalysisService(cache)
+    executor = get_analysis_executor()
+    return AnalysisService(cache, executor)
 
 
 def get_result_service() -> 'ResultService':
     """Create result service with dependencies."""
-    from worker.services.result_service_new import ResultService
+    from worker.services.result_service import ResultService
     repository = get_repository()
     return ResultService(repository)
 
@@ -158,3 +168,18 @@ def get_task_service() -> 'TaskService':
 
     logger.info("Task service initialized with all dependencies")
     return task_service
+
+
+def shutdown_dependencies():
+    """Shut down all cached singletons and release resources."""
+    logger.info("Shutting down dependencies...")
+
+    # Shutdown executor first (finish in-flight work)
+    if get_analysis_executor.cache_info().currsize > 0:
+        get_analysis_executor().shutdown(wait=True)
+        logger.info("Analysis executor shut down")
+
+    # Close Redis connection
+    if get_redis_client.cache_info().currsize > 0:
+        get_redis_client().close()
+        logger.info("Redis client closed")

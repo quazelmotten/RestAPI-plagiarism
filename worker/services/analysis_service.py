@@ -155,15 +155,16 @@ class AnalysisService:
         from plagiarism_core.fingerprints import (
             tokenize_with_tree_sitter,
             compute_fingerprints,
-            winnow_fingerprints
+            winnow_fingerprints,
+            parse_file_once,
+            tokenize_and_hash_ast,
         )
-        from plagiarism_core.ast_hash import extract_ast_hashes
 
         def do_generate():
-            tokens = tokenize_with_tree_sitter(file_path, language)
+            tree, _ = parse_file_once(file_path, language)
+            tokens, ast_hashes = tokenize_and_hash_ast(file_path, language, tree=tree)
             raw_fps = compute_fingerprints(tokens)
             fps = winnow_fingerprints(raw_fps)
-            ast_hashes = extract_ast_hashes(file_path, language)
 
             return {
                 'file': file_path,

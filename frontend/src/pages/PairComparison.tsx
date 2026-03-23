@@ -17,14 +17,15 @@ type FilePickerFile = FileInfo;
 
 type PlagiarismMatch = ApiPlagiarismMatch;
 
-// Matches are already in the correct format from the API
-const transformMatches = (matches: ApiPlagiarismMatch[]): PlagiarismMatch[] => {
+// Backend returns { file1: {start_line, end_line, ...}, file2: {start_line, end_line, ...}, kgram_count }
+// Frontend expects { file_a_start_line, file_a_end_line, file_b_start_line, file_b_end_line }
+const transformMatches = (matches: any[]): PlagiarismMatch[] => {
   if (!Array.isArray(matches)) return [];
   return matches.map(m => ({
-    file_a_start_line: m.file_a_start_line,
-    file_a_end_line: m.file_a_end_line,
-    file_b_start_line: m.file_b_start_line,
-    file_b_end_line: m.file_b_end_line,
+    file_a_start_line: m.file1?.start_line ?? m.file_a_start_line,
+    file_a_end_line: m.file1?.end_line ?? m.file_a_end_line,
+    file_b_start_line: m.file2?.start_line ?? m.file_b_start_line,
+    file_b_end_line: m.file2?.end_line ?? m.file_b_end_line,
   }));
 };
 

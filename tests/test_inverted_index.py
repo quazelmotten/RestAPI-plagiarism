@@ -8,7 +8,8 @@ import sys
 sys.path.insert(0, '/home/bobbybrown/RestAPI-plagiarism/worker')
 
 import logging
-from inverted_index import InvertedIndex
+from collections import defaultdict
+from infrastructure.inverted_index import RedisInvertedIndex
 
 # Setup logging
 logging.basicConfig(
@@ -16,6 +17,73 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class FakeRedisPipeline:
+    """In-memory mock of a Redis pipeline."""
+
+    def __init__(self, store):
+        self._store = store
+        self._commands = []
+
+    def sadd(self, key, *values):
+        self._commands.append(('sadd', key, set(values)))
+
+    def srem(self, key, *values):
+        self._commands.append(('srem', key, set(values)))
+
+    def smembers(self, key):
+        self._commands.append(('smembers', key))
+
+    def scard(self, key):
+        self._commands.append(('scard', key))
+
+    def delete(self, key):
+        self._commands.append(('delete', key))
+
+    def execute(self):
+        results = []
+        for op, key, *args in self._commands:
+            if op == 'sadd':
+                self._store.setdefault(key, set()).update(args[0])
+                results.append(len(args[0]))
+            elif op == 'srem':
+                self._store.setdefault(key, set()).difference_update(args[0])
+                results.append(len(args[0]))
+            elif op == 'smembers':
+                results.append(set(self._store.get(key, set())))
+            elif op == 'scard':
+                results.append(len(self._store.get(key, set())))
+            elif op == 'delete':
+                self._store.pop(key, None)
+                results.append(1)
+        self._commands.clear()
+        return results
+
+
+class FakeRedis:
+    """In-memory mock of a Redis client using sets."""
+
+    def __init__(self):
+        self._store = defaultdict(set)
+
+    def pipeline(self):
+        return FakeRedisPipeline(self._store)
+
+    def sadd(self, key, *values):
+        self._store[key].update(values)
+
+    def smembers(self, key):
+        return set(self._store.get(key, set()))
+
+    def scard(self, key):
+        return len(self._store.get(key, set()))
+
+    def srem(self, key, *values):
+        self._store[key].difference_update(values)
+
+    def delete(self, key):
+        self._store.pop(key, None)
 
 
 def create_test_fingerprints(base_hash: int, count: int) -> list:
@@ -33,7 +101,7 @@ def test_inverted_index():
     logger.info("=" * 70)
     
     # Create inverted index instance
-    index = InvertedIndex()
+    index = RedisInvertedIndex(FakeRedis())
     
     # Simulate adding files to the database
     logger.info("\n1. Indexing files in the database...")
@@ -62,20 +130,14 @@ def test_inverted_index():
     index.add_file_fingerprints(file4_hash, file4_fps, "python")
     logger.info(f"   Indexed file4: 100 fingerprints (5% overlap with file1)")
     
-    # Show stats
-    stats = index.get_stats("python")
-    logger.info(f"\n2. Database Statistics:")
-    logger.info(f"   Total files indexed: {stats['indexed_files']}")
-    logger.info(f"   Unique fingerprint hashes: {stats['unique_hashes']}")
-    logger.info(f"   Min overlap threshold: {stats['min_overlap_threshold']:.0%}")
-    
     # Test candidate search with 15% threshold
     logger.info(f"\n3. Searching for candidates (new file with 100 fingerprints)...")
     
     # New file: 100 fingerprints, overlaps with all existing files
     new_file_fps = create_test_fingerprints(1000, 100)
+    new_file_hashes = [str(fp['hash']) for fp in new_file_fps]
     
-    candidates = index.find_candidate_files(new_file_fps, "python")
+    candidates = index.find_candidates(new_file_hashes, "python")
     
     logger.info(f"   Query file has {len(new_file_fps)} fingerprints")
     logger.info(f"   Minimum overlap required: {int(len(new_file_fps) * 0.15)} fingerprints")
@@ -110,14 +172,9 @@ def test_inverted_index():
     # Test with different threshold
     logger.info(f"\n6. Testing with 50% threshold...")
     index.min_overlap_threshold = 0.50
-    candidates_strict = index.find_candidate_files(new_file_fps, "python")
+    candidates_strict = index.find_candidates(new_file_hashes, "python")
     logger.info(f"   Candidates with 50% threshold: {len(candidates_strict)}")
     logger.info(f"   Expected: file1 (100%), file2 (50%)")
-    
-    # Cleanup
-    logger.info(f"\n7. Cleaning up...")
-    index.clear_language("python")
-    logger.info("   Cleared all test data from inverted index")
     
     logger.info("\n" + "=" * 70)
     logger.info("Test completed successfully!")

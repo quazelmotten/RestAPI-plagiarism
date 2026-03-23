@@ -240,12 +240,12 @@ def test_config():
 
 @pytest.fixture(autouse=True)
 def mock_get_session(monkeypatch, mock_db_session):
-    """Patch get_session in crud module to return a mock sync context manager."""
-    import worker.crud as crud
+    """Patch get_session in database module to return a mock sync context manager."""
+    import worker.database as db_module
     @contextlib.contextmanager
     def fake_get_session():
         yield mock_db_session
-    monkeypatch.setattr(crud, 'get_session', fake_get_session)
+    monkeypatch.setattr(db_module, 'get_session', fake_get_session)
 
 
 # Markers for test categorization
