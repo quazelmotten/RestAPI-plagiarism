@@ -156,6 +156,7 @@ class AnalysisService:
             tokenize_with_tree_sitter,
             compute_fingerprints,
             winnow_fingerprints,
+            compute_and_winnow,
             parse_file_once,
             tokenize_and_hash_ast,
         )
@@ -163,8 +164,7 @@ class AnalysisService:
         def do_generate():
             tree, _ = parse_file_once(file_path, language)
             tokens, ast_hashes = tokenize_and_hash_ast(file_path, language, tree=tree)
-            raw_fps = compute_fingerprints(tokens)
-            fps = winnow_fingerprints(raw_fps)
+            fps = compute_and_winnow(tokens)
 
             return {
                 'file': file_path,

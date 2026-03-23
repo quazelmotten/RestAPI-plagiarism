@@ -227,6 +227,7 @@ def bench_indexing(
         tokenize_with_tree_sitter,
         compute_fingerprints,
         winnow_fingerprints,
+        compute_and_winnow,
         parse_file_once,
         tokenize_and_hash_ast,
     )
@@ -240,11 +241,10 @@ def bench_indexing(
         for fi in files:
             t0 = time.perf_counter()
 
-            # Single parse + single tree walk for both tokens and AST hashes
+            # Single parse + single tree walk + single fingerprint pass
             tree, _ = parse_file_once(fi['file_path'], language)
             tokens, ast_hashes = tokenize_and_hash_ast(fi['file_path'], language, tree=tree)
-            raw_fps = compute_fingerprints(tokens)
-            fps = winnow_fingerprints(raw_fps)
+            fps = compute_and_winnow(tokens)
 
             fps_for_storage = [
                 {'hash': fp['hash'], 'start': tuple(fp['start']), 'end': tuple(fp['end'])}

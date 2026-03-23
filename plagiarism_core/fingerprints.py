@@ -3,12 +3,14 @@ Tokenization and fingerprinting for plagiarism detection.
 """
 
 import logging
+from collections import deque
 from functools import lru_cache
 from typing import List, Dict, Any, Tuple
 
 from tree_sitter import Language, Parser
 import tree_sitter_python as tspython
 import tree_sitter_cpp as tscpp
+import xxhash
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +157,79 @@ def winnow_fingerprints(
         min_fp = min(window, key=lambda x: x['hash'])
         if not winnowed or min_fp['hash'] != winnowed[-1]['hash']:
             winnowed.append(min_fp.copy())
+    return winnowed
+
+
+def compute_and_winnow(
+    tokens: List[Tuple[str, Tuple[int, int], Tuple[int, int]]],
+    k: int = 6,
+    base: int = 257,
+    mod: int = 10**9 + 7,
+    window_size: int = 5,
+) -> List[Dict[str, Any]]:
+    """
+    Compute k-gram fingerprints and apply winnowing in a single pass.
+
+    Optimizations over separate compute_fingerprints + winnow_fingerprints:
+    - Pre-hashes all token types up front (avoids repeated xxhash calls)
+    - Uses deque-based monotonic queue for O(n) winnowing (vs O(nw) min scan)
+    - Tuples internally, only creates dicts for final winnowed output
+    - No intermediate list of all k-gram fingerprints
+    """
+    n = len(tokens)
+    if n < k:
+        return []
+
+    # B) Pre-hash all token types at once
+    token_hashes = [xxhash.xxh64(t[0].encode()).intdigest() for t in tokens]
+
+    power = pow(base, k - 1, mod)
+
+    # Compute first k-gram hash
+    h = 0
+    for i in range(k):
+        h = (h * base + token_hashes[i]) % mod
+
+    # C) Deque-based monotonic queue for winnowing
+    # Each entry: (hash_value, kgram_idx, start_point, end_point)
+    dq: deque = deque()
+    winnowed: List[Dict[str, Any]] = []
+
+    def _process_kgram(kg_hash, kgram_idx):
+        """Process one k-gram through the winnowing deque."""
+        start = tokens[kgram_idx][1]
+        end = tokens[kgram_idx + k - 1][2]
+
+        # Remove entries outside the window
+        while dq and dq[0][1] <= kgram_idx - window_size:
+            dq.popleft()
+
+        # Remove entries with larger or equal hash (monotonic)
+        while dq and dq[-1][0] >= kg_hash:
+            dq.pop()
+
+        dq.append((kg_hash, kgram_idx, start, end))
+
+        # Output minimum if we have a full window
+        if kgram_idx >= window_size - 1:
+            min_hash, min_idx, min_start, min_end = dq[0]
+            if not winnowed or min_hash != winnowed[-1]['hash']:
+                winnowed.append({
+                    'hash': min_hash,
+                    'start': min_start,
+                    'end': min_end,
+                    'kgram_idx': min_idx,
+                })
+
+    # First k-gram
+    _process_kgram(h, 0)
+
+    # Remaining k-grams via rolling hash
+    for i in range(k, n):
+        h = (h - token_hashes[i - k] * power) % mod
+        h = (h * base + token_hashes[i]) % mod
+        _process_kgram(h, i - k + 1)
+
     return winnowed
 
 

@@ -13,6 +13,7 @@ from plagiarism_core.fingerprints import (
     tokenize_with_tree_sitter,
     compute_fingerprints,
     winnow_fingerprints,
+    compute_and_winnow,
     index_fingerprints,
     parse_file_once,
     tokenize_and_hash_ast,
