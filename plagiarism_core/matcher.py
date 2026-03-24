@@ -73,21 +73,46 @@ def find_paired_occurrences(
     """
     Find all paired occurrences of matching fingerprints between two files.
 
+    Uses greedy index-proximity pairing: for each occurrence in file A,
+    pairs it with the closest unused occurrence in file B by k-gram index.
+    This handles insertions/deletions that shift indices between files.
+
     Returns list of PairedOccurrence objects with k-gram indices.
     """
     occurrences = []
     for h in set(index_a) & set(index_b):
-        for a, b in zip(index_a[h], index_b[h]):
-            occ = PairedOccurrence(
-                left_idx=a.get('kgram_idx', 0),
-                right_idx=b.get('kgram_idx', 0),
-                left_start=a['start'],
-                left_end=a['end'],
-                right_start=b['start'],
-                right_end=b['end'],
-                fingerprint_hash=h
-            )
-            occurrences.append(occ)
+        b_list = sorted(index_b[h], key=lambda x: x.get('kgram_idx', 0))
+        used_b = set()
+
+        for a in index_a[h]:
+            a_idx = a.get('kgram_idx', 0)
+            best_b = None
+            best_dist = float('inf')
+
+            for bi, b in enumerate(b_list):
+                if bi in used_b:
+                    continue
+                b_idx = b.get('kgram_idx', 0)
+                dist = abs(a_idx - b_idx)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_b = bi
+                if dist == 0:
+                    break  # Exact match, no need to look further
+
+            if best_b is not None:
+                used_b.add(best_b)
+                b = b_list[best_b]
+                occ = PairedOccurrence(
+                    left_idx=a_idx,
+                    right_idx=b.get('kgram_idx', 0),
+                    left_start=a['start'],
+                    left_end=a['end'],
+                    right_start=b['start'],
+                    right_end=b['end'],
+                    fingerprint_hash=h
+                )
+                occurrences.append(occ)
     return occurrences
 
 
@@ -98,7 +123,8 @@ def build_fragments(
     """
     Build fragments from paired occurrences.
 
-    Fragments are groups of consecutive matching k-grams.
+    Fragments are groups of matching k-grams. First builds by k-gram index
+    adjacency, then merges fragments whose line ranges overlap.
     """
     if not occurrences:
         return []
@@ -132,10 +158,28 @@ def build_fragments(
             fragment_end[new_end_key] = fragment
 
     fragments = list(fragment_start.values())
-    fragments = [f for f in fragments if len(f.pairs) >= minimum_occurrences]
-    fragments.sort(key=lambda f: f.left_kgram_range[0])
 
-    return fragments
+    # Second pass: merge fragments whose line ranges overlap (not just k-gram adjacency)
+    # This handles files with slight index offsets
+    fragments.sort(key=lambda f: (f.left_selection['start_line'], f.right_selection['start_line']))
+    merged = []
+    for frag in fragments:
+        if not merged:
+            merged.append(frag)
+            continue
+        prev = merged[-1]
+        f1_overlap = frag.left_selection['start_line'] <= prev.left_selection['end_line'] + 2
+        f2_overlap = frag.right_selection['start_line'] <= prev.right_selection['end_line'] + 2
+        if f1_overlap and f2_overlap:
+            for pair in frag.pairs:
+                prev.extend_with(pair)
+        else:
+            merged.append(frag)
+
+    merged = [f for f in merged if len(f.pairs) >= minimum_occurrences]
+    merged.sort(key=lambda f: f.left_kgram_range[0])
+
+    return merged
 
 
 def squash_fragments(fragments: List[Fragment]) -> List[Fragment]:
@@ -187,3 +231,55 @@ def matches_from_fragments(fragments: List[Fragment]) -> List[Match]:
             kgram_count=len(frag.pairs)
         ))
     return matches
+
+
+def merge_adjacent_matches(matches: List[Match], gap: int = 2) -> List[Match]:
+    """
+    Merge matches that are adjacent or overlapping in line ranges.
+
+    Winnowing creates gaps in k-gram indices, so build_fragments produces
+    many small fragments for what should be one large match. This function
+    merges them back together based on line proximity.
+
+    Args:
+        matches: List of Match objects
+        gap: Maximum line gap to consider adjacent (default 2)
+    """
+    if not matches:
+        return []
+
+    # Sort by file1 start line, then by file2 start line
+    sorted_matches = sorted(
+        matches,
+        key=lambda m: (m.file1['start_line'], m.file2['start_line'])
+    )
+
+    merged = [Match(
+        file1=dict(sorted_matches[0].file1),
+        file2=dict(sorted_matches[0].file2),
+        kgram_count=sorted_matches[0].kgram_count
+    )]
+
+    for m in sorted_matches[1:]:
+        prev = merged[-1]
+
+        # Check if this match is adjacent/overlapping with the previous one
+        # in BOTH files
+        f1_adjacent = m.file1['start_line'] <= prev.file1['end_line'] + gap
+        f2_adjacent = m.file2['start_line'] <= prev.file2['end_line'] + gap
+
+        if f1_adjacent and f2_adjacent:
+            # Merge: extend the end lines and add k-gram count
+            prev.file1['end_line'] = max(prev.file1['end_line'], m.file1['end_line'])
+            prev.file1['end_col'] = max(prev.file1['end_col'], m.file1['end_col'])
+            prev.file2['end_line'] = max(prev.file2['end_line'], m.file2['end_line'])
+            prev.file2['end_col'] = max(prev.file2['end_col'], m.file2['end_col'])
+            prev.kgram_count += m.kgram_count
+        else:
+            merged.append(Match(
+                file1=dict(m.file1),
+                file2=dict(m.file2),
+                kgram_count=m.kgram_count
+            ))
+
+    return merged

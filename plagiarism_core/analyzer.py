@@ -1,30 +1,20 @@
 """
 Main analyzer orchestrating plagiarism detection.
 
-Combines fingerprinting, AST analysis, and match detection.
+Uses the multi-level plagiarism detector to classify matches by type
+(Type 1-4) and produce enriched match data.
 """
 
 import logging
 from typing import List, Dict, Any, Tuple, Optional
 
-from .fingerprints import (
-    tokenize_with_tree_sitter,
-    compute_fingerprints,
-    winnow_fingerprints,
-    index_fingerprints,
-)
 from .ast_hash import extract_ast_hashes, ast_similarity as compute_ast_similarity
-from .matcher import (
-    find_paired_occurrences,
-    build_fragments,
-    matches_from_fragments,
-)
-from .similarity import compute_similarity_metrics
+from .plagiarism_detector import detect_plagiarism
 from .models import (
     AnalysisResult,
     Match,
+    PlagiarismType,
     SimilarityMetrics,
-    Fingerprint,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,16 +24,12 @@ class Analyzer:
     """
     Main plagiarism analyzer.
 
-    Provides both simple analysis and cached analysis workflows.
+    Uses the multi-level detector to find and classify matching code regions.
+    Each match is annotated with a plagiarism type (1-4), similarity score,
+    and optional details (renames, transformations).
     """
 
-    def __init__(self, ast_threshold: float = 0.30):
-        """
-        Initialize analyzer.
-
-        Args:
-            ast_threshold: Minimum AST similarity to trigger fragment building (default 0.30)
-        """
+    def __init__(self, ast_threshold: float = 0.15):
         self.ast_threshold = ast_threshold
 
     def analyze(
@@ -63,52 +49,38 @@ class Analyzer:
             ast_threshold: Override default AST threshold
 
         Returns:
-            AnalysisResult with similarity and matches
+            AnalysisResult with similarity and typed matches
         """
-        threshold = ast_threshold if ast_threshold is not None else self.ast_threshold
+        with open(file1, 'r', encoding='utf-8', errors='ignore') as f:
+            source1 = f.read()
+        with open(file2, 'r', encoding='utf-8', errors='ignore') as f:
+            source2 = f.read()
 
-        # Parse and tokenize
-        tokens1 = tokenize_with_tree_sitter(file1, language)
-        tokens2 = tokenize_with_tree_sitter(file2, language)
+        lines1 = source1.split('\n')
+        lines2 = source2.split('\n')
 
-        # Generate fingerprints
-        fps1 = winnow_fingerprints(compute_fingerprints(tokens1))
-        fps2 = winnow_fingerprints(compute_fingerprints(tokens2))
-
-        index1 = index_fingerprints(fps1)
-        index2 = index_fingerprints(fps2)
-
-        # AST analysis
         ast1 = extract_ast_hashes(file1, language)
         ast2 = extract_ast_hashes(file2, language)
         ast_sim = compute_ast_similarity(ast1, ast2)
 
-        # Early exit if below threshold
-        if ast_sim < threshold:
-            metrics = compute_similarity_metrics(
-                [],
-                len(fps1),
-                len(fps2)
-            )
-            return AnalysisResult(
-                similarity_ratio=ast_sim,
-                matches=[],
-                metrics=metrics,
-                file1_path=file1,
-                file2_path=file2,
-                language=language
-            )
+        # Multi-level matching
+        matches = detect_plagiarism(source1, source2, language)
 
-        # Find matches
-        occurrences = find_paired_occurrences(index1, index2)
-        fragments = build_fragments(occurrences, minimum_occurrences=1)
-        matches = matches_from_fragments(fragments)
+        # Compute metrics (all match types contribute to coverage)
+        total_lines_a = len([l for l in lines1 if l.strip()])
+        total_lines_b = len([l for l in lines2 if l.strip()])
+        matched_lines_a = sum(m.file1['end_line'] - m.file1['start_line'] + 1 for m in matches)
+        matched_lines_b = sum(m.file2['end_line'] - m.file2['start_line'] + 1 for m in matches)
 
-        # Compute metrics
-        metrics = compute_similarity_metrics(
-            [(occ.left_index, occ.right_index) for occ in occurrences],
-            len(fps1),
-            len(fps2)
+        metrics = SimilarityMetrics(
+            left_covered=matched_lines_a,
+            right_covered=matched_lines_b,
+            left_total=max(total_lines_a, 1),
+            right_total=max(total_lines_b, 1),
+            similarity=max(matched_lines_a / max(total_lines_a, 1),
+                          matched_lines_b / max(total_lines_b, 1)),
+            longest_fragment=max((m.file1['end_line'] - m.file1['start_line'] + 1
+                                 for m in matches), default=0),
         )
 
         return AnalysisResult(
@@ -126,112 +98,86 @@ class Analyzer:
         file2_path: str,
         file1_hash: str,
         file2_hash: str,
-        get_fingerprints,  # Callable[[str], List[Fingerprint] | None]
+        get_fingerprints,  # Unused, kept for API compatibility
         get_ast_hashes,    # Callable[[str], List[int] | None]
-        cache_fingerprints, # Callable[[str, List[Fingerprint], List[int]], None]
+        cache_fingerprints, # Unused, kept for API compatibility
         language: str = 'python',
         ast_threshold: Optional[float] = None
     ) -> Tuple[float, List[Dict[str, Any]], Dict[str, Any]]:
         """
-        Analyze with caching support.
+        Analyze with caching support (AST hashes only).
 
         Args:
             file1_path, file2_path: File paths
             file1_hash, file2_hash: File content hashes
-            get_fingerprints: Function to get fingerprints (from cache or compute)
-            get_ast_hashes: Function to get AST hashes
-            cache_fingerprints: Function to cache computed data
+            get_fingerprints: Unused (kept for API compat)
+            get_ast_hashes: Function to get AST hashes from cache
+            cache_fingerprints: Unused (kept for API compat)
             language: Programming language
-            ast_threshold: AST similarity threshold
+            ast_threshold: Unused (kept for API compat)
 
         Returns:
-            Tuple of (ast_similarity, matches, metrics)
+            Tuple of (ast_similarity, matches_data, metrics)
         """
-        threshold = ast_threshold if ast_threshold is not None else self.ast_threshold
+        # Read file contents
+        with open(file1_path, 'r', encoding='utf-8', errors='ignore') as f:
+            source1 = f.read()
+        with open(file2_path, 'r', encoding='utf-8', errors='ignore') as f:
+            source2 = f.read()
 
-        # Get or compute fingerprints and AST hashes for file1
-        fps1 = get_fingerprints(file1_hash)
+        lines1 = source1.split('\n')
+        lines2 = source2.split('\n')
+
+        # Get or compute AST hashes (for similarity score only)
         ast1 = get_ast_hashes(file1_hash)
-
-        if fps1 is None or ast1 is None:
-            # Need to compute from file
-            from .fingerprints import tokenize_with_tree_sitter, compute_fingerprints, winnow_fingerprints
-
-            tokens1 = tokenize_with_tree_sitter(file1_path, language)
-            fps1 = winnow_fingerprints(compute_fingerprints(tokens1))
-            ast1 = extract_ast_hashes(file1_path, language)
-            cache_fingerprints(file1_hash, fps1, ast1)
-
-        index1 = index_fingerprints(fps1)
-
-        # Get or compute for file2
-        fps2 = get_fingerprints(file2_hash)
         ast2 = get_ast_hashes(file2_hash)
 
-        if fps2 is None or ast2 is None:
-            from .fingerprints import tokenize_with_tree_sitter, compute_fingerprints, winnow_fingerprints
-
-            tokens2 = tokenize_with_tree_sitter(file2_path, language)
-            fps2 = winnow_fingerprints(compute_fingerprints(tokens2))
+        if ast1 is None:
+            ast1 = extract_ast_hashes(file1_path, language)
+        if ast2 is None:
             ast2 = extract_ast_hashes(file2_path, language)
-            cache_fingerprints(file2_hash, fps2, ast2)
 
-        index2 = index_fingerprints(fps2)
-
-        # AST similarity
         ast_sim = compute_ast_similarity(ast1, ast2)
 
-        if ast_sim < threshold:
-            metrics = compute_similarity_metrics(
-                [],
-                len(fps1),
-                len(fps2)
-            )
-            return ast_sim, [], {
-                'left_covered': 0,
-                'right_covered': 0,
-                'left_total': len(fps1),
-                'right_total': len(fps2),
-                'similarity': 0.0,
-                'longest_fragment': 0,
-            }
+        # Multi-level matching
+        matches = detect_plagiarism(source1, source2, language)
 
-        # Find matches
-        occurrences = find_paired_occurrences(index1, index2)
-        fragments = build_fragments(occurrences, minimum_occurrences=1)
-        matches = matches_from_fragments(fragments)
+        # Compute metrics (all match types contribute to coverage)
+        total_lines_a = len([l for l in lines1 if l.strip()])
+        total_lines_b = len([l for l in lines2 if l.strip()])
+        matched_lines_a = sum(m.file1['end_line'] - m.file1['start_line'] + 1 for m in matches)
+        matched_lines_b = sum(m.file2['end_line'] - m.file2['start_line'] + 1 for m in matches)
 
-        # Compute metrics
-        metrics = compute_similarity_metrics(
-            [(occ.left_index, occ.right_index) for occ in occurrences],
-            len(fps1),
-            len(fps2)
-        )
-
-        # Transform matches to dict format
+        # Transform matches to dict format (1-indexed line numbers)
         matches_data = []
         for match in matches:
             matches_data.append({
                 'file1': {
-                    'start_line': match.file1['start_line'],
-                    'start_col': match.file1['start_col'],
-                    'end_line': match.file1['end_line'],
-                    'end_col': match.file1['end_col'],
+                    'start_line': match.file1['start_line'] + 1,
+                    'start_col': match.file1.get('start_col', 0),
+                    'end_line': match.file1['end_line'] + 1,
+                    'end_col': match.file1.get('end_col', 0),
                 },
                 'file2': {
-                    'start_line': match.file2['start_line'],
-                    'start_col': match.file2['start_col'],
-                    'end_line': match.file2['end_line'],
-                    'end_col': match.file2['end_col'],
+                    'start_line': match.file2['start_line'] + 1,
+                    'start_col': match.file2.get('start_col', 0),
+                    'end_line': match.file2['end_line'] + 1,
+                    'end_col': match.file2.get('end_col', 0),
                 },
-                'kgram_count': match.kgram_count
+                'kgram_count': match.kgram_count,
+                'plagiarism_type': match.plagiarism_type,
+                'similarity': match.similarity,
+                'details': match.details,
+                'description': match.description,
             })
 
         return ast_sim, matches_data, {
-            'left_covered': metrics.left_covered,
-            'right_covered': metrics.right_covered,
-            'left_total': metrics.left_total,
-            'right_total': metrics.right_total,
-            'similarity': metrics.similarity,
-            'longest_fragment': metrics.longest_fragment,
+            'left_covered': matched_lines_a,
+            'right_covered': matched_lines_b,
+            'left_total': total_lines_a,
+            'right_total': total_lines_b,
+            'similarity': max(matched_lines_a / max(total_lines_a, 1),
+                            matched_lines_b / max(total_lines_b, 1)),
+            'longest_fragment': max((m['file1']['end_line'] - m['file1']['start_line'] + 1
+                                   for m in matches_data), default=0),
         }

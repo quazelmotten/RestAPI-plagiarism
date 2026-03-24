@@ -8,45 +8,87 @@ import {
   Badge,
   useColorModeValue,
   Box,
+  Tooltip,
 } from '@chakra-ui/react';
 import type { PlagiarismMatch } from '../../types';
+import {
+  PLAGIARISM_TYPE_COLORS,
+  PLAGIARISM_TYPE_COLORS_HOVER,
+  PLAGIARISM_TYPE_BORDERS,
+  PLAGIARISM_TYPE_LABELS,
+} from '../../types';
 
-const MATCH_COLORS = [
+// Fallback colors for matches without type info (backward compat)
+const FALLBACK_COLORS = [
   'rgba(255, 235, 59, 0.3)',
   'rgba(76, 175, 80, 0.25)',
   'rgba(33, 150, 243, 0.25)',
   'rgba(156, 39, 176, 0.25)',
-  'rgba(255, 87, 34, 0.25)',
-  'rgba(0, 188, 212, 0.25)',
-  'rgba(233, 30, 99, 0.25)',
-  'rgba(255, 152, 0, 0.25)',
 ];
 
-const MATCH_COLORS_HOVER = [
-  'rgba(255, 235, 59, 0.7)',
-  'rgba(76, 175, 80, 0.6)',
-  'rgba(33, 150, 243, 0.6)',
-  'rgba(156, 39, 176, 0.6)',
-  'rgba(255, 87, 34, 0.6)',
-  'rgba(0, 188, 212, 0.6)',
-  'rgba(233, 30, 99, 0.6)',
-  'rgba(255, 152, 0, 0.6)',
-];
+const FALLBACK_BORDERS = ['#FBC02D', '#388E3C', '#1976D2', '#7B1FA2'];
 
-const MATCH_BORDERS = [
-  '#FBC02D',
-  '#388E3C',
-  '#1976D2',
-  '#7B1FA2',
-  '#E64A19',
-  '#0097A7',
-  '#C2185B',
-  '#F57C00',
-];
+const isCommentLine = (line: string, language: string): boolean => {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  if (language === 'python') {
+    return trimmed.startsWith('#');
+  }
+  if (['javascript', 'typescript', 'c', 'cpp', 'java', 'go', 'rust', 'kotlin', 'swift', 'csharp'].includes(language)) {
+    return trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/');
+  }
+  if (language === 'html' || language === 'xml') {
+    return trimmed.startsWith('<!--');
+  }
+  if (language === 'css' || language === 'scss' || language === 'less') {
+    return trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/');
+  }
+  if (language === 'ruby' || language === 'perl' || language === 'bash' || language === 'shell') {
+    return trimmed.startsWith('#');
+  }
+  if (language === 'lua') {
+    return trimmed.startsWith('--');
+  }
+  if (language === 'sql') {
+    return trimmed.startsWith('--');
+  }
+  return false;
+};
 
-const getMatchColor = (matchIndex: number) => MATCH_COLORS[matchIndex % MATCH_COLORS.length];
-const getMatchColorHover = (matchIndex: number) => MATCH_COLORS_HOVER[matchIndex % MATCH_COLORS_HOVER.length];
-const getMatchBorder = (matchIndex: number) => MATCH_BORDERS[matchIndex % MATCH_BORDERS.length];
+const getMatchBg = (match: PlagiarismMatch | null, isHovered: boolean): string => {
+  if (!match) return 'transparent';
+  const ptype = match.plagiarism_type;
+  if (ptype && PLAGIARISM_TYPE_COLORS[ptype]) {
+    return isHovered
+      ? PLAGIARISM_TYPE_COLORS_HOVER[ptype]
+      : PLAGIARISM_TYPE_COLORS[ptype];
+  }
+  // Fallback: use index-based coloring
+  return isHovered ? 'rgba(255, 235, 59, 0.7)' : FALLBACK_COLORS[0];
+};
+
+const getMatchBorder = (match: PlagiarismMatch | null): string => {
+  if (!match) return 'transparent';
+  const ptype = match.plagiarism_type;
+  if (ptype && PLAGIARISM_TYPE_BORDERS[ptype]) {
+    return PLAGIARISM_TYPE_BORDERS[ptype];
+  }
+  return FALLBACK_BORDERS[0];
+};
+
+const getMatchTooltip = (match: PlagiarismMatch | null): string => {
+  if (!match) return '';
+  const ptype = match.plagiarism_type;
+  const label = ptype ? (PLAGIARISM_TYPE_LABELS[ptype] || `Type ${ptype}`) : 'Match';
+  if (match.description) {
+    return `${label}: ${match.description}`;
+  }
+  if (match.details?.renames && match.details.renames.length > 0) {
+    const renames = match.details.renames.map((r: any) => `${r.original} → ${r.renamed}`).join(', ');
+    return `${label}: ${renames}`;
+  }
+  return label;
+};
 
 interface FileViewerProps {
   content: string;
@@ -54,6 +96,7 @@ interface FileViewerProps {
   language: string;
   matches: PlagiarismMatch[];
   isFileA: boolean;
+  filterComments: boolean;
   hoveredMatchIndex: number | null;
   onHoverMatch: (index: number | null) => void;
   onJumpToMatch: (clickedLine: number, clickedLineOffset: number, clickedIsFileA: boolean) => void;
@@ -67,6 +110,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
   language,
   matches,
   isFileA,
+  filterComments,
   hoveredMatchIndex,
   onHoverMatch,
   onJumpToMatch,
@@ -81,32 +125,43 @@ const FileViewer: React.FC<FileViewerProps> = ({
   const lines = useMemo(() => content.split('\n'), [content]);
 
   const lineMatchMap = useMemo(() => {
-    const map: Array<{ matchIndex: number } | null> = new Array(lines.length).fill(null);
+    const map: Array<{ matchIndex: number; match: PlagiarismMatch } | null> = new Array(lines.length).fill(null);
     matches.forEach((match, index) => {
       const startLine = isFileA ? match.file_a_start_line : match.file_b_start_line;
       const endLine = isFileA ? match.file_a_end_line : match.file_b_end_line;
       for (let lineNum = Math.max(1, startLine); lineNum <= endLine && lineNum <= lines.length; lineNum++) {
         const idx = lineNum - 1;
         if (map[idx] === null) {
-          map[idx] = { matchIndex: index };
+          map[idx] = { matchIndex: index, match };
         }
       }
     });
     return map;
   }, [lines.length, matches, isFileA]);
 
+  const displayedLines = useMemo(() => {
+    const result: Array<{ originalIdx: number; originalLineNumber: number; line: string }> = [];
+    lines.forEach((line, idx) => {
+      if (filterComments && isCommentLine(line, language)) return;
+      result.push({ originalIdx: idx, originalLineNumber: idx + 1, line });
+    });
+    return result;
+  }, [lines, filterComments, language]);
+
   const handleClick = useCallback((lineNumber: number, event: React.SyntheticEvent) => {
     const lineEl = event.currentTarget as HTMLDivElement;
     const container = scrollContainerRef.current;
     if (!container) return;
-    const offsetInContainer = lineEl.offsetTop - container.scrollTop;
-    onJumpToMatch(lineNumber, offsetInContainer, isFileA);
+    const lineRect = lineEl.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const targetViewportOffset = lineRect.top - containerRect.top - (parseFloat(getComputedStyle(container).borderTopWidth) || 0);
+    onJumpToMatch(lineNumber, targetViewportOffset, isFileA);
   }, [scrollContainerRef, onJumpToMatch, isFileA]);
 
   return (
-    <Card flex={1} display="flex" flexDirection="column">
-      <CardBody p={0} flex={1} display="flex" flexDirection="column">
-        <Flex direction="column" h="100%">
+    <Card flex={1} display="flex" flexDirection="column" overflow="hidden">
+      <CardBody p={0} flex={1} display="flex" flexDirection="column" overflow="hidden">
+        <Flex direction="column" h="100%" minH={0}>
           <HStack p={3} borderBottomWidth={1} borderColor={borderColor} justify="space-between">
             <Text fontWeight="bold">{fileName}</Text>
             <Badge colorScheme={isFileA ? 'blue' : 'green'}>{language || 'unknown'}</Badge>
@@ -120,30 +175,32 @@ const FileViewer: React.FC<FileViewerProps> = ({
             fontSize="sm"
             minW={0}
           >
-            {lines.map((line, idx) => {
-              const lineNumber = idx + 1;
-              const matchInfo = lineMatchMap[idx];
+            {displayedLines.map(({ originalIdx, originalLineNumber, line }, displayIdx) => {
+              const matchInfo = lineMatchMap[originalIdx];
               const isHovered = matchInfo !== null && matchInfo.matchIndex === hoveredMatchIndex;
+              const tooltip = getMatchTooltip(matchInfo?.match ?? null);
+              const bg = getMatchBg(matchInfo?.match ?? null, isHovered);
+              const border = getMatchBorder(matchInfo?.match ?? null);
+
               return (
                 <Flex
-                  key={idx}
-                  ref={(el) => getLineRef(idx, el)}
-                  bg={isHovered
-                    ? getMatchColorHover(matchInfo!.matchIndex)
-                    : (matchInfo ? getMatchColor(matchInfo.matchIndex) : 'transparent')}
+                  key={originalIdx}
+                  ref={(el) => getLineRef(originalIdx, el)}
+                  bg={bg}
                   borderLeftWidth={matchInfo ? 4 : 0}
-                  borderLeftColor={matchInfo ? getMatchBorder(matchInfo.matchIndex) : 'transparent'}
+                  borderLeftColor={border}
                   onMouseEnter={() => onHoverMatch(matchInfo ? matchInfo.matchIndex : null)}
                   onMouseLeave={() => onHoverMatch(null)}
-                  onClick={(e) => matchInfo && handleClick(lineNumber, e)}
+                  onClick={(e) => matchInfo && handleClick(originalLineNumber, e)}
                   cursor={matchInfo ? 'pointer' : 'default'}
                   role={matchInfo ? 'button' : undefined}
                   tabIndex={matchInfo ? 0 : undefined}
                   minW="fit-content"
+                  title={tooltip || undefined}
                   onKeyDown={(e) => {
                     if (matchInfo && (e.key === 'Enter' || e.key === ' ')) {
                       e.preventDefault();
-                      handleClick(lineNumber, e);
+                      handleClick(originalLineNumber, e);
                     }
                   }}
                 >
@@ -160,7 +217,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
                     borderRightColor={borderColor}
                     userSelect="none"
                   >
-                    {lineNumber}
+                    {originalLineNumber}
                   </Box>
                   <Box
                     flex={1}
@@ -173,6 +230,24 @@ const FileViewer: React.FC<FileViewerProps> = ({
                   >
                     {line || ' '}
                   </Box>
+                  {matchInfo?.match?.plagiarism_type && matchInfo.match.plagiarism_type >= 2 && (
+                    <Tooltip label={PLAGIARISM_TYPE_LABELS[matchInfo.match.plagiarism_type] || `Type ${matchInfo.match.plagiarism_type}`} placement="top">
+                      <Badge
+                        size="sm"
+                        colorScheme={
+                          matchInfo.match.plagiarism_type === 2 ? 'yellow' :
+                          matchInfo.match.plagiarism_type === 3 ? 'blue' :
+                          matchInfo.match.plagiarism_type === 4 ? 'red' : 'gray'
+                        }
+                        mr={2}
+                        alignSelf="center"
+                        fontSize="2xs"
+                        opacity={0.8}
+                      >
+                        T{matchInfo.match.plagiarism_type}
+                      </Badge>
+                    </Tooltip>
+                  )}
                 </Flex>
               );
             })}

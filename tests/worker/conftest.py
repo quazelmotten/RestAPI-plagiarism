@@ -156,6 +156,10 @@ class SimpleRedis:
         self.strings[name] = value
         return self._record(True)
 
+    def get(self, name):
+        result = self.strings.get(name)
+        return self._record(result)
+
 
 @pytest.fixture(scope="session")
 def temp_dir():

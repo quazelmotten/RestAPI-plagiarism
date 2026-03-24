@@ -107,7 +107,7 @@ def tokenize_and_hash_ast(
 
 def compute_fingerprints(
     tokens: List[Tuple[str, Tuple[int, int], Tuple[int, int]]],
-    k: int = 6,
+    k: int = 3,
     base: int = 257,
     mod: int = 10**9 + 7
 ) -> List[Dict[str, Any]]:
@@ -146,7 +146,7 @@ def compute_fingerprints(
 
 def winnow_fingerprints(
     fingerprints: List[Dict[str, Any]],
-    window_size: int = 5
+    window_size: int = 3
 ) -> List[Dict[str, Any]]:
     """
     Apply winnowing algorithm: select minimum hash in each sliding window.
@@ -162,10 +162,10 @@ def winnow_fingerprints(
 
 def compute_and_winnow(
     tokens: List[Tuple[str, Tuple[int, int], Tuple[int, int]]],
-    k: int = 6,
+    k: int = 3,
     base: int = 257,
     mod: int = 10**9 + 7,
-    window_size: int = 5,
+    window_size: int = 3,
 ) -> List[Dict[str, Any]]:
     """
     Compute k-gram fingerprints and apply winnowing in a single pass.

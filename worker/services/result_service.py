@@ -57,7 +57,7 @@ class ResultService:
                 'file_a_id': file_a_id,
                 'file_b_id': file_b_id,
                 'ast_similarity': round(similarity, 6),
-                'matches': {},
+                'matches': [],
             })
 
         if not results:

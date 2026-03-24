@@ -58,12 +58,23 @@ def analyze_plagiarism(
     analyzer = Analyzer(ast_threshold=ast_threshold)
     result = analyzer.analyze(file1, file2, language, ast_threshold=ast_threshold)
 
-    # Convert matches to dict format
+    # Convert matches to dict format, converting 0-indexed tree-sitter
+    # positions to 1-indexed line numbers for consistency with the API.
     matches_data = []
     for match in result.matches:
         matches_data.append({
-            'file1': match.file1,
-            'file2': match.file2,
+            'file1': {
+                'start_line': match.file1['start_line'] + 1,
+                'start_col': match.file1['start_col'],
+                'end_line': match.file1['end_line'] + 1,
+                'end_col': match.file1['end_col'],
+            },
+            'file2': {
+                'start_line': match.file2['start_line'] + 1,
+                'start_col': match.file2['start_col'],
+                'end_line': match.file2['end_line'] + 1,
+                'end_col': match.file2['end_col'],
+            },
             'kgram_count': match.kgram_count
         })
 
@@ -155,15 +166,15 @@ class Analyzer:
         for match in result.matches:
             matches_serializable.append({
                 "file1": {
-                    "start_line": match.file1['start_line'],
+                    "start_line": match.file1['start_line'] + 1,
                     "start_col": match.file1['start_col'],
-                    "end_line": match.file1['end_line'],
+                    "end_line": match.file1['end_line'] + 1,
                     "end_col": match.file1['end_col'],
                 },
                 "file2": {
-                    "start_line": match.file2['start_line'],
+                    "start_line": match.file2['start_line'] + 1,
                     "start_col": match.file2['start_col'],
-                    "end_line": match.file2['end_line'],
+                    "end_line": match.file2['end_line'] + 1,
                     "end_col": match.file2['end_col'],
                 },
                 "kgram_count": match.kgram_count

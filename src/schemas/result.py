@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 
 
 class FileInfo(BaseModel):

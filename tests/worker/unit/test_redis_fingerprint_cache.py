@@ -26,24 +26,26 @@ class TestRedisFingerprintCache:
         redis_test_instance.flushdb()
         return RedisFingerprintCache(redis_test_instance, ttl=3600)
 
-    def test_cache_fingerprints_stores_positions_and_hashes(self, cache, redis_test_instance):
-        """Test that fingerprints are stored correctly with positions and hashes."""
+    def test_cache_fingerprints_stores_data(self, cache, redis_test_instance):
+        """Test that fingerprints are stored correctly with positions and kgram_idx."""
         file_hash = "test123"
         fingerprints = [
-            {'hash': 123, 'start': (0, 0), 'end': (1, 0)},
-            {'hash': 456, 'start': (2, 0), 'end': (3, 0)}
+            {'hash': 123, 'start': (0, 0), 'end': (1, 0), 'kgram_idx': 5},
+            {'hash': 456, 'start': (2, 0), 'end': (3, 0), 'kgram_idx': 10}
         ]
         ast_hashes = [789, 101112]
 
         result = cache.cache_fingerprints(file_hash, fingerprints, ast_hashes)
 
         assert result is True
-        # Verify data stored in Redis
+        # Verify data stored in Redis (new format: single JSON array)
         token_key = f"{cache.TOKEN_PREFIX}:{file_hash}"
-        assert redis_test_instance.exists(f"{token_key}:hashes") is True
-        stored_hashes = redis_test_instance.smembers(f"{token_key}:hashes")
-        assert "123" in stored_hashes
-        assert "456" in stored_hashes
+        assert redis_test_instance.exists(f"{token_key}:data") is True
+        stored = json.loads(redis_test_instance.get(f"{token_key}:data"))
+        assert len(stored) == 2
+        assert stored[0]['kgram_idx'] == 5
+        assert stored[1]['kgram_idx'] == 10
+        # AST hashes stored separately
         ast_key = f"{cache.AST_PREFIX}:{file_hash}"
         assert "789" in redis_test_instance.smembers(f"{ast_key}:hashes")
 
@@ -56,8 +58,8 @@ class TestRedisFingerprintCache:
         """Test retrieving fingerprints returns list with correct structure."""
         file_hash = "test123"
         fingerprints = [
-            {'hash': 123, 'start': (0, 0), 'end': (1, 0)},
-            {'hash': 456, 'start': (2, 0), 'end': (3, 0)}
+            {'hash': 123, 'start': (0, 0), 'end': (1, 0), 'kgram_idx': 5},
+            {'hash': 456, 'start': (2, 0), 'end': (3, 0), 'kgram_idx': 10}
         ]
         ast_hashes = [789]
 
@@ -68,13 +70,18 @@ class TestRedisFingerprintCache:
 
         assert fps is not None
         assert len(fps) == 2
-        # Verify hashes as int or str
+        # Verify hashes
         hashes = [fp['hash'] for fp in fps]
-        assert 123 in hashes or '123' in hashes
+        assert 123 in hashes
+        assert 456 in hashes
         # Verify positions are tuples
         for fp in fps:
             assert isinstance(fp['start'], tuple)
             assert isinstance(fp['end'], tuple)
+        # Verify kgram_idx preserved
+        kgram_indices = {fp['hash']: fp['kgram_idx'] for fp in fps}
+        assert kgram_indices[123] == 5
+        assert kgram_indices[456] == 10
 
     def test_get_fingerprints_cache_miss_returns_none(self, cache):
         """Test that cache miss returns None."""
@@ -166,4 +173,26 @@ class TestRedisFingerprintCache:
         result = cache.batch_get(['missing'])
         assert result['missing']['fingerprints'] is None
         assert result['missing']['ast_hashes'] is None
+
+    def test_cache_preserves_duplicate_hashes(self, cache, redis_test_instance):
+        """Test that duplicate hash values at different positions are preserved.
+
+        Winnowing can select the same hash at non-consecutive positions.
+        The old hash-keyed storage silently lost duplicates.
+        """
+        file_hash = "test_dup"
+        # Same hash (123) at different k-gram positions
+        fingerprints = [
+            {'hash': 123, 'start': (0, 0), 'end': (2, 0), 'kgram_idx': 0},
+            {'hash': 456, 'start': (3, 0), 'end': (5, 0), 'kgram_idx': 5},
+            {'hash': 123, 'start': (10, 0), 'end': (12, 0), 'kgram_idx': 15},
+        ]
+        cache.cache_fingerprints(file_hash, fingerprints, [])
+
+        fps = cache.get_fingerprints(file_hash)
+
+        assert fps is not None
+        assert len(fps) == 3, "Duplicate hashes should all be preserved"
+        kgram_indices = sorted(fp['kgram_idx'] for fp in fps)
+        assert kgram_indices == [0, 5, 15]
 

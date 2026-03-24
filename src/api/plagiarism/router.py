@@ -258,7 +258,6 @@ async def analyze_file_pair(
         file_b_model.file_hash
     )
 
-    similarity = result['similarity_ratio']
     legacy_matches = result['matches']
 
     # Find or create similarity result, update with matches
@@ -273,7 +272,6 @@ async def analyze_file_pair(
     sr = existing.scalar_one_or_none()
 
     if sr:
-        sr.ast_similarity = similarity
         sr.matches = legacy_matches
     else:
         sr = SimilarityResult(
@@ -281,7 +279,7 @@ async def analyze_file_pair(
             task_id=file_a_model.task_id,
             file_a_id=file_a,
             file_b_id=file_b,
-            ast_similarity=similarity,
+            ast_similarity=result['similarity_ratio'],
             matches=legacy_matches,
         )
         db.add(sr)
@@ -293,7 +291,7 @@ async def analyze_file_pair(
     return ResultItem(
         file_a={"id": str(file_a_model.id), "filename": file_a_model.filename},
         file_b={"id": str(file_b_model.id), "filename": file_b_model.filename},
-        ast_similarity=similarity,
+        ast_similarity=sr.ast_similarity,
         matches=legacy_matches,
         created_at=now,
     )

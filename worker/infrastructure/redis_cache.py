@@ -43,9 +43,13 @@ class RedisFingerprintCache(FingerprintCache):
         """
         Cache fingerprints and AST hashes for a file.
 
+        Fingerprints are stored as a single JSON array to preserve
+        duplicate hashes (winnowing can select the same hash at different
+        positions) and kgram_idx (needed for fragment building).
+
         Args:
             file_hash: SHA256 hash of file content
-            fingerprints: List of fingerprint dicts with 'hash', 'start', 'end'
+            fingerprints: List of fingerprint dicts with 'hash', 'start', 'end', 'kgram_idx'
             ast_hashes: List of AST subtree hash integers
 
         Returns:
@@ -58,19 +62,20 @@ class RedisFingerprintCache(FingerprintCache):
         try:
             pipe = self.redis.pipeline()
 
-            # Cache fingerprints
+            # Cache fingerprints as a single JSON array to preserve all entries
+            # (the old hash-keyed approach lost duplicate hashes and kgram_idx)
             token_key = f"{self.TOKEN_PREFIX}:{file_hash}"
             if fingerprints:
-                pipe.hset(f"{token_key}:positions", mapping={
-                    str(fp['hash']): json.dumps({
+                fps_data = json.dumps([
+                    {
+                        'hash': fp['hash'],
                         'start': list(fp['start']),
-                        'end': list(fp['end'])
-                    })
+                        'end': list(fp['end']),
+                        'kgram_idx': fp.get('kgram_idx', 0),
+                    }
                     for fp in fingerprints
-                })
-                pipe.sadd(f"{token_key}:hashes", *[str(fp['hash']) for fp in fingerprints])
-                pipe.expire(f"{token_key}:positions", self.ttl)
-                pipe.expire(f"{token_key}:hashes", self.ttl)
+                ])
+                pipe.set(f"{token_key}:data", fps_data, ex=self.ttl)
 
             # Cache AST hashes
             if ast_hashes:
@@ -95,24 +100,20 @@ class RedisFingerprintCache(FingerprintCache):
         """
         try:
             token_key = f"{self.TOKEN_PREFIX}:{file_hash}"
-            if not self.redis.exists(f"{token_key}:hashes"):
+            raw = self.redis.get(f"{token_key}:data")
+            if raw is None:
                 return None
 
-            hashes = self.redis.smembers(f"{token_key}:hashes")
-            positions_raw = self.redis.hgetall(f"{token_key}:positions")
-
-            fingerprints = []
-            for h in hashes:
-                pos_json = positions_raw.get(h)
-                if pos_json:
-                    pos = json.loads(pos_json)
-                    fingerprints.append({
-                        'hash': int(h) if h.isdigit() else h,
-                        'start': tuple(pos['start']),
-                        'end': tuple(pos['end'])
-                    })
-
-            return fingerprints if fingerprints else None
+            fps = json.loads(raw)
+            return [
+                {
+                    'hash': fp['hash'],
+                    'start': tuple(fp['start']),
+                    'end': tuple(fp['end']),
+                    'kgram_idx': fp.get('kgram_idx', 0),
+                }
+                for fp in fps
+            ] if fps else None
 
         except RedisError as e:
             logger.warning(f"Failed to get fingerprints for {file_hash[:16]}...: {e}")
@@ -148,7 +149,7 @@ class RedisFingerprintCache(FingerprintCache):
         """Check if fingerprints are cached for a file."""
         try:
             token_key = f"{self.TOKEN_PREFIX}:{file_hash}"
-            return self.redis.exists(f"{token_key}:hashes") > 0
+            return self.redis.exists(f"{token_key}:data") > 0
         except RedisError:
             return False
 
@@ -174,66 +175,38 @@ class RedisFingerprintCache(FingerprintCache):
             for fh in file_hashes:
                 token_key = f"{self.TOKEN_PREFIX}:{fh}"
                 ast_key = f"{self.AST_PREFIX}:{fh}"
-                pipe.exists(f"{token_key}:hashes")
+                pipe.get(f"{token_key}:data")
                 pipe.exists(f"{ast_key}:hashes")
 
-            exists_results = pipe.execute()
+            raw_results = pipe.execute()
 
-            # Second pass: fetch actual data for existing keys
-            pipe2 = self.redis.pipeline()
-            fetch_map = []
-
+            # Process results
             for i, fh in enumerate(file_hashes):
-                token_exists = exists_results[i * 2]
-                ast_exists = exists_results[i * 2 + 1]
+                token_raw = raw_results[i * 2]
+                ast_exists = raw_results[i * 2 + 1]
 
-                if token_exists:
-                    token_key = f"{self.TOKEN_PREFIX}:{fh}"
-                    pipe2.smembers(f"{token_key}:hashes")
-                    pipe2.hgetall(f"{token_key}:positions")
-                    fetch_map.append((fh, 'token'))
+                if token_raw:
+                    fps_list = json.loads(token_raw)
+                    result[fh]['fingerprints'] = [
+                        {
+                            'hash': fp['hash'],
+                            'start': tuple(fp['start']),
+                            'end': tuple(fp['end']),
+                            'kgram_idx': fp.get('kgram_idx', 0),
+                        }
+                        for fp in fps_list
+                    ]
+                    result[fh]['fingerprint_count'] = len(fps_list)
+
                 if ast_exists:
                     ast_key = f"{self.AST_PREFIX}:{fh}"
-                    pipe2.smembers(f"{ast_key}:hashes")
-                    fetch_map.append((fh, 'ast'))
-
-            if not fetch_map:
-                return result
-
-            fetch_results = pipe2.execute()
-            ri = 0
-
-            for fh, data_type in fetch_map:
-                if data_type == 'token':
-                    hashes = fetch_results[ri]
-                    positions_raw = fetch_results[ri + 1]
-                    ri += 2
-
-                    fps = []
-                    for h in hashes:
-                        pos_json = positions_raw.get(h)
-                        if pos_json:
-                            pos = json.loads(pos_json)
-                            fps.append({
-                                'hash': int(h) if h.isdigit() else h,
-                                'start': tuple(pos['start']),
-                                'end': tuple(pos['end'])
-                            })
-
-                    result[fh]['fingerprints'] = fps
-                    result[fh]['fingerprint_count'] = len(fps)
-
-                elif data_type == 'ast':
-                    hash_strings = fetch_results[ri]
-                    ri += 1
-
+                    hash_strings = self.redis.smembers(f"{ast_key}:hashes")
                     ast_hashes = []
                     for h in hash_strings:
                         try:
                             ast_hashes.append(int(h))
                         except ValueError:
                             ast_hashes.append(h)
-
                     result[fh]['ast_hashes'] = ast_hashes
 
             return result
@@ -262,16 +235,16 @@ class RedisFingerprintCache(FingerprintCache):
                 token_key = f"{self.TOKEN_PREFIX}:{file_hash}"
 
                 if fingerprints:
-                    pipe.hset(f"{token_key}:positions", mapping={
-                        str(fp['hash']): json.dumps({
+                    fps_data = json.dumps([
+                        {
+                            'hash': fp['hash'],
                             'start': list(fp['start']),
-                            'end': list(fp['end'])
-                        })
+                            'end': list(fp['end']),
+                            'kgram_idx': fp.get('kgram_idx', 0),
+                        }
                         for fp in fingerprints
-                    })
-                    pipe.sadd(f"{token_key}:hashes", *[str(fp['hash']) for fp in fingerprints])
-                    pipe.expire(f"{token_key}:positions", self.ttl)
-                    pipe.expire(f"{token_key}:hashes", self.ttl)
+                    ])
+                    pipe.set(f"{token_key}:data", fps_data, ex=self.ttl)
 
                 if ast_hashes:
                     ast_key = f"{self.AST_PREFIX}:{file_hash}"

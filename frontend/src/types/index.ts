@@ -21,7 +21,39 @@ export interface PlagiarismMatch {
   file_a_end_line: number;
   file_b_start_line: number;
   file_b_end_line: number;
+  plagiarism_type?: number; // 1=exact, 2=renamed, 3=reordered, 4=semantic
+  similarity?: number;
+  details?: Record<string, any> | null;
+  description?: string | null;
 }
+
+export const PLAGIARISM_TYPE_COLORS: Record<number, string> = {
+  1: 'rgba(76, 175, 80, 0.3)',    // green - exact copy
+  2: 'rgba(255, 235, 59, 0.35)',   // yellow - renamed identifiers
+  3: 'rgba(33, 150, 243, 0.3)',    // blue - reordered code
+  4: 'rgba(244, 67, 54, 0.3)',     // red - semantic equivalent
+};
+
+export const PLAGIARISM_TYPE_COLORS_HOVER: Record<number, string> = {
+  1: 'rgba(76, 175, 80, 0.6)',
+  2: 'rgba(255, 235, 59, 0.7)',
+  3: 'rgba(33, 150, 243, 0.6)',
+  4: 'rgba(244, 67, 54, 0.6)',
+};
+
+export const PLAGIARISM_TYPE_BORDERS: Record<number, string> = {
+  1: '#388E3C',
+  2: '#FBC02D',
+  3: '#1976D2',
+  4: '#D32F2F',
+};
+
+export const PLAGIARISM_TYPE_LABELS: Record<number, string> = {
+  1: 'Exact copy',
+  2: 'Renamed identifiers',
+  3: 'Reordered code',
+  4: 'Semantic equivalent',
+};
 
 export interface PlagiarismResult {
   file_a: {
