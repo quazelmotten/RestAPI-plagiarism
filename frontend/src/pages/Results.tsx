@@ -53,12 +53,14 @@ const getStatusIcon = (status: string) => {
       return <FiCheckCircle color="#48bb78" />;
     case 'failed':
       return <FiAlertCircle color="#f56565" />;
-    case 'processing':
+    case 'storing_results':
       return <FiActivity color="#ed8936" />;
     case 'indexing':
-      return <FiLayers color="#4299e1" />; // blue
-    case 'finding_pairs':
-      return <FiLayers color="#9f7aea" />; // purple
+      return <FiLayers color="#4299e1" />;
+    case 'finding_intra_pairs':
+      return <FiLayers color="#9f7aea" />;
+    case 'finding_cross_pairs':
+      return <FiLayers color="#805ad5" />;
     default:
       return <FiLayers color="#a0aec0" />;
   }
@@ -70,11 +72,13 @@ const getStatusColorScheme = (status: string) => {
       return 'green';
     case 'failed':
       return 'red';
-    case 'processing':
+    case 'storing_results':
       return 'orange';
     case 'indexing':
       return 'blue';
-    case 'finding_pairs':
+    case 'finding_intra_pairs':
+      return 'purple';
+    case 'finding_cross_pairs':
       return 'purple';
     default:
       return 'gray';
@@ -184,7 +188,6 @@ const Results: React.FC = () => {
       }
      }, [selectedTaskId]);
 
-
     useEffect(() => {
       if (selectedTaskId) {
         fetchTaskDetails();
@@ -192,6 +195,18 @@ const Results: React.FC = () => {
         setSelectedTaskDetails(null);
       }
     }, [selectedTaskId, fetchTaskDetails]);
+
+    // When task finishes, do a full refresh to load results
+    const prevStatusRef = React.useRef(selectedTaskDetails?.status);
+    useEffect(() => {
+      const prev = prevStatusRef.current;
+      const curr = selectedTaskDetails?.status;
+      if (prev && curr && prev !== curr && (curr === 'completed' || curr === 'failed')) {
+        loadTasks();
+        fetchTaskDetails();
+      }
+      prevStatusRef.current = curr;
+    }, [selectedTaskDetails?.status, loadTasks, fetchTaskDetails]);
    
     const selectedTaskListItem = tasks.find(t => t.task_id === selectedTaskId);
     const selectedTask = selectedTaskDetails;
@@ -293,7 +308,7 @@ const Results: React.FC = () => {
                         <Badge size="sm" colorScheme={getStatusColorScheme(selectedTaskListItem.status)}>
                           {selectedTaskListItem.status}
                         </Badge>
-                        {selectedTaskListItem.status === 'processing' && selectedTaskListItem.progress && (
+                        {['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(selectedTaskListItem.status) && selectedTaskListItem.progress && (
                           <Text fontSize="xs" color="gray.500">
                             {selectedTaskListItem.progress.display}
                           </Text>
@@ -303,7 +318,7 @@ const Results: React.FC = () => {
                       'Select a task'
                     )}
                   </Button>
-                   {selectedTaskListItem && ['processing', 'indexing', 'finding_pairs'].includes(selectedTaskListItem.status) && (
+                   {selectedTaskListItem && ['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(selectedTaskListItem.status) && (
                      <Spinner size="sm" color="orange.500" speed="0.8s" />
                    )}
                    <Button
@@ -351,7 +366,7 @@ const Results: React.FC = () => {
                    cardBg={cardBg}
                  />
                 
-                <TaskProgress selectedTask={selectedTask} cardBg={cardBg} />
+                <TaskProgress taskId={selectedTask.task_id} status={selectedTask.status} cardBg={cardBg} />
                 
                  <SimilarityDistribution
                    results={selectedTask.results}

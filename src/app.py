@@ -10,11 +10,21 @@ from exceptions.error_handler import add_exception_handler
 from startup.create_exchange import create_queues_and_exchanges
 from config import settings
 
+
+# Override Starlette's default 1000-file limit for multipart uploads
+from starlette.requests import Request as StarletteRequest
+
+class CustomRequest(StarletteRequest):
+    async def _get_form(self, *, max_files: int | float = float("inf"), max_fields: int | float = float("inf"), **kwargs):
+        return await super()._get_form(max_files=max_files, max_fields=max_fields, **kwargs)
+
+
 subpath = settings.subpath_normalized
 subpath_for_routes = subpath.strip("/") if subpath else ""
 
 app = FastAPI(
     title="Plagiarism Detection API",
+    request_class=CustomRequest,
 )
 
 # Configure CORS

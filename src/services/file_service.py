@@ -68,7 +68,7 @@ class FileService:
 
     async def get_files(
         self,
-        limit: Optional[int] = None,
+        limit: int | None = None, #TODO: 21.03 переписать так всё
         offset: Optional[int] = None,
         filename: Optional[str] = None,
         language: Optional[str] = None,
@@ -135,7 +135,7 @@ class FileService:
                 before_dt_end = before_dt.replace(hour=23, minute=59, second=59)
                 query = query.where(FileModel.created_at <= before_dt_end)
             except (ValueError, TypeError):
-                pass
+                pass #TODO: 21.03 try except убрать (пример в тг, делать через валидаторы (class ValidationError))
         if similarity_min is not None:
             query = query.where(max_sim_subq.c.max_sim >= similarity_min)
         if similarity_max is not None:

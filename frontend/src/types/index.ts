@@ -5,12 +5,14 @@ export interface User {
   role: 'teacher' | 'admin';
 }
 
+type TaskStatus = 'pending' | 'queued' | 'indexing' | 'finding_intra_pairs' | 'finding_cross_pairs' | 'storing_results' | 'processing' | 'completed' | 'failed';
+
 export interface Submission {
   id: string;
   fileName: string;
   language: string;
   createdAt: string;
-  status: 'pending' | 'indexing' | 'finding_pairs' | 'processing' | 'completed' | 'failed';
+  status: TaskStatus;
   similarity?: number;
 }
 
@@ -52,7 +54,7 @@ export interface PlagiarismNetwork {
 
 export interface TaskListItem {
   task_id: string;
-  status: 'pending' | 'indexing' | 'finding_pairs' | 'processing' | 'completed' | 'failed';
+  status: TaskStatus;
   total_pairs: number;
   progress?: {
     completed: number;

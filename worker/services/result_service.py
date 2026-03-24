@@ -65,6 +65,8 @@ class ResultService:
             return
 
         total = len(results)
+        log_interval = max(batch_size, total // 20)  # every 5%
+
         for i in range(0, total, batch_size):
             batch = results[i:i+batch_size]
             self.repository.bulk_insert_results(batch)
@@ -73,12 +75,13 @@ class ResultService:
             # Update progress
             self.repository.update_task(
                 task_id=task_id,
-                status="processing",
+                status="storing_results",
                 processed_pairs=processed
             )
 
-            if processed % 500 == 0 or processed == total:
-                logger.info(f"[Task {task_id}] Stored {processed}/{total} results")
+            if processed % log_interval < batch_size or processed == total:
+                percent = processed / total * 100
+                logger.info(f"[Task {task_id}] Stored {processed}/{total} ({percent:.0f}%)")
 
         logger.info(f"[Task {task_id}] Stored all {total} similarity results")
 
@@ -91,7 +94,7 @@ class ResultService:
         """Update task processing progress."""
         self.repository.update_task(
             task_id=task_id,
-            status="processing",
+            status="storing_results",
             processed_pairs=processed,
             total_pairs=total
         )

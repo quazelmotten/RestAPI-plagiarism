@@ -8,8 +8,9 @@ Responsible for:
 """
 
 import logging
+import time
 import warnings
-from typing import List, Tuple, Dict, Any, Set, Optional
+from typing import List, Tuple, Dict, Any, Set, Optional, Callable
 
 from shared.interfaces import CandidateIndex
 
@@ -33,7 +34,8 @@ class CandidateService:
         files_a: List[Dict[str, Any]],
         files_b: Optional[List[Dict[str, Any]]] = None,
         language: str = "python",
-        deduplicate: bool = True
+        deduplicate: bool = True,
+        on_progress: Optional[Callable[[int, int], None]] = None,
     ) -> List[Tuple[dict, dict, float]]:
         """
         Find candidate plagiarism pairs using the inverted index.
@@ -66,6 +68,11 @@ class CandidateService:
 
         pairs = []
         seen_pairs: Set[frozenset] = set() if deduplicate else None
+        files_checked = 0
+        candidates_found = 0
+        t0 = time.perf_counter()
+        total_a = len(files_a)
+        log_interval = max(1, min(25, total_a // 8))  # ~8 progress updates
 
         # Build a map of file hash -> file dict for files_b for quick lookup
         files_b_by_hash: Dict[str, Dict] = {}
@@ -74,7 +81,7 @@ class CandidateService:
             if fb_hash:
                 files_b_by_hash[fb_hash] = fb
 
-        for file_a in files_a:
+        for idx, file_a in enumerate(files_a, 1):
             file_a_hash = file_a.get('hash') or file_a.get('file_hash')
             if not file_a_hash:
                 continue
@@ -84,8 +91,11 @@ class CandidateService:
             if not fps_a:
                 continue
 
+            files_checked += 1
+
             # Find candidates using inverted index
             candidates = self.index.find_candidates(fps_a, language)  # Dict[file_hash -> similarity]
+            candidates_found += len(candidates)
 
             # Match with files from files_b
             for file_b_hash, similarity in candidates.items():
@@ -106,9 +116,21 @@ class CandidateService:
 
                 pairs.append((file_a, file_b, similarity))
 
+            # Progress reporting
+            if idx % log_interval == 0 or idx == total_a:
+                elapsed = time.perf_counter() - t0
+                speed = idx / elapsed if elapsed > 0 else 0
+                logger.info(f"  Checked {idx}/{total_a} files, {len(pairs)} pairs so far "
+                            f"({speed:.0f} files/sec)")
+                if on_progress:
+                    on_progress(idx, total_a)
+
+        elapsed = time.perf_counter() - t0
+        speed = files_checked / elapsed if elapsed > 0 else 0
+        scope = "intra" if is_intra else f"cross ({len(files_b)} existing)"
         logger.info(
-            f"Candidate pairs: {len(pairs)} found from {len(files_a)} files"
-            + (f" A" if is_intra else f" vs {len(files_b)} B files")
+            f"Candidate pairs ({scope}): {len(pairs)} found from {files_checked} files "
+            f"({candidates_found} raw candidates) in {elapsed:.2f}s ({speed:.0f} files/sec)"
         )
         return pairs
 

@@ -216,7 +216,7 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
                                 ⚠️ {task.high_similarity_count} high
                               </Badge>
                             )}
-                            {task.status === 'processing' && task.progress && (
+                            {['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(task.status) && task.progress && (
                               <Badge size="sm" colorScheme="purple" variant="subtle">
                                 {task.progress.display}
                               </Badge>
