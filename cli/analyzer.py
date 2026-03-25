@@ -6,7 +6,7 @@ backward compatibility with existing CLI and tests.
 """
 
 import logging
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple
 
 # Re-export core functions
 from plagiarism_core.fingerprints import (
@@ -45,7 +45,6 @@ def analyze_plagiarism(
     file1: str,
     file2: str,
     language: str = 'python',
-    ast_threshold: float = 0.30,
 ) -> Tuple[float, List[Dict[str, Any]], Dict[str, Any]]:
     """
     Standalone function matching old API.
@@ -55,8 +54,8 @@ def analyze_plagiarism(
     """
     from plagiarism_core.analyzer import Analyzer
 
-    analyzer = Analyzer(ast_threshold=ast_threshold)
-    result = analyzer.analyze(file1, file2, language, ast_threshold=ast_threshold)
+    analyzer = Analyzer()
+    result = analyzer.analyze(file1, file2, language)
 
     # Convert matches to dict format, converting 0-indexed tree-sitter
     # positions to 1-indexed line numbers for consistency with the API.
@@ -97,7 +96,6 @@ def analyze_plagiarism_cached(
     file2_hash: str,
     cache=None,
     language: str = 'python',
-    ast_threshold: float = 0.30,
 ) -> Tuple[float, List[Dict[str, Any]], Dict[str, Any]]:
     """
     Cached analysis using Redis. For compatibility - uses in-memory cache.
@@ -106,12 +104,11 @@ def analyze_plagiarism_cached(
         cache: Ignored (for compatibility)
     """
     # Simplified: just run full analysis
-    return analyze_plagiarism(file1_path, file2_path, language, ast_threshold)
+    return analyze_plagiarism(file1_path, file2_path, language)
 
 
 def analyze_plagiarism_batch(
     pairs_data: List[Dict[str, Any]],
-    ast_threshold: float = 0.30,
 ) -> List[Tuple[float, List[Dict[str, Any]], Dict[str, Any]]]:
     """
     Batch analyze multiple pairs. Simple wrapper.
@@ -124,7 +121,7 @@ def analyze_plagiarism_batch(
 
         if file_a_path and file_b_path:
             ast_sim, matches, metrics = analyze_plagiarism(
-                file_a_path, file_b_path, language, ast_threshold
+                file_a_path, file_b_path, language
             )
             results.append((ast_sim, matches, metrics))
         else:
@@ -146,7 +143,7 @@ class Analyzer:
 
     def __init__(self):
         from plagiarism_core.analyzer import Analyzer as CoreAnalyzer
-        self._analyzer = CoreAnalyzer(ast_threshold=0.0)
+        self._analyzer = CoreAnalyzer()
 
     def Start(
         self,
@@ -160,7 +157,7 @@ class Analyzer:
         Returns:
             Dict with similarity, matches, etc.
         """
-        result = self._analyzer.analyze(file1, file2, language, ast_threshold=0.0)
+        result = self._analyzer.analyze(file1, file2, language)
 
         matches_serializable = []
         for match in result.matches:

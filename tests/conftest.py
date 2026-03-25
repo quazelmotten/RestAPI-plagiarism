@@ -14,7 +14,9 @@ os.environ.setdefault('RMQ_PORT', '5672')
 os.environ.setdefault('RMQ_USER', 'test_mq_user')
 os.environ.setdefault('RMQ_PASS', 'test_mq_password_12345678')
 
-src_path = '/home/bobbybrown/RestAPI-plagiarism/src'
+# Resolve src path relative to project root (parent of tests/)
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+src_path = os.path.join(_project_root, 'src')
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 

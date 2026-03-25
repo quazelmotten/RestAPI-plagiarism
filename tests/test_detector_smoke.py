@@ -4,8 +4,9 @@ Quick smoke test for the multi-level plagiarism detector.
 Tests Types 1-4 against known inputs.
 """
 
+import os
 import sys
-sys.path.insert(0, '/home/bobbybrown/RestAPI-plagiarism')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plagiarism_core.plagiarism_detector import detect_plagiarism
 from plagiarism_core.canonicalizer import normalize_identifiers, canonicalize_type4

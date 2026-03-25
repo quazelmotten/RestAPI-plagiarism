@@ -18,7 +18,7 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY ./src/requirements.txt ./
-RUN apt update && pip install --upgrade pip && pip3 install -r requirements.txt
+RUN apt update && pip install --upgrade pip && pip install -r requirements.txt
 
 # Copy Python source
 COPY ./src ./

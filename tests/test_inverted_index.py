@@ -5,11 +5,11 @@ Shows how the system filters out non-viable candidates for plagiarism detection.
 """
 
 import sys
-sys.path.insert(0, '/home/bobbybrown/RestAPI-plagiarism/worker')
+import os
 
 import logging
 from collections import defaultdict
-from infrastructure.inverted_index import RedisInvertedIndex
+from worker.infrastructure.inverted_index import RedisInvertedIndex
 
 # Setup logging
 logging.basicConfig(

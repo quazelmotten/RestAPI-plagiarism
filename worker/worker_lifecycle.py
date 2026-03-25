@@ -9,11 +9,10 @@ import time
 import functools
 from typing import Optional
 
-from concurrent.futures import ThreadPoolExecutor
 import pika
 
 from worker.config import settings
-from worker.dependencies import get_redis_client
+from worker.dependencies import get_redis_client, get_analysis_executor
 
 log = logging.getLogger(__name__)
 
@@ -82,8 +81,8 @@ class AsyncWorker:
         except Exception as e:
             log.warning(f"Redis cache unavailable: {e}. Caching disabled.")
 
-        self.executor = ThreadPoolExecutor(max_workers=self.worker_concurrency)
-        log.info(f"Thread pool started with {self.worker_concurrency} workers")
+        self.executor = get_analysis_executor()
+        log.info(f"Thread pool shared ({self.worker_concurrency} workers)")
         return True
 
     def run(self) -> None:
@@ -322,7 +321,7 @@ class AsyncWorker:
             try:
                 self._connection.ioloop.stop()
             except Exception:
-                pass
+                log.error("Failed to stop IOLoop", exc_info=True)
 
     def shutdown(self):
         log.info("Shutting down worker...")
@@ -331,10 +330,6 @@ class AsyncWorker:
         if self._connection:
             while not self._connection.is_closed and not self._closing:
                 time.sleep(0.1)
-
-        if self.executor:
-            self.executor.shutdown(wait=True)
-            log.info("Thread pool shutdown complete")
 
         log.info("Worker shutdown complete")
 

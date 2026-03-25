@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from tree_sitter import Node
 
 from .canonicalizer import (
+    _normalize_identifiers_from_tree,
     canonicalize_type4,
     get_identifier_renames,
     normalize_identifiers,
@@ -57,9 +58,12 @@ def _strip_comments(line: str) -> str:
     return ''.join(result).strip()
 
 
-def _make_shadow_lines(source: str, lang_code: str = 'python') -> List[str]:
+def _make_shadow_lines(source: str, lang_code: str = 'python', tree=None, source_bytes: bytes = None) -> List[str]:
     """Produce identifier-normalized lines (shadow version)."""
-    normalized = normalize_identifiers(source, lang_code)
+    if tree is not None and source_bytes is not None:
+        normalized = _normalize_identifiers_from_tree(tree, source_bytes, source)
+    else:
+        normalized = normalize_identifiers(source, lang_code)
     return normalized.split('\n')
 
 
@@ -350,6 +354,10 @@ def _function_level_matches(
     used_lines_a: Set[int],
     used_lines_b: Set[int],
     lang_code: str = 'python',
+    tree_a=None,
+    bytes_a: bytes = None,
+    tree_b=None,
+    bytes_b: bytes = None,
 ) -> List[Match]:
     """
     Match functions between files by structural hash (identifiers ignored).
@@ -358,11 +366,13 @@ def _function_level_matches(
       - Type 3 if the function moved to a different position
       - Type 2 if it stayed in the same position but has different names
     """
-    try:
-        tree_a, bytes_a = parse_file_once_from_string(source_a, lang_code)
-        tree_b, bytes_b = parse_file_once_from_string(source_b, lang_code)
-    except Exception:
-        return []
+    if tree_a is None or bytes_a is None or tree_b is None or bytes_b is None:
+        try:
+            tree_a, bytes_a = parse_file_once_from_string(source_a, lang_code)
+            tree_b, bytes_b = parse_file_once_from_string(source_b, lang_code)
+        except Exception:
+            logger.warning("Failed to parse sources for function-level matching (lang=%s), skipping", lang_code, exc_info=True)
+            return []
 
     funcs_a = _extract_functions(tree_a.root_node, bytes_a)
     funcs_b = _extract_functions(tree_b.root_node, bytes_b)
@@ -609,6 +619,10 @@ def _semantic_function_matches(
     used_lines_a: Set[int],
     used_lines_b: Set[int],
     lang_code: str = 'python',
+    tree_a=None,
+    bytes_a: bytes = None,
+    tree_b=None,
+    bytes_b: bytes = None,
 ) -> List[Match]:
     """
     Apply Type 4 canonicalization and re-match unmatched function regions.
@@ -620,11 +634,13 @@ def _semantic_function_matches(
     if lang_code != 'python':
         return []
 
-    try:
-        tree_a, bytes_a = parse_file_once_from_string(source_a, lang_code)
-        tree_b, bytes_b = parse_file_once_from_string(source_b, lang_code)
-    except Exception:
-        return []
+    if tree_a is None or bytes_a is None or tree_b is None or bytes_b is None:
+        try:
+            tree_a, bytes_a = parse_file_once_from_string(source_a, lang_code)
+            tree_b, bytes_b = parse_file_once_from_string(source_b, lang_code)
+        except Exception:
+            logger.warning("Failed to parse sources for semantic function matching (lang=%s), skipping", lang_code, exc_info=True)
+            return []
 
     funcs_a = _extract_functions(tree_a.root_node, bytes_a)
     funcs_b = _extract_functions(tree_b.root_node, bytes_b)
@@ -799,9 +815,17 @@ def detect_plagiarism(
     lines_a = source_a.split('\n')
     lines_b = source_b.split('\n')
 
-    # Generate shadow (identifier-normalized) lines
-    shadow_a = _make_shadow_lines(source_a, lang_code)
-    shadow_b = _make_shadow_lines(source_b, lang_code)
+    # Parse once, reuse across all match phases
+    try:
+        tree_a, bytes_a = parse_file_once_from_string(source_a, lang_code)
+        tree_b, bytes_b = parse_file_once_from_string(source_b, lang_code)
+    except Exception:
+        logger.warning("Failed to parse sources (lang=%s), falling back to unoptimized path", lang_code, exc_info=True)
+        tree_a, bytes_a, tree_b, bytes_b = None, None, None, None
+
+    # Generate shadow (identifier-normalized) lines using pre-parsed trees
+    shadow_a = _make_shadow_lines(source_a, lang_code, tree_a, bytes_a)
+    shadow_b = _make_shadow_lines(source_b, lang_code, tree_b, bytes_b)
 
     # Level 1+2: Line-level matching
     line_matches = _line_level_matches(
@@ -812,9 +836,10 @@ def detect_plagiarism(
     covered_a = _covered_lines(line_matches, True)
     covered_b = _covered_lines(line_matches, False)
 
-    # Level 3: Function-level matching (Type 3 / Type 2)
+    # Level 3: Function-level matching (Type 3 / Type 2) — reuse parsed trees
     func_matches = _function_level_matches(
-        source_a, source_b, covered_a, covered_b, lang_code
+        source_a, source_b, covered_a, covered_b, lang_code,
+        tree_a=tree_a, bytes_a=bytes_a, tree_b=tree_b, bytes_b=bytes_b,
     )
     covered_a = covered_a | _covered_lines(func_matches, True)
     covered_b = covered_b | _covered_lines(func_matches, False)
@@ -829,9 +854,10 @@ def detect_plagiarism(
     covered_a = covered_a | _covered_lines(sem_line_matches, True)
     covered_b = covered_b | _covered_lines(sem_line_matches, False)
 
-    # Level 4b: Function-level semantic matching (canonicalized function bodies)
+    # Level 4b: Function-level semantic matching — reuse parsed trees
     sem_func_matches = _semantic_function_matches(
         source_a, source_b, covered_a, covered_b, lang_code,
+        tree_a=tree_a, bytes_a=bytes_a, tree_b=tree_b, bytes_b=bytes_b,
     )
 
     # Combine all matches

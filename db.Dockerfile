@@ -7,7 +7,7 @@ COPY database/requirements.txt ./
 
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN apt-get update && apt-get install -y python3.11 python3-pip python3-venv
-RUN pip3 install -r requirements.txt
+RUN pip install -r requirements.txt
 
 COPY database ./
 COPY src/models/models.py ./

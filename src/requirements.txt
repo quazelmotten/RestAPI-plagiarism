@@ -1,4 +1,4 @@
-aio-pika==9.5.3
+aio-pika==9.6.2
 aiofiles==24.1.0
 aiormq==6.8.1
 annotated-types==0.7.0

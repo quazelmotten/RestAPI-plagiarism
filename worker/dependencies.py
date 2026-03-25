@@ -91,16 +91,16 @@ def get_repository() -> TaskRepository:
 @lru_cache()
 def get_analyzer() -> CoreAnalyzer:
     """Get or create singleton core analyzer."""
-    analyzer = CoreAnalyzer(ast_threshold=0.15)
+    analyzer = CoreAnalyzer()
     logger.info("Core analyzer initialized")
     return analyzer
 
 
 @lru_cache()
 def get_analysis_executor() -> ThreadPoolExecutor:
-    """Get or create singleton thread pool for analysis timeouts."""
+    """Get or create singleton thread pool for analysis and message processing."""
     executor = ThreadPoolExecutor(max_workers=worker_settings.worker_concurrency)
-    logger.info(f"Analysis executor initialized with {worker_settings.worker_concurrency} workers")
+    logger.info(f"Thread pool initialized with {worker_settings.worker_concurrency} workers")
     return executor
 
 

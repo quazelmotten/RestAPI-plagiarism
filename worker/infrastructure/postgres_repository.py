@@ -102,6 +102,7 @@ class PostgresRepository(TaskRepository):
                 session.commit()
             except IntegrityError:
                 session.rollback()
+                logger.warning("Bulk insert of %d results failed, falling back to per-row insert", len(results))
                 for r in results:
                     try:
                         result = SimilarityResult(
@@ -116,6 +117,7 @@ class PostgresRepository(TaskRepository):
                         session.commit()
                     except IntegrityError:
                         session.rollback()
+                        logger.warning("Skipping duplicate result for files %s <-> %s", r['file_a_id'], r['file_b_id'])
 
     def get_max_similarity(self, task_id: str) -> float:
         """Get maximum similarity score for a task."""

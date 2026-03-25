@@ -4,7 +4,6 @@ from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
 
 from config import settings
 
@@ -16,7 +15,13 @@ Base = declarative_base()
 
 metadata = MetaData()
 
-engine = create_async_engine(DATABASE_URL, poolclass=NullPool)
+engine = create_async_engine(
+    DATABASE_URL,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_timeout=settings.db_pool_timeout,
+    pool_pre_ping=True,
+)
 async_session_maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

@@ -1,10 +1,13 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, union_all
 
 from models.models import PlagiarismTask, File as FileModel, SimilarityResult
 from schemas.file import FileResponse, FileContentResponse
+
+logger = logging.getLogger(__name__)
 
 
 BUCKET_NAME = "plagiarism-files"
@@ -99,90 +102,71 @@ class FileService:
             .subquery()
         )
 
-        # Build main query: files join tasks, then outerjoin max similarity
-        query = select(
-            FileModel.id,
-            FileModel.filename,
-            FileModel.language,
-            FileModel.created_at,
-            PlagiarismTask.id.label("task_id"),
-            PlagiarismTask.status,
-            max_sim_subq.c.max_sim
-        ).join(
-            PlagiarismTask, FileModel.task_id == PlagiarismTask.id
-        ).outerjoin(
-            max_sim_subq, FileModel.id == max_sim_subq.c.file_id
+        # Build base query with joins
+        base = (
+            select(
+                FileModel.id,
+                FileModel.filename,
+                FileModel.language,
+                FileModel.created_at,
+                PlagiarismTask.id.label("task_id"),
+                PlagiarismTask.status,
+                max_sim_subq.c.max_sim
+            )
+            .join(PlagiarismTask, FileModel.task_id == PlagiarismTask.id)
+            .outerjoin(max_sim_subq, FileModel.id == max_sim_subq.c.file_id)
         )
 
-        # Apply filters
-        if filename:
-            query = query.where(FileModel.filename.ilike(f"%{filename}%"))
-        if language:
-            query = query.where(FileModel.language == language)
-        if status:
-            query = query.where(PlagiarismTask.status == status)
-        if task_id:
-            query = query.where(PlagiarismTask.id == task_id)
+        # Parse date filters once
+        after_dt = None
         if submitted_after:
             try:
                 after_dt = datetime.strptime(submitted_after, '%Y-%m-%d')
-                query = query.where(FileModel.created_at >= after_dt)
             except (ValueError, TypeError):
-                pass
+                logger.warning("Invalid submitted_after date format: %s (expected YYYY-MM-DD)", submitted_after)
+
+        before_dt_end = None
         if submitted_before:
             try:
                 before_dt = datetime.strptime(submitted_before, '%Y-%m-%d')
                 before_dt_end = before_dt.replace(hour=23, minute=59, second=59)
-                query = query.where(FileModel.created_at <= before_dt_end)
             except (ValueError, TypeError):
-                pass #TODO: 21.03 try except убрать (пример в тг, делать через валидаторы (class ValidationError))
-        if similarity_min is not None:
-            query = query.where(max_sim_subq.c.max_sim >= similarity_min)
-        if similarity_max is not None:
-            query = query.where(max_sim_subq.c.max_sim <= similarity_max)
+                logger.warning("Invalid submitted_before date format: %s (expected YYYY-MM-DD)", submitted_before)
 
-        query = query.order_by(FileModel.created_at.desc())
+        # Apply shared filters to both queries
+        def apply_filters(q):
+            if filename:
+                q = q.where(FileModel.filename.ilike(f"%{filename}%"))
+            if language:
+                q = q.where(FileModel.language == language)
+            if status:
+                q = q.where(PlagiarismTask.status == status)
+            if task_id:
+                q = q.where(PlagiarismTask.id == task_id)
+            if after_dt is not None:
+                q = q.where(FileModel.created_at >= after_dt)
+            if before_dt_end is not None:
+                q = q.where(FileModel.created_at <= before_dt_end)
+            if similarity_min is not None:
+                q = q.where(max_sim_subq.c.max_sim >= similarity_min)
+            if similarity_max is not None:
+                q = q.where(max_sim_subq.c.max_sim <= similarity_max)
+            return q
 
-        # Build count query with same joins and filters
-        count_query = select(func.count()).select_from(
+        # Count query (same joins + filters, just COUNT)
+        count_base = select(func.count()).select_from(
             FileModel
         ).join(
             PlagiarismTask, FileModel.task_id == PlagiarismTask.id
         ).outerjoin(
             max_sim_subq, FileModel.id == max_sim_subq.c.file_id
         )
-
-        # Apply same filters to count_query
-        if filename:
-            count_query = count_query.where(FileModel.filename.ilike(f"%{filename}%"))
-        if language:
-            count_query = count_query.where(FileModel.language == language)
-        if status:
-            count_query = count_query.where(PlagiarismTask.status == status)
-        if task_id:
-            count_query = count_query.where(PlagiarismTask.id == task_id)
-        if submitted_after:
-            try:
-                after_dt = datetime.strptime(submitted_after, '%Y-%m-%d')
-                count_query = count_query.where(FileModel.created_at >= after_dt)
-            except (ValueError, TypeError):
-                pass
-        if submitted_before:
-            try:
-                before_dt = datetime.strptime(submitted_before, '%Y-%m-%d')
-                before_dt_end = before_dt.replace(hour=23, minute=59, second=59)
-                count_query = count_query.where(FileModel.created_at <= before_dt_end)
-            except (ValueError, TypeError):
-                pass
-        if similarity_min is not None:
-            count_query = count_query.where(max_sim_subq.c.max_sim >= similarity_min)
-        if similarity_max is not None:
-            count_query = count_query.where(max_sim_subq.c.max_sim <= similarity_max)
-
+        count_query = apply_filters(count_base)
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
-        # Apply pagination
+        # Main query with filters, ordering, pagination
+        query = apply_filters(base).order_by(FileModel.created_at.desc())
         if limit is not None:
             query = query.limit(limit)
         if offset is not None:
@@ -191,19 +175,18 @@ class FileService:
         result = await self.db.execute(query)
         rows = result.all()
 
-        files_list = []
-        for row in rows:
-            files_list.append(
-                FileResponse(
-                    id=str(row.id),
-                    filename=str(row.filename),
-                    language=str(row.language),
-                    created_at=row.created_at.isoformat() if row.created_at else None,
-                    task_id=str(row.task_id),
-                    status=str(row.status),
-                    similarity=float(row.max_sim) if row.max_sim is not None else None,
-                )
+        files_list = [
+            FileResponse(
+                id=str(row.id),
+                filename=str(row.filename),
+                language=str(row.language),
+                created_at=row.created_at.isoformat() if row.created_at else None,
+                task_id=str(row.task_id),
+                status=str(row.status),
+                similarity=float(row.max_sim) if row.max_sim is not None else None,
             )
+            for row in rows
+        ]
 
         return {"files": files_list, "total": total}
 

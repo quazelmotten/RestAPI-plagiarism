@@ -218,25 +218,13 @@ async def analyze_file_pair(
     db: AsyncSession = Depends(get_async_session)
 ):
     """Run full plagiarism analysis on-demand for a file pair. Updates DB with matches."""
-    import redis
     from models.models import File as FileModel, SimilarityResult
     from uuid import uuid4
     from datetime import datetime, timezone
-    from config import settings
     from worker.services.analysis_service import AnalysisService
-    from worker.infrastructure.redis_cache import RedisFingerprintCache
+    from redis_client import get_fingerprint_cache
 
-    # Create Redis client and cache
-    redis_client = redis.Redis(
-        host=settings.redis_host,
-        port=settings.redis_port,
-        db=settings.redis_db,
-        password=settings.redis_password,
-        decode_responses=True,
-        socket_connect_timeout=5,
-        socket_timeout=5,
-    )
-    cache = RedisFingerprintCache(redis_client, ttl=settings.redis_fingerprint_ttl)
+    cache = get_fingerprint_cache()
     analysis_service = AnalysisService(cache)
 
     # Fetch file info from DB

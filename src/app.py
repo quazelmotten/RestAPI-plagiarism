@@ -8,6 +8,8 @@ from api.plagiarism.router import router as router_plagiarism
 from api.auth.router import router as router_auth
 from exceptions.error_handler import add_exception_handler
 from startup.create_exchange import create_queues_and_exchanges
+from rabbit import connect, disconnect
+from redis_client import connect_redis, disconnect_redis
 from config import settings
 
 
@@ -79,6 +81,14 @@ if subpath_for_routes:
 @app.on_event("startup")
 async def on_startup():
     await create_queues_and_exchanges()
+    await connect()
+    await connect_redis()
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await disconnect()
+    await disconnect_redis()
 
 
 @app.get("/health")

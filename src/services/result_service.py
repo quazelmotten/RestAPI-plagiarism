@@ -103,13 +103,6 @@ class ResultService:
         if not task:
             return None
 
-        # Get all files for the task (no pagination for files)
-        files_result = await self.db.execute(
-            select(FileModel).where(FileModel.task_id == task_id)
-        )
-        files = files_result.scalars().all()
-        file_map = {str(f.id): f.filename for f in files}
-
         # Build query for results with pagination
         results_query = select(SimilarityResult).where(SimilarityResult.task_id == task_id).order_by(desc(SimilarityResult.ast_similarity))
         
@@ -122,21 +115,20 @@ class ResultService:
         results_result = await self.db.execute(results_query)
         results = results_result.scalars().all()
 
-        # Collect all file IDs referenced in these results
+        # Collect all file IDs referenced in these results (task files + any cross-task)
         file_ids = set()
         for result in results:
             file_ids.add(str(result.file_a_id))
             file_ids.add(str(result.file_b_id))
 
-        # Fetch filenames for all referenced files (including cross-task files)
+        # Single query to fetch all referenced files
+        file_map = {}
         if file_ids:
             files_result = await self.db.execute(
                 select(FileModel).where(FileModel.id.in_(file_ids))
             )
-            all_files = files_result.scalars().all()
-            file_map = {str(f.id): f.filename for f in all_files}
-        else:
-            file_map = {}
+            for f in files_result.scalars().all():
+                file_map[str(f.id)] = f.filename
 
         formatted_results = [
             ResultItem(
@@ -183,6 +175,9 @@ class ResultService:
                     'total_results': total_count
                 }
 
+        # Build file list from the already-loaded file_map
+        files = [FileInfo(id=fid, filename=name) for fid, name in file_map.items()]
+
         return TaskResultsResponse(
             task_id=task_id,
             status=task.status,
@@ -194,7 +189,7 @@ class ResultService:
                 display=f"{task.processed_pairs or 0}/{actual_total_pairs}"
             ),
             total_pairs=actual_total_pairs,
-            files=[FileInfo(id=str(f.id), filename=f.filename) for f in files],
+            files=files,
             results=formatted_results,
             overall_stats=overall_stats
         )

@@ -6,7 +6,7 @@ Uses the multi-level plagiarism detector to classify matches by type
 """
 
 import logging
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple
 
 from .ast_hash import extract_ast_hashes, ast_similarity as compute_ast_similarity
 from .plagiarism_detector import detect_plagiarism
@@ -29,15 +29,14 @@ class Analyzer:
     and optional details (renames, transformations).
     """
 
-    def __init__(self, ast_threshold: float = 0.15):
-        self.ast_threshold = ast_threshold
+    def __init__(self):
+        pass
 
     def analyze(
         self,
         file1: str,
         file2: str,
         language: str = 'python',
-        ast_threshold: Optional[float] = None
     ) -> AnalysisResult:
         """
         Complete plagiarism analysis between two files.
@@ -46,7 +45,6 @@ class Analyzer:
             file1: Path to first file
             file2: Path to second file
             language: Programming language
-            ast_threshold: Override default AST threshold
 
         Returns:
             AnalysisResult with similarity and typed matches
@@ -102,7 +100,6 @@ class Analyzer:
         get_ast_hashes,    # Callable[[str], List[int] | None]
         cache_fingerprints, # Unused, kept for API compatibility
         language: str = 'python',
-        ast_threshold: Optional[float] = None
     ) -> Tuple[float, List[Dict[str, Any]], Dict[str, Any]]:
         """
         Analyze with caching support (AST hashes only).
@@ -114,7 +111,6 @@ class Analyzer:
             get_ast_hashes: Function to get AST hashes from cache
             cache_fingerprints: Unused (kept for API compat)
             language: Programming language
-            ast_threshold: Unused (kept for API compat)
 
         Returns:
             Tuple of (ast_similarity, matches_data, metrics)

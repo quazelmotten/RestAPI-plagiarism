@@ -154,25 +154,6 @@ def modify_analyzer_parameters(params: Dict[str, Any]) -> bool:
                 lines[idx] = lines[idx].replace('minimum_occurrences=1', f"minimum_occurrences={params['minimum_occurrences']}")
                 modified.append(idx)
         
-        # ast_threshold in function signatures and calls
-        if 'ast_threshold' in params:
-            idx = 441
-            if idx < len(lines):
-                lines[idx] = f"    ast_threshold={params['ast_threshold']},\n"
-                modified.append(idx)
-            idx = 504
-            if idx < len(lines):
-                lines[idx] = f"    ast_threshold: float = {params['ast_threshold']},\n"
-                modified.append(idx)
-            idx = 650
-            if idx < len(lines):
-                lines[idx] = f"    ast_threshold: float = {params['ast_threshold']},\n"
-                modified.append(idx)
-            idx = 771
-            if idx < len(lines):
-                lines[idx] = f"            ast_threshold={params['ast_threshold']}\n"
-                modified.append(idx)
-        
         with open(ANALYZER_PATH, 'w') as f:
             f.writelines(lines)
         
@@ -405,7 +386,6 @@ def generate_parameter_combinations(n_samples: int = 5000) -> List[Dict[str, Any
         'k': list(range(2, 13)),  # 2-12
         'window_size': list(range(2, 13)),  # 2-12
         'min_depth': list(range(2, 13)),  # 2-12
-        'ast_threshold': [round(i * 0.05, 2) for i in range(0, 20)],  # 0.00-0.95 step 0.05
         'minimum_occurrences': list(range(2, 6)),  # 2-5
     }
     

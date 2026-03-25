@@ -83,29 +83,6 @@ def modify_analyzer_parameters(params: Dict[str, Any]) -> bool:
                 lines[idx] = lines[idx].replace('minimum_occurrences=1', f"minimum_occurrences={params['minimum_occurrences']}")
                 modified.append(idx)
         
-        # ast_threshold in function signatures and calls
-        if 'ast_threshold' in params:
-            # analyze_plagiarism - the parameter line, line 442 (0-indexed: 441)
-            idx = 441
-            if idx < len(lines):
-                lines[idx] = f"    ast_threshold={params['ast_threshold']},\n"
-                modified.append(idx)
-            # analyze_plagiarism_cached - line 505 (0-indexed: 504)
-            idx = 504
-            if idx < len(lines):
-                lines[idx] = f"    ast_threshold: float = {params['ast_threshold']},\n"
-                modified.append(idx)
-            # analyze_plagiarism_batch - line 651 (0-indexed: 650)
-            idx = 650
-            if idx < len(lines):
-                lines[idx] = f"    ast_threshold: float = {params['ast_threshold']},\n"
-                modified.append(idx)
-            # Analyzer.Start - line 772 (0-indexed: 771)
-            idx = 771
-            if idx < len(lines):
-                lines[idx] = f"            ast_threshold={params['ast_threshold']}\n"
-                modified.append(idx)
-        
         # Write back
         with open(ANALYZER_PATH, 'w') as f:
             f.writelines(lines)
@@ -322,7 +299,6 @@ def generate_parameter_combinations() -> List[Dict[str, Any]]:
         'k': [4, 5, 6, 7, 8],
         'window_size': [3, 4, 5, 6, 7],
         'min_depth': [2, 3, 4, 5],
-        'ast_threshold': [0.20, 0.25, 0.30, 0.35, 0.40],
         'minimum_occurrences': [1, 2, 3],
     }
     
@@ -572,8 +548,6 @@ def main():
                 print(f"  - winnow_fingerprints: window_size={value}")
             elif key == 'min_depth':
                 print(f"  - hash_ast_subtrees: min_depth={value}")
-            elif key == 'ast_threshold':
-                print(f"  - analyze_plagiarism: ast_threshold={value}")
             elif key == 'minimum_occurrences':
                 print(f"  - build_fragments: minimum_occurrences={value}")
             elif key == 'base':

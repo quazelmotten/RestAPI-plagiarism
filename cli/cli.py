@@ -2,7 +2,7 @@
 """
 Plagiarism detection CLI tool.
 Usage: 
-  python cli.py analyze file1 file2 [--language LANG] [--threshold THRESHOLD]
+  python cli.py analyze file1 file2 [--language LANG]
   python cli.py fingerprint file1 [--language LANG]
 Outputs JSON to stdout.
 """
@@ -36,7 +36,6 @@ def cmd_analyze(args):
             args.file1,
             args.file2,
             language=args.language,
-            ast_threshold=args.threshold
         )
         
         matches_serializable = []
@@ -123,8 +122,6 @@ def main():
     analyze_parser.add_argument("file2", help="Path to the second file")
     analyze_parser.add_argument("--language", "-l", default="python", choices=["python", "cpp"],
                                 help="Programming language (default: python)")
-    analyze_parser.add_argument("--threshold", "-t", type=float, default=0.30,
-                                help="AST similarity threshold (default: 0.30)")
     
     fingerprint_parser = subparsers.add_parser("fingerprint", help="Extract fingerprints from a file")
     fingerprint_parser.add_argument("file", help="Path to the file")

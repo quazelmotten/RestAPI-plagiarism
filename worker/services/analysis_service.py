@@ -35,7 +35,7 @@ class AnalysisService:
         """
         self.cache = cache
         self.analysis_executor = analysis_executor
-        self.analyzer = CoreAnalyzer(ast_threshold=0.15)
+        self.analyzer = CoreAnalyzer()
 
     def analyze_pair(
         self,
@@ -45,7 +45,6 @@ class AnalysisService:
         file1_hash: str,
         file2_hash: str,
         timeout: int = 600,
-        threshold: float = 0.15
     ) -> Dict:
         """
         Analyze pair using cached fingerprints when available.
@@ -55,7 +54,6 @@ class AnalysisService:
             language: Programming language
             file1_hash, file2_hash: Content hashes
             timeout: Timeout in seconds (only used if executor provided)
-            threshold: AST similarity threshold
 
         Returns:
             Dict with 'similarity_ratio' and 'matches' list
@@ -71,7 +69,6 @@ class AnalysisService:
                 get_ast_hashes=self._get_ast_hashes,
                 cache_fingerprints=self._cache_fingerprints,
                 language=language,
-                ast_threshold=threshold
             )
 
         # Run with or without executor
@@ -109,7 +106,7 @@ class AnalysisService:
         """
         def do_analyze():
             result = self.analyzer.analyze(
-                file1_path, file2_path, language, ast_threshold=0.0
+                file1_path, file2_path, language
             )
             return {
                 'similarity_ratio': result.similarity_ratio,
@@ -211,6 +208,4 @@ class AnalysisService:
         self.cache.batch_cache([(file_hash, fingerprints, ast_hashes)])
 
     def shutdown(self):
-        """Shutdown the analysis executor if we own it."""
-        if self.analysis_executor:
-            self.analysis_executor.shutdown(wait=True)
+        """No-op: executor is managed externally by shutdown_dependencies()."""

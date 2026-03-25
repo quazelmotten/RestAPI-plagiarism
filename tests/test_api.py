@@ -58,7 +58,8 @@ os.environ['REDIS_USE_SSL'] = 'false'
 
 os.environ['INVERTED_INDEX_MIN_OVERLAP_THRESHOLD'] = '0.15'
 
-sys.path.insert(0, '/home/bobbybrown/RestAPI-plagiarism/src')
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_project_root, 'src'))
 
 
 class TestHealthEndpoint:

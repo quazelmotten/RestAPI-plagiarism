@@ -49,7 +49,6 @@ class TestAnalysisService:
                 language='python',
                 file1_hash='h1',
                 file2_hash='h2',
-                threshold=0.15
             )
 
             assert result['similarity_ratio'] == 0.75
@@ -61,7 +60,6 @@ class TestAnalysisService:
             assert call_kwargs['get_ast_hashes'] == service._get_ast_hashes
             assert call_kwargs['cache_fingerprints'] == service._cache_fingerprints
             assert call_kwargs['language'] == 'python'
-            assert call_kwargs['ast_threshold'] == 0.15
 
     def test_analyze_pair_with_executor_uses_timeout(self, service_async):
         """Test analyze_pair submits to executor and waits with timeout."""
@@ -106,7 +104,7 @@ class TestAnalysisService:
             assert result['similarity_ratio'] == 0.9
             assert len(result['matches']) == 1
             analyzer.analyze.assert_called_once_with(
-                '/f1.py', '/f2.py', 'python', ast_threshold=0.0
+                '/f1.py', '/f2.py', 'python'
             )
 
     def test_generate_fingerprints_creates_and_returns_data(self, service_sync):
@@ -151,12 +149,12 @@ class TestAnalysisService:
         service_sync._cache_fingerprints('k1', [{'hash': 1}], [100])
         mock_cache.batch_cache.assert_called_with([('k1', [{'hash': 1}], [100])])
 
-    def test_shutdown_calls_executor_shutdown(self):
-        """Test shutdown closes executor if present."""
+    def test_shutdown_does_not_shut_down_shared_executor(self):
+        """Test shutdown is a no-op since executor is managed externally."""
         executor = MagicMock()
         service = AnalysisService(MagicMock(), analysis_executor=executor)
         service.shutdown()
-        executor.shutdown.assert_called_once_with(wait=True)
+        executor.shutdown.assert_not_called()
 
     def test_shutdown_no_executor(self, mock_cache):
         """Test shutdown with no executor does nothing."""

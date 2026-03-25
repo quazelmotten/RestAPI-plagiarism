@@ -6,12 +6,15 @@ Provides two main capabilities:
 2. Semantic canonicalization (Type 4 detection) - normalizes known equivalent code patterns
 """
 
+import logging
 import re
 from typing import Dict, List, Tuple, Optional
 
 from tree_sitter import Parser, Node
 
 from .fingerprints import get_language, parse_file_once
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -104,11 +107,17 @@ def normalize_identifiers(source: str, lang_code: str = 'python') -> str:
     try:
         tree, source_bytes = parse_file_once_from_string(source, lang_code)
     except Exception:
+        logger.warning("Failed to parse source for identifier normalization (lang=%s), returning original", lang_code, exc_info=True)
         return source
 
+    return _normalize_identifiers_from_tree(tree, source_bytes, source)
+
+
+def _normalize_identifiers_from_tree(tree, source_bytes: bytes, fallback: str) -> str:
+    """Replace identifiers using a pre-parsed tree (avoids re-parsing)."""
     identifiers = _collect_identifiers(tree.root_node, source_bytes)
     if not identifiers:
-        return source
+        return fallback
 
     placeholders = _assign_placeholders(identifiers)
     return _replace_identifiers(source_bytes, identifiers, placeholders)
@@ -124,6 +133,7 @@ def get_identifier_renames(source_a: str, source_b: str, lang_code: str = 'pytho
         tree_a, bytes_a = parse_file_once_from_string(source_a, lang_code)
         tree_b, bytes_b = parse_file_once_from_string(source_b, lang_code)
     except Exception:
+        logger.warning("Failed to parse sources for rename detection (lang=%s), returning empty", lang_code, exc_info=True)
         return []
 
     ids_a = _collect_identifiers(tree_a.root_node, bytes_a)
@@ -374,7 +384,7 @@ def canonicalize_type4(code: str) -> str:
         try:
             code = rule(code)
         except Exception:
-            pass
+            logger.warning("Canonicalization rule %s failed", rule.__name__, exc_info=True)
     return code
 
 
