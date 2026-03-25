@@ -97,7 +97,7 @@ class TestPostgresRepository:
         mock_session.bulk_insert_mappings.assert_called_once()
         mappings = mock_session.bulk_insert_mappings.call_args[0][1]
         assert len(mappings) == 2
-        assert all('id' in m for m in mappings)  # UUIDs generated
+        assert all('task_id' in m for m in mappings)  # Uses server-side UUID now
 
     def test_bulk_insert_results_handles_integrity_error_fallback(self, repo, mock_session):
         """Test that bulk_insert_results falls back to individual inserts on integrity error."""

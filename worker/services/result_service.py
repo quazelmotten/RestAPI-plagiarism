@@ -31,7 +31,7 @@ class ResultService:
         self,
         task_id: str,
         pairs: List[tuple],
-        batch_size: int = 100
+        batch_size: int = 5000
     ) -> None:
         """
         Store similarity scores for candidate pairs.
@@ -39,7 +39,7 @@ class ResultService:
         Args:
             task_id: Task identifier
             pairs: List of (file_a_dict, file_b_dict, similarity_score) tuples
-            batch_size: Batch size for DB inserts
+            batch_size: Batch size for DB inserts (default 5000 for optimal throughput)
         """
         if not pairs:
             logger.info(f"[Task {task_id}] No pairs to store")
@@ -65,19 +65,22 @@ class ResultService:
             return
 
         total = len(results)
-        log_interval = max(batch_size, total // 20)  # every 5%
+        progress_update_interval = max(1, total // 10)  # Update progress every 10%
+        log_interval = max(batch_size, total // 20)  # Log every 5%
 
         for i in range(0, total, batch_size):
             batch = results[i:i+batch_size]
             self.repository.bulk_insert_results(batch)
             processed = min(i + batch_size, total)
 
-            # Update progress
-            self.repository.update_task(
-                task_id=task_id,
-                status="storing_results",
-                processed_pairs=processed
-            )
+            # Update progress only every 10% (not after every batch)
+            if processed % progress_update_interval < batch_size or processed == total:
+                self.repository.update_task(
+                    task_id=task_id,
+                    status="storing_results",
+                    processed_pairs=processed,
+                    total_pairs=total
+                )
 
             if processed % log_interval < batch_size or processed == total:
                 percent = processed / total * 100

@@ -75,7 +75,7 @@ class TestResultService:
 
         mock_repo.update_task.assert_called_once_with(
             task_id=task_id,
-            status="processing",
+            status="storing_results",
             processed_pairs=50,
             total_pairs=100
         )

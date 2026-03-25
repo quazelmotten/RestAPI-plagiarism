@@ -77,11 +77,11 @@ class PostgresRepository(TaskRepository):
             session.commit()
 
     def bulk_insert_results(self, results: List[Dict[str, Any]]) -> None:
-        """Bulk insert similarity results."""
-        from uuid import uuid4
-
+        """Bulk insert similarity results using SQLAlchemy bulk_insert_mappings."""
         if not results:
             return
+
+        from uuid import uuid4
 
         with get_session() as session:
             try:
@@ -102,7 +102,7 @@ class PostgresRepository(TaskRepository):
                 session.commit()
             except IntegrityError:
                 session.rollback()
-                logger.warning("Bulk insert of %d results failed, falling back to per-row insert", len(results))
+                logger.debug("Bulk insert of %d results failed, falling back to per-row insert", len(results))
                 for r in results:
                     try:
                         result = SimilarityResult(
@@ -117,7 +117,7 @@ class PostgresRepository(TaskRepository):
                         session.commit()
                     except IntegrityError:
                         session.rollback()
-                        logger.warning("Skipping duplicate result for files %s <-> %s", r['file_a_id'], r['file_b_id'])
+                        logger.debug("Skipping duplicate result for files %s <-> %s", r['file_a_id'], r['file_b_id'])
 
     def get_max_similarity(self, task_id: str) -> float:
         """Get maximum similarity score for a task."""
