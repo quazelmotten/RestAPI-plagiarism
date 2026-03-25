@@ -17,7 +17,8 @@ class TestCandidateService:
         """Mock CandidateIndex (inverted index)."""
         idx = MagicMock(spec=CandidateIndex)
         idx.get_file_fingerprints = MagicMock()
-        idx.find_candidates = MagicMock()
+        idx.get_file_fingerprints_batch = MagicMock(return_value={})
+        idx.find_candidates = MagicMock(return_value={})
         return idx
 
     @pytest.fixture
@@ -42,13 +43,13 @@ class TestCandidateService:
             'h3': ['fp3', 'fp1']
         }
 
-        # get_file_fingerprints returns the fingerprint hash strings for each file
-        mock_index.get_file_fingerprints.side_effect = lambda h, l: fps_by_hash.get(h, [])
+        # get_file_fingerprints_batch returns all at once
+        mock_index.get_file_fingerprints_batch.side_effect = lambda hashes, lang: {
+            h: fps_by_hash.get(h) for h in hashes
+        }
 
         # find_candidates returns similarity scores for candidates when queried
-        # For each file, we'll return the other two as candidates
         def find_candidates(fps, lang):
-            # Determine which file is being queried by its fingerprints
             if set(fps) == set(fps_by_hash['h1']):
                 return {'h2': 0.5, 'h3': 0.5}
             elif set(fps) == set(fps_by_hash['h2']):
@@ -82,12 +83,14 @@ class TestCandidateService:
         ]
         language = 'python'
 
-        # Each file has fingerprints
-        mock_index.get_file_fingerprints.side_effect = lambda h, l: [f'{h}_fp']
+        # Batch fetch returns fingerprints for all files
+        all_fps = {'a1': ['a1_fp'], 'a2': ['a2_fp']}
+        mock_index.get_file_fingerprints_batch.side_effect = lambda hashes, lang: {
+            h: all_fps.get(h) for h in hashes
+        }
 
         # find_candidates for each A returns all B files as candidates
         def find_candidates(fps, lang):
-            # Determine source file by fingerprint prefix
             if fps[0].startswith('a1'):
                 return {'b1': 0.7, 'b2': 0.8}
             elif fps[0].startswith('a2'):
@@ -114,22 +117,24 @@ class TestCandidateService:
             {'hash': 'h1', 'id': '1'},
             {'hash': 'h2', 'id': '2'}
         ]
-        mock_index.get_file_fingerprints.side_effect = lambda h, l: None if h == 'h2' else ['fp1']
+        # h1 has fingerprints, h2 returns None (not indexed)
+        mock_index.get_file_fingerprints_batch.side_effect = lambda hashes, lang: {
+            h: ['fp1'] if h == 'h1' else None for h in hashes
+        }
 
         mock_index.find_candidates.return_value = {}
 
         pairs = service.find_candidate_pairs(files, language='python')
 
-        # Only h1 is processed; h2 skipped
+        # Only h1 is processed; h2 skipped (None fingerprints)
         mock_index.find_candidates.assert_called_once()
-        # Called with fingerprints from h1
         called_fps = mock_index.find_candidates.call_args[0][0]
         assert called_fps == ['fp1']
 
     def test_find_candidate_pairs_skips_self_for_intra_task(self, service, mock_index):
         """Test intra-task comparisons skip self-comparison."""
         files = [{'hash': 'h1', 'id': '1'}]
-        mock_index.get_file_fingerprints.return_value = ['fp1']
+        mock_index.get_file_fingerprints_batch.return_value = {'h1': ['fp1']}
         mock_index.find_candidates.return_value = {'h1': 1.0}  # candidate includes self
 
         pairs = service.find_candidate_pairs(files, language='python', deduplicate=True)

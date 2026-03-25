@@ -122,3 +122,19 @@ class TestRedisInvertedIndex:
         """Test that removing file with no hashes does minimal work."""
         index.remove_file("missing_file", "python")
         # Should not error
+
+    def test_get_file_fingerprints_batch_returns_all_at_once(self, index, redis_test_instance):
+        """Test batch fetch returns fingerprints for multiple files in one call."""
+        index.add_file_fingerprints("f1", [{'hash': 'a'}, {'hash': 'b'}], "py")
+        index.add_file_fingerprints("f2", [{'hash': 'c'}], "py")
+
+        result = index.get_file_fingerprints_batch(["f1", "f2", "f3"], "py")
+
+        assert set(result["f1"]) == {"a", "b"}
+        assert set(result["f2"]) == {"c"}
+        assert result["f3"] is None
+
+    def test_get_file_fingerprints_batch_empty_list(self, index):
+        """Test batch fetch with empty list returns empty dict."""
+        result = index.get_file_fingerprints_batch([], "py")
+        assert result == {}

@@ -85,6 +85,32 @@ class FakeRedis:
     def delete(self, key):
         self._store.pop(key, None)
 
+    def register_script(self, script):
+        store = self._store
+        class _LuaScript:
+            def __call__(self, keys=None, args=None):
+                lang = args[0]
+                qcount = int(args[1])
+                min_overlap = int(args[2])
+                query_hashes = [str(a) for a in args[3:]]
+                cands = {}
+                for qh in query_hashes:
+                    inv_key = f"inv:hash:{lang}:{qh}"
+                    for fh in store.get(inv_key, set()):
+                        cands[fh] = cands.get(fh, 0) + 1
+                result = []
+                for fh, overlap in cands.items():
+                    if overlap >= min_overlap:
+                        fkey = f"inv:file:{lang}:{fh}"
+                        bcount = len(store.get(fkey, set()))
+                        union = qcount + bcount - overlap
+                        if union > 0:
+                            sim = min(1.0, overlap / union)
+                            result.append(fh)
+                            result.append(sim)
+                return result
+        return _LuaScript()
+
 
 def create_test_fingerprints(base_hash: int, count: int) -> list:
     """Create test fingerprints with varying hashes."""

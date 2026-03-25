@@ -18,6 +18,42 @@ if project_root not in sys.path:
 from worker.config import settings  # noqa: F401
 
 
+class _MockLuaScript:
+    """Simulates redis-py Script by running candidate-finding logic in Python."""
+
+    def __init__(self, redis_mock):
+        self._redis = redis_mock
+
+    def call(self, keys, args):
+        lang = args[0]
+        qcount = int(args[1])
+        min_overlap = int(args[2])
+        query_hashes = [str(a) for a in args[3:]]
+
+        # Count how many query hashes each candidate file shares
+        cands = {}
+        for qh in query_hashes:
+            inv_key = f"inv:hash:{lang}:{qh}"
+            for fh in self._redis.sets.get(inv_key, set()):
+                cands[fh] = cands.get(fh, 0) + 1
+
+        # Compute Jaccard
+        result = []
+        for fh, overlap in cands.items():
+            if overlap >= min_overlap:
+                fkey = f"inv:file:{lang}:{fh}"
+                bcount = len(self._redis.sets.get(fkey, set()))
+                union = qcount + bcount - overlap
+                if union > 0:
+                    sim = min(1.0, overlap / union)
+                    result.append(fh)
+                    result.append(sim)
+        return result
+
+    def __call__(self, keys=None, args=None):
+        return self.call(keys or [], args or [])
+
+
 class SimpleRedis:
     """A simple in-memory Redis mock supporting common operations with pipeline simulation."""
 
@@ -159,6 +195,9 @@ class SimpleRedis:
     def get(self, name):
         result = self.strings.get(name)
         return self._record(result)
+
+    def register_script(self, script):
+        return _MockLuaScript(self)
 
 
 @pytest.fixture(scope="session")

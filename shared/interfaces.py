@@ -68,6 +68,12 @@ class CandidateIndex(Protocol):
         language: str = "python"
     ) -> Optional[List[str]]: ...
 
+    def get_file_fingerprints_batch(
+        self,
+        file_hashes: List[str],
+        language: str = "python"
+    ) -> Dict[str, Optional[List[str]]]: ...
+
     def remove_file(self, file_hash: str, language: str = "python") -> None: ...
 
 
