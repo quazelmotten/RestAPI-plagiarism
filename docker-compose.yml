@@ -67,8 +67,6 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-production}
       API_HOST: ${API_HOST:-0.0.0.0}
       API_PORT: ${API_PORT:-8000}
-      SECRET_KEY: ${SECRET_KEY}
-      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       SUBPATH: ${SUBPATH:-plagitype}
       
@@ -150,9 +148,6 @@ services:
       # Worker
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
       WORKER_PREFETCH_COUNT: ${WORKER_PREFETCH_COUNT:-1}
-
-      # Security
-      SECRET_KEY: ${SECRET_KEY}
 
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

@@ -93,7 +93,6 @@ This will test:
 - ✅ API health endpoints
 - ✅ Database connectivity
 - ✅ RabbitMQ connectivity
-- ✅ User registration & login
 - ✅ File upload functionality
 - ✅ Plagiarism check workflow
 - ✅ Frontend serving

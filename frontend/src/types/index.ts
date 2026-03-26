@@ -1,10 +1,3 @@
-export interface User {
-  id: string;
-  username: string;
-  email: string;
-  role: 'teacher' | 'admin';
-}
-
 type TaskStatus = 'pending' | 'queued' | 'indexing' | 'finding_intra_pairs' | 'finding_cross_pairs' | 'storing_results' | 'processing' | 'completed' | 'failed';
 
 export interface Submission {

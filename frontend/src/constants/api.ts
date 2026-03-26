@@ -4,10 +4,6 @@
  */
 
 export const API_ENDPOINTS = {
-  // Authentication
-  LOGIN: '/auth/login',
-  ME: '/auth/me',
-
   // Plagiarism checks
   CHECK: '/plagiarism/check',
   TASKS: '/plagiarism/tasks',

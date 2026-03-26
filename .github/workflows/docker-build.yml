@@ -156,10 +156,9 @@ jobs:
        run: |
          if [ -f .env.example ]; then
            cp .env.example .env
-           # Set dummy values for required secrets if not already set
-           echo "DB_PASS=${DB_PASSWORD:-testpassword}" >> .env
-           echo "RMQ_PASS=${RABBITMQ_PASSWORD:-testpassword}" >> .env
-           echo "SECRET_KEY=${SECRET_KEY:-testsecretkey}" >> .env
+          # Set dummy values for required secrets if not already set
+          echo "DB_PASS=${DB_PASSWORD:-testpassword}" >> .env
+          echo "RMQ_PASS=${RABBITMQ_PASSWORD:-testpassword}" >> .env
          else
            echo "ERROR: .env.example not found"
            exit 1

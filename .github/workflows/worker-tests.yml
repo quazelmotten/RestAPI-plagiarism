@@ -66,9 +66,8 @@ jobs:
         echo "DB_NAME=test_plagiarism" >> $GITHUB_ENV
         echo "DB_USER=test" >> $GITHUB_ENV
         echo "DB_PASS=testpasswordthatis16characterslong" >> $GITHUB_ENV
-        echo "RMQ_PASS=testpasswordthatis16characterslong" >> $GITHUB_ENV
-        echo "SECRET_KEY=supersecretkeythatis32characterslong1234567890" >> $GITHUB_ENV
-        echo "WORKER_CONCURRENCY=4" >> $GITHUB_ENV
+         echo "RMQ_PASS=testpasswordthatis16characterslong" >> $GITHUB_ENV
+         echo "WORKER_CONCURRENCY=4" >> $GITHUB_ENV
         echo "WORKER_PREFETCH_COUNT=1" >> $GITHUB_ENV
         echo "LOG_LEVEL=INFO" >> $GITHUB_ENV
         echo "STORAGE_LOCAL_PATH=/tmp/test_s3_storage" >> $GITHUB_ENV

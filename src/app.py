@@ -5,7 +5,6 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.plagiarism.router import router as router_plagiarism
-from api.auth.router import router as router_auth
 from exceptions.error_handler import add_exception_handler
 from startup.create_exchange import create_queues_and_exchanges
 from rabbit import connect, disconnect
@@ -41,7 +40,6 @@ app.add_middleware(
 
 # Include API routers with subpath prefix
 app.include_router(router_plagiarism, prefix=f"/{subpath_for_routes}")
-app.include_router(router_auth, prefix=f"/{subpath_for_routes}")
 
 add_exception_handler(app)
 
@@ -137,7 +135,7 @@ if subpath_for_routes:
     @app.get(f"/{subpath_for_routes}/{{full_path:path}}")
     async def serve_react_subpath(request: Request, full_path: str = ""):
         """Serve the React SPA for subpath routes"""
-        if full_path.startswith("api/") or full_path.startswith("assets/") or full_path.startswith("auth/") or full_path.startswith("docs") or full_path.startswith("openapi") or full_path.startswith("plagiarism"):
+        if full_path.startswith("api/") or full_path.startswith("assets/") or full_path.startswith("docs") or full_path.startswith("openapi") or full_path.startswith("plagiarism"):
             return {"detail": "Not Found"}
         
         index_path = static_path / "index.html"
@@ -149,7 +147,7 @@ if subpath_for_routes:
 @app.get("/{full_path:path}")
 async def serve_react(full_path: str, request: Request):
     """Serve the React SPA for all non-API routes"""
-    if full_path.startswith("api/") or full_path.startswith("assets/") or full_path.startswith("auth/") or full_path.startswith("docs") or full_path.startswith("openapi") or full_path.startswith("plagiarism") or full_path.startswith("health") or full_path.startswith("version"):
+    if full_path.startswith("api/") or full_path.startswith("assets/") or full_path.startswith("docs") or full_path.startswith("openapi") or full_path.startswith("plagiarism") or full_path.startswith("health") or full_path.startswith("version"):
         return {"detail": "Not Found"}
     
     index_path = static_path / "index.html"

@@ -54,8 +54,6 @@ class Settings(BaseSettings):
     api_host: str = Field(default="0.0.0.0", validation_alias="API_HOST")
     api_port: int = Field(default=8000, validation_alias="API_PORT")
     api_workers: int = Field(default=1, validation_alias="API_WORKERS")
-    secret_key: str = Field(validation_alias="SECRET_KEY")
-    access_token_expire_minutes: int = Field(default=30, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     cors_origins: str = Field(default="http://localhost:3000", validation_alias="CORS_ORIGINS")
     subpath: str = Field(default="plagitype", validation_alias="SUBPATH")
     
@@ -128,14 +126,6 @@ class Settings(BaseSettings):
         if v.lower() not in allowed:
             raise ValueError(f"Environment must be one of: {allowed}")
         return v.lower()
-    
-    @field_validator("secret_key")
-    @classmethod
-    def validate_secret_key(cls, v: str) -> str:
-        """Ensure secret key is strong enough."""
-        if len(v) < 32:
-            raise ValueError("Secret key must be at least 32 characters")
-        return v
     
     @field_validator("default_plagiarism_threshold")
     @classmethod

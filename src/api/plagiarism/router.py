@@ -323,7 +323,6 @@ async def get_task_histogram(
 async def websocket_task_progress(
     websocket: WebSocket,
     task_id: str,
-    token: Optional[str] = Query(None, description="Optional JWT token for authentication"),
 ):
     """
     WebSocket endpoint for real-time task progress updates.

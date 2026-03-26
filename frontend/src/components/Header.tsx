@@ -1,23 +1,15 @@
 import React from 'react';
-import { useAuth } from '../contexts/AuthContext';
 import {
   Box,
   Flex,
   Text,
-  Button,
-  Avatar,
-  Menu,
-  MenuButton,
-  MenuList,
-  MenuItem,
   IconButton,
   useColorModeValue,
   useColorMode,
 } from '@chakra-ui/react';
-import { FiChevronDown, FiLogOut, FiMoon, FiSun } from 'react-icons/fi';
+import { FiMoon, FiSun } from 'react-icons/fi';
 
 const Header: React.FC = () => {
-  const { user, logout } = useAuth();
   const { colorMode, toggleColorMode } = useColorMode();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -49,23 +41,6 @@ const Header: React.FC = () => {
             variant="ghost"
             size="md"
           />
-          <Menu>
-            <MenuButton
-              as={Button}
-              variant="ghost"
-              rightIcon={<FiChevronDown />}
-            >
-              <Flex align="center">
-                <Avatar size="sm" name={user?.username || 'User'} mr={2} />
-                <Text>{user?.username || 'User'}</Text>
-              </Flex>
-            </MenuButton>
-            <MenuList>
-              <MenuItem icon={<FiLogOut />} onClick={logout}>
-                Logout
-              </MenuItem>
-            </MenuList>
-          </Menu>
         </Flex>
       </Flex>
     </Box>

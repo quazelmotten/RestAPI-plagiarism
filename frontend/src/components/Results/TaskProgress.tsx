@@ -211,14 +211,11 @@ const TaskProgress: React.FC<TaskProgressProps> = ({ taskId, status: initialStat
     // Start the smooth animation loop
     startAnimation();
 
-    if ('WebSocket' in window) {
-      if (wsRef.current?.readyState === WebSocket.OPEN) return;
+     if ('WebSocket' in window) {
+       if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-      const wsUrl = getWebSocketUrl(taskId);
-      const token = localStorage.getItem('token');
-      const finalUrl = token ? `${wsUrl}?token=${token}` : wsUrl;
-
-      const ws = new WebSocket(finalUrl);
+       const wsUrl = getWebSocketUrl(taskId);
+       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -257,8 +254,8 @@ const TaskProgress: React.FC<TaskProgressProps> = ({ taskId, status: initialStat
                     });
                     if (ACTIVE_STATUSES.includes(task.status)) {
                       stopPolling();
-                      if (wsRef.current?.readyState !== WebSocket.OPEN) {
-                        const retryWs = new WebSocket(finalUrl);
+                       if (wsRef.current?.readyState !== WebSocket.OPEN) {
+                         const retryWs = new WebSocket(wsUrl);
                         wsRef.current = retryWs;
                         retryWs.onopen = () => { stopPolling(); };
                         retryWs.onmessage = ws.onmessage;

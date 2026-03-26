@@ -35,8 +35,6 @@ os.environ['ENVIRONMENT'] = 'development'
 os.environ['API_HOST'] = '0.0.0.0'
 os.environ['API_PORT'] = '8000'
 os.environ['API_WORKERS'] = '1'
-os.environ['SECRET_KEY'] = 'test_secret_key_12345678901234567890'
-os.environ['ACCESS_TOKEN_EXPIRE_MINUTES'] = '30'
 os.environ['CORS_ORIGINS'] = 'http://localhost:3000'
 
 os.environ['DEFAULT_PLAGIARISM_THRESHOLD'] = '0.75'
@@ -87,70 +85,6 @@ class TestHealthEndpoint:
         client = TestClient(app)
         response = client.get("/")
         assert response.status_code == 200
-
-
-class TestAuthEndpoints:
-    def test_register(self):
-        from app import app
-        from fastapi.testclient import TestClient
-        client = TestClient(app)
-        response = client.post("/auth/register", json={
-            "username": "testuser",
-            "email": "test@example.com",
-            "password": "password123"
-        })
-        assert response.status_code == 200
-        data = response.json()
-        assert data["username"] == "testuser"
-        assert data["email"] == "test@example.com"
-    
-    def test_login(self):
-        from app import app
-        from fastapi.testclient import TestClient
-        client = TestClient(app)
-        response = client.post("/auth/login", json={
-            "email": "test@example.com",
-            "password": "password123",
-            "username": "testuser"
-        })
-        assert response.status_code == 200
-        data = response.json()
-        assert "access_token" in data
-        assert data["token_type"] == "bearer"
-    
-    def test_login_missing_fields(self):
-        from app import app
-        from fastapi.testclient import TestClient
-        client = TestClient(app)
-        response = client.post("/auth/login", json={})
-        assert response.status_code == 400
-    
-    def test_get_me_no_token(self):
-        from app import app
-        from fastapi.testclient import TestClient
-        client = TestClient(app)
-        response = client.get("/auth/me")
-        assert response.status_code == 401
-    
-    def test_get_me_with_token(self):
-        from app import app
-        from fastapi.testclient import TestClient
-        client = TestClient(app)
-        # First login to get token
-        login_response = client.post("/auth/login", json={
-            "email": "test@example.com",
-            "password": "password123",
-            "username": "testuser"
-        })
-        token = login_response.json()["access_token"]
-        
-        response = client.get("/auth/me", headers={
-            "Authorization": f"Bearer {token}"
-        })
-        assert response.status_code == 200
-        data = response.json()
-        assert "id" in data
-        assert "email" in data
 
 
 class TestPlagiarismEndpoints:

@@ -4,7 +4,6 @@ A React SPA frontend for the Plagiarism Detection API built with React 18, TypeS
 
 ## Features
 
-- **Authentication**: JWT-based auth with protected routes
 - **Teacher Dashboard**: Overview, Students, Submissions, Plagiarism Graph, and Upload pages
 - **Plagiarism Visualization**: Interactive network graph using Cytoscape.js
 - **File Upload**: Drag & drop file uploads with multiple file support
@@ -46,10 +45,8 @@ Output goes to `dist/` folder
 ```
 frontend/
 ├── src/
-│   ├── components/     # Reusable components (Sidebar, Header, PrivateRoute)
-│   ├── contexts/       # React contexts (AuthContext)
+│   ├── components/     # Reusable components (Sidebar, Header)
 │   ├── pages/          # Page components
-│   │   ├── Login.tsx
 │   │   ├── Dashboard.tsx
 │   │   ├── Overview.tsx
 │   │   ├── Students.tsx
@@ -77,11 +74,11 @@ VITE_API_URL=http://localhost:8000
 
 The frontend expects these FastAPI endpoints:
 
-- `POST /auth/login` - Login, returns JWT
-- `GET /auth/me` - Get current user
-- `GET /students` - List students
-- `GET /submissions` - List submissions
-- `POST /submissions` - Upload files
+- `GET /plagiarism/check` - Submit files for plagiarism check
+- `GET /plagiarism/tasks` - List all tasks
+- `GET /plagiarism/{task_id}/results` - Get task results
+- `GET /plagiarism/files` - List files
+- `GET /plagiarism/files/{file_id}/content` - Get file content
 - `GET /plagiarism/network` - Get plagiarism graph data
 
 ## Available Scripts
@@ -112,15 +109,9 @@ Interactive network visualization showing connections between similar submission
 - Language selection
 - Progress tracking
 
-### Authentication
-- JWT token stored in localStorage
-- Auto-redirect on token expiration
-- Protected routes
-
 ## Next Steps
 
-1. Implement FastAPI endpoints for auth, students, and submissions
-2. Connect frontend to real API endpoints
-3. Add loading states and error handling
-4. Implement pagination for tables
-5. Add export functionality
+1. Connect frontend to real API endpoints
+2. Add loading states and error handling
+3. Implement pagination for tables
+4. Add export functionality

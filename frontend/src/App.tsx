@@ -1,10 +1,7 @@
 import { ChakraProvider, extendTheme } from '@chakra-ui/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router';
-import { AuthProvider } from './contexts/AuthContext';
-import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import PrivateRoute from './components/PrivateRoute';
 import { getBasePath } from './utils/subpath';
 
 const queryClient = new QueryClient({
@@ -44,20 +41,10 @@ function App() {
     <ChakraProvider theme={theme}>
       <QueryClientProvider client={queryClient}>
         <Router basename={BASE}>
-          <AuthProvider>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route
-                path="/dashboard/*"
-                element={
-                  <PrivateRoute>
-                    <Dashboard />
-                  </PrivateRoute>
-                }
-              />
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-          </AuthProvider>
+          <Routes>
+            <Route path="/dashboard/*" element={<Dashboard />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
         </Router>
       </QueryClientProvider>
     </ChakraProvider>

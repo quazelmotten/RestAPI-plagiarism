@@ -51,7 +51,6 @@ echo
 # Generate secure passwords
 DB_PASS=$(generate_password)
 RMQ_PASS=$(generate_password)
-SECRET_KEY=$(generate_secret)
 
 echo "Creating .env file with secure passwords..."
 
@@ -93,8 +92,6 @@ ENVIRONMENT=production
 API_HOST=0.0.0.0
 API_PORT=8000
 API_WORKERS=4
-SECRET_KEY=${SECRET_KEY}
-ACCESS_TOKEN_EXPIRE_MINUTES=30
 CORS_ORIGINS=http://localhost:3000
 SUBPATH=plagitype
 
@@ -140,7 +137,6 @@ echo
 echo "Your configuration has been generated with:"
 echo "  • Strong database password (32 chars)"
 echo "  • Strong RabbitMQ password (32 chars)"
-echo "  • Secure secret key (48 bytes)"
 echo
 echo -e "${YELLOW}Next steps:${NC}"
 echo "  1. Review the .env file and adjust settings if needed"
