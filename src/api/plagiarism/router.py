@@ -1,4 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
+import asyncio
+import json
+import logging
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
@@ -14,8 +17,10 @@ from schemas.result import ResultsListResponse, TaskResultsResponse, ResultItem
 from schemas.file import FilesListResponse
 from rabbit import publish_message
 from s3_storage import s3_storage
+from websocket_manager import get_connection_manager
 
 router = APIRouter(prefix="/plagiarism", tags=["Plagiarism"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/check", response_model=TaskCreateResponse)
@@ -312,3 +317,53 @@ async def get_task_histogram(
     
     result_service = ResultService(db)
     return await result_service.get_task_histogram(task_id, bins)
+
+
+@router.websocket("/ws/tasks/{task_id}")
+async def websocket_task_progress(
+    websocket: WebSocket,
+    task_id: str,
+    token: Optional[str] = Query(None, description="Optional JWT token for authentication"),
+):
+    """
+    WebSocket endpoint for real-time task progress updates.
+
+    Connects to a specific task and receives progress events:
+    - type: "progress"
+    - task_id: string
+    - status: string (e.g., "finding_intra_pairs")
+    - processed_pairs: int
+    - total_pairs: int
+    - progress: float (0-1)
+    - timestamp: float
+
+    Clients should send periodic pings to keep connection alive.
+    Connection auto-closes when task completes or on error.
+    """
+    logger.info("WebSocket connection attempt for task %s", task_id)
+
+    manager = get_connection_manager()
+    await manager.connect(websocket, task_id)
+
+    try:
+        # Keep connection alive and handle incoming messages (pings, etc.)
+        while True:
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                logger.debug("Received WebSocket message for task %s: %s", task_id, data[:100])
+            except asyncio.TimeoutError:
+                # Send a ping to check if client is still there
+                try:
+                    await websocket.send_text(json.dumps({"type": "ping"}))
+                except Exception:
+                    # Client disconnected
+                    break
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.warning("WebSocket error for task %s: %s", task_id, e)
+                break
+    except Exception as e:
+        logger.info("WebSocket connection ended for task %s: %s", task_id, e)
+    finally:
+        manager.disconnect(websocket, task_id)

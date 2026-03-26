@@ -72,7 +72,7 @@ class IndexingService:
         fingerprint_map = {}
         total_fps = 0
         t0 = time.perf_counter()
-        log_interval = max(1, min(25, len(files) // 8))  # ~8 progress updates
+        log_interval = max(1, min(20, len(files) // 20))  # ~20 progress updates
 
         # Process each file, generating fingerprints if needed
         for idx, file_info in enumerate(files, 1):

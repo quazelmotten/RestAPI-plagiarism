@@ -188,25 +188,13 @@ const Results: React.FC = () => {
       }
      }, [selectedTaskId]);
 
-    useEffect(() => {
-      if (selectedTaskId) {
-        fetchTaskDetails();
-      } else {
-        setSelectedTaskDetails(null);
-      }
-    }, [selectedTaskId, fetchTaskDetails]);
-
-    // When task finishes, do a full refresh to load results
-    const prevStatusRef = React.useRef(selectedTaskDetails?.status);
-    useEffect(() => {
-      const prev = prevStatusRef.current;
-      const curr = selectedTaskDetails?.status;
-      if (prev && curr && prev !== curr && (curr === 'completed' || curr === 'failed')) {
-        loadTasks();
-        fetchTaskDetails();
-      }
-      prevStatusRef.current = curr;
-    }, [selectedTaskDetails?.status, loadTasks, fetchTaskDetails]);
+     useEffect(() => {
+       if (selectedTaskId) {
+         fetchTaskDetails();
+       } else {
+         setSelectedTaskDetails(null);
+       }
+     }, [selectedTaskId, fetchTaskDetails]);
    
     const selectedTaskListItem = tasks.find(t => t.task_id === selectedTaskId);
     const selectedTask = selectedTaskDetails;
@@ -366,7 +354,7 @@ const Results: React.FC = () => {
                    cardBg={cardBg}
                  />
                 
-                <TaskProgress taskId={selectedTask.task_id} status={selectedTask.status} cardBg={cardBg} />
+                <TaskProgress taskId={selectedTask.task_id} status={selectedTask.status} cardBg={cardBg} onCompleted={handleRefresh} />
                 
                  <SimilarityDistribution
                    results={selectedTask.results}

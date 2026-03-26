@@ -88,10 +88,11 @@ class CandidateService:
         all_pairs: List[Tuple[dict, dict, float]] = []
         all_seen: Set[frozenset] = set()
         checked_counter = [0]
-        log_interval = max(1, min(25, total_a // 8))
+        log_interval = max(1, total_a // 20)  # ~20 progress updates
 
         def process_batch(batch: List[Dict]):
             local_pairs = []
+            local_checked = 0
             for file_a in batch:
                 file_a_hash = file_a.get('hash') or file_a.get('file_hash')
                 if not file_a_hash:
@@ -112,7 +113,16 @@ class CandidateService:
 
                     local_pairs.append((file_a, file_b, similarity))
 
-            # Single lock acquisition for the whole batch
+                local_checked += 1
+
+                # Report progress periodically within the batch
+                if local_checked % log_interval == 0:
+                    with lock:
+                        checked_counter[0] += log_interval
+                        if on_progress:
+                            on_progress(checked_counter[0], total_a)
+
+            # Final batch flush: deduplicate + commit remaining progress
             with lock:
                 if deduplicate:
                     for fa, fb, sim in local_pairs:
@@ -124,7 +134,7 @@ class CandidateService:
                 else:
                     all_pairs.extend(local_pairs)
 
-                checked_counter[0] += len(batch)
+                checked_counter[0] += local_checked % log_interval
                 elapsed = time.perf_counter() - t0
                 speed = checked_counter[0] / elapsed if elapsed > 0 else 0
                 logger.info(f"  Checked {checked_counter[0]}/{total_a} files, "

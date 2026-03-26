@@ -84,6 +84,14 @@ def get_repository() -> TaskRepository:
     Base.metadata.create_all(bind=engine)
 
     repo = PostgresRepository()
+    
+    # Attach Redis client for progress publishing (non-critical)
+    try:
+        redis_client = get_redis_client()
+        repo.redis_client = redis_client
+    except Exception as e:
+        logger.warning("Redis not available for progress publishing: %s", e)
+    
     logger.info("Task repository initialized")
     return repo
 

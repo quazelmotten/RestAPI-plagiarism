@@ -9,8 +9,9 @@ from api.auth.router import router as router_auth
 from exceptions.error_handler import add_exception_handler
 from startup.create_exchange import create_queues_and_exchanges
 from rabbit import connect, disconnect
-from redis_client import connect_redis, disconnect_redis
+from redis_client import connect_redis, disconnect_redis, get_redis_client
 from config import settings
+from websocket_manager import get_connection_manager
 
 
 # Override Starlette's default 1000-file limit for multipart uploads
@@ -84,11 +85,19 @@ async def on_startup():
     await connect()
     await connect_redis()
 
+    # Start WebSocket manager (creates its own Redis connection)
+    manager = get_connection_manager()
+    await manager.start()
+
 
 @app.on_event("shutdown")
 async def on_shutdown():
     await disconnect()
     await disconnect_redis()
+    
+    # Stop WebSocket manager
+    manager = get_connection_manager()
+    await manager.stop()
 
 
 @app.get("/health")

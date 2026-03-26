@@ -5,6 +5,8 @@ Implements TaskRepository interface using SQLAlchemy with sync engine.
 """
 
 import logging
+import time
+import json
 from typing import List, Dict, Any, Optional
 
 from sqlalchemy import select, update, func
@@ -19,6 +21,15 @@ logger = logging.getLogger(__name__)
 
 class PostgresRepository(TaskRepository):
     """PostgreSQL implementation of task repository."""
+
+    def __init__(self, redis_client=None):
+        """
+        Initialize repository.
+        
+        Args:
+            redis_client: Optional Redis client for pub/sub progress updates.
+        """
+        self.redis_client = redis_client
 
     def get_all_files(self, exclude_task_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all files from database, optionally excluding a task."""
@@ -75,6 +86,23 @@ class PostgresRepository(TaskRepository):
             )
             session.execute(stmt)
             session.commit()
+
+        # Publish progress to Redis for WebSocket subscribers (non-blocking)
+        if self.redis_client and processed_pairs is not None:
+            try:
+                channel = f"task:{task_id}:progress"
+                message = {
+                    "type": "progress",
+                    "task_id": task_id,
+                    "status": status,
+                    "processed_pairs": processed_pairs,
+                    "total_pairs": total_pairs if total_pairs is not None else 0,
+                    "progress": values.get("progress", 0.0),
+                    "timestamp": time.time(),
+                }
+                self.redis_client.publish(channel, json.dumps(message))
+            except Exception as e:
+                logger.debug("Failed to publish progress to Redis: %s", e)
 
     def bulk_insert_results(self, results: List[Dict[str, Any]]) -> None:
         """Bulk insert similarity results using SQLAlchemy bulk_insert_mappings."""

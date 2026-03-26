@@ -65,16 +65,18 @@ class ResultService:
             return
 
         total = len(results)
-        progress_update_interval = max(1, total // 10)  # Update progress every 10%
+        progress_update_interval = max(1, total // 50)  # Update every ~2%
         log_interval = max(batch_size, total // 20)  # Log every 5%
+        last_progress_sent = 0  # Track last processed count we reported
 
         for i in range(0, total, batch_size):
             batch = results[i:i+batch_size]
             self.repository.bulk_insert_results(batch)
             processed = min(i + batch_size, total)
 
-            # Update progress only every 10% (not after every batch)
-            if processed % progress_update_interval < batch_size or processed == total:
+            # Update progress roughly every 10% or on final batch
+            if processed == total or processed - last_progress_sent >= progress_update_interval:
+                last_progress_sent = processed
                 self.repository.update_task(
                     task_id=task_id,
                     status="storing_results",
