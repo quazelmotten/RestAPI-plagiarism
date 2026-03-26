@@ -8,7 +8,8 @@ Uses the multi-level plagiarism detector to classify matches by type
 import logging
 from typing import List, Dict, Any, Tuple
 
-from .ast_hash import extract_ast_hashes, ast_similarity as compute_ast_similarity
+from .ast_hash import extract_ast_hashes, ast_similarity as compute_ast_similarity, hash_ast_subtrees
+from .canonicalizer import parse_file_once_from_string
 from .plagiarism_detector import detect_plagiarism
 from .models import (
     AnalysisResult,
@@ -32,39 +33,53 @@ class Analyzer:
     def __init__(self):
         pass
 
-    def analyze(
+    def analyze_sources(
         self,
-        file1: str,
-        file2: str,
+        source1: str,
+        source2: str,
         language: str = 'python',
+        file1_path: str = None,
+        file2_path: str = None,
     ) -> AnalysisResult:
         """
-        Complete plagiarism analysis between two files.
+        Analyze plagiarism given source code strings.
+
+        This method does not perform any file I/O - it operates purely on
+        in-memory strings. This enables:
+        - Unit testing without creating files
+        - Analysis of code already in memory (from caches, databases, etc.)
+        - Separation of concerns (I/O is handled by caller)
 
         Args:
-            file1: Path to first file
-            file2: Path to second file
+            source1: First source code string
+            source2: Second source code string
             language: Programming language
+            file1_path: Optional path for metadata (not read)
+            file2_path: Optional path for metadata (not read)
 
         Returns:
             AnalysisResult with similarity and typed matches
         """
-        with open(file1, 'r', encoding='utf-8', errors='ignore') as f:
-            source1 = f.read()
-        with open(file2, 'r', encoding='utf-8', errors='ignore') as f:
-            source2 = f.read()
-
         lines1 = source1.split('\n')
         lines2 = source2.split('\n')
 
-        ast1 = extract_ast_hashes(file1, language)
-        ast2 = extract_ast_hashes(file2, language)
+        # Compute AST hashes directly from source strings
+        try:
+            from .canonicalizer import parse_file_once_from_string
+            tree1, bytes1 = parse_file_once_from_string(source1, language)
+            tree2, bytes2 = parse_file_once_from_string(source2, language)
+            ast1 = hash_ast_subtrees(tree1.root_node)
+            ast2 = hash_ast_subtrees(tree2.root_node)
+        except Exception:
+            logger.warning("Failed to parse sources for AST similarity, defaulting to 0", exc_info=True)
+            ast1, ast2 = [], []
+
         ast_sim = compute_ast_similarity(ast1, ast2)
 
-        # Multi-level matching
+        # Multi-level matching using the full detector
         matches = detect_plagiarism(source1, source2, language)
 
-        # Compute metrics (all match types contribute to coverage)
+        # Compute metrics
         total_lines_a = len([l for l in lines1 if l.strip()])
         total_lines_b = len([l for l in lines2 if l.strip()])
         matched_lines_a = sum(m.file1['end_line'] - m.file1['start_line'] + 1 for m in matches)
@@ -85,9 +100,39 @@ class Analyzer:
             similarity_ratio=ast_sim,
             matches=matches,
             metrics=metrics,
-            file1_path=file1,
-            file2_path=file2,
+            file1_path=file1_path or '',
+            file2_path=file2_path or '',
             language=language
+        )
+
+    def analyze(
+        self,
+        file1: str,
+        file2: str,
+        language: str = 'python',
+    ) -> AnalysisResult:
+        """
+        Complete plagiarism analysis between two files.
+
+        This method reads the files from disk and calls analyze_sources().
+        For in-memory analysis without file I/O, use analyze_sources() directly.
+
+        Args:
+            file1: Path to first file
+            file2: Path to second file
+            language: Programming language
+
+        Returns:
+            AnalysisResult with similarity and typed matches
+        """
+        with open(file1, 'r', encoding='utf-8', errors='ignore') as f:
+            source1 = f.read()
+        with open(file2, 'r', encoding='utf-8', errors='ignore') as f:
+            source2 = f.read()
+
+        return self.analyze_sources(
+            source1, source2, language,
+            file1_path=file1, file2_path=file2
         )
 
     def analyze_cached(

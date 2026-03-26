@@ -11,7 +11,6 @@ Each match carries a plagiarism_type, similarity score, and optional details
 (renames detected, transformations applied, etc.).
 """
 
-import hashlib
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -81,10 +80,10 @@ def _make_exact_lines(source: str) -> List[str]:
 
 
 def _line_hash(line: str) -> int:
-    """Fast int hash for a normalized line."""
+    """Fast int hash for a normalized line using xxhash for consistency."""
     if not line:
         return 0
-    return int(hashlib.md5(line.encode()).hexdigest()[:15], 16)
+    return stable_hash(line)
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +187,7 @@ def _line_level_matches(
         if all_exact:
             ptype = PlagiarismType.EXACT
             desc = None
+            renames = None
         else:
             ptype = PlagiarismType.RENAMED
             renames = _extract_line_renames(lines_a, lines_b, shadow_a, shadow_b, sa, sb, length)
@@ -199,7 +199,7 @@ def _line_level_matches(
             kgram_count=length,
             plagiarism_type=ptype,
             similarity=1.0,
-            details={'renames': _extract_line_renames(lines_a, lines_b, shadow_a, shadow_b, sa, sb, length)} if not all_exact else None,
+            details={'renames': renames} if renames else None,
             description=desc,
         ))
         used_a.update(range(sa, sa + length))
@@ -244,12 +244,10 @@ def _extract_line_renames(
     ordered_a = sorted(seen_a, key=lambda n: seen_a[n])
     ordered_b = sorted(seen_b, key=lambda n: seen_b[n])
 
-    # Pair by position order, skip identical names
+    # Pair by position order using enumerate (O(n) instead of O(n²))
     renames = []
     paired_b: Set[str] = set()
-    for name_a in ordered_a:
-        # Find corresponding name in B (by positional index)
-        idx_a = ordered_a.index(name_a)
+    for idx_a, name_a in enumerate(ordered_a):
         if idx_a < len(ordered_b):
             name_b = ordered_b[idx_a]
             if name_a != name_b and name_b not in paired_b:
@@ -264,41 +262,66 @@ def _extract_line_renames(
 
 
 # ---------------------------------------------------------------------------
-# AST structural hashing (identifier-independent)
+# AST structural hashing (identifier-independent, with semantic normalization)
 # ---------------------------------------------------------------------------
 
-def _hash_ast_subtree(node: Node) -> int:
-    """
-    Hash a subtree's structure, completely ignoring identifier names.
+# Import semantic node type map from canonicalizer for consistent hashing
+from .canonicalizer import SEMANTIC_NODE_MAP, _semantic_node_type
 
-    This means two functions like:
-        def calculate(x): return x * 2
-        def compute(y):   return y * 2
-    will produce the same hash (after identifier stripping they're identical).
+
+def _hash_ast_subtree(node: Node, use_semantic: bool = False) -> int:
+    """
+    Hash a subtree's structure, optionally using semantic normalization.
+
+    If use_semantic=True, semantically equivalent constructs (for/while loops,
+    list comprehensions/map calls, etc.) produce the same hash, enabling better
+    Type 4 detection at the AST level.
+
+    With use_semantic=False (default), the function ignores identifier names,
+    so two functions with different variable names produce identical hashes
+    (for Type 2 detection).
     """
     if node.type == 'comment':
         return 0
 
+    # Get the effective node type for hashing
+    if use_semantic:
+        hash_type = _semantic_node_type(node) or node.type
+    else:
+        hash_type = node.type
+
     if not node.children:
-        if node.type == 'identifier':
+        if hash_type == 'identifier':
             return 0  # ignore names entirely
-        return stable_hash(node.type)
+        return stable_hash(hash_type)
 
     child_hashes = []
     for child in node.children:
-        ch = _hash_ast_subtree(child)
+        ch = _hash_ast_subtree(child, use_semantic)
         if ch:
             child_hashes.append(ch)
 
     if not child_hashes:
         return 0
 
-    rep = node.type + "(" + ",".join(str(h) for h in child_hashes) + ")"
+    rep = hash_type + "(" + ",".join(str(h) for h in child_hashes) + ")"
     return stable_hash(rep)
 
 
+def _hash_ast_subtree_semantic(node: Node) -> int:
+    """
+    Hash a subtree using semantic normalization (Approach A).
+    
+    Semantically equivalent code constructs produce identical hashes:
+      - for loops and while loops → same hash (LOOP)
+      - list comprehensions and map() calls → same hash (COLLECTION)
+      - f-strings and .format() → same hash (STRING_FORMAT)
+    """
+    return _hash_ast_subtree(node, use_semantic=True)
+
+
 def _extract_functions(root_node: Node, source_bytes: bytes) -> List[Dict]:
-    """Extract top-level function definitions with metadata."""
+    """Extract top-level function definitions with both structural and semantic hashes."""
     functions = []
     for child in root_node.children:
         if child.type in ('function_definition', 'decorated_definition'):
@@ -318,16 +341,19 @@ def _extract_functions(root_node: Node, source_bytes: bytes) -> List[Dict]:
                     break
 
             struct_hash = _hash_ast_subtree(child)
+            semantic_hash = _hash_ast_subtree_semantic(child)
             functions.append({
                 'name': name or '<anonymous>',
                 'start_line': child.start_point[0],
                 'end_line': child.end_point[0],
                 'struct_hash': struct_hash,
+                'semantic_hash': semantic_hash,
                 'node': child,
             })
 
         elif child.type == 'class_definition':
             struct_hash = _hash_ast_subtree(child)
+            semantic_hash = _hash_ast_subtree_semantic(child)
             name = None
             for sub in child.children:
                 if sub.type == 'identifier':
@@ -338,6 +364,7 @@ def _extract_functions(root_node: Node, source_bytes: bytes) -> List[Dict]:
                 'start_line': child.start_point[0],
                 'end_line': child.end_point[0],
                 'struct_hash': struct_hash,
+                'semantic_hash': semantic_hash,
                 'node': child,
             })
 
@@ -543,7 +570,7 @@ def _semantic_line_matches(
                 visited.add(ia)
                 ia += 1
                 ib += 1
-            if length >= 1:
+            if length >= min_match_lines:
                 raw.append((start_a, start_b, length))
 
     # Greedy longest-first selection
@@ -625,11 +652,15 @@ def _semantic_function_matches(
     bytes_b: bytes = None,
 ) -> List[Match]:
     """
-    Apply Type 4 canonicalization and re-match unmatched function regions.
+    Apply Type 4 semantic matching at the function level.
 
-    For each unmatched function in A, try to find a function in B that:
+    Uses AST-level semantic normalization (Approach A): semantically equivalent
+    constructs (for/while loops, comprehensions, f-strings, etc.) produce identical
+    semantic hashes, enabling detection even when the structural hashes differ.
+
+    For each unmatched function in A, tries to find a function in B that:
       1. Didn't match at any earlier level
-      2. Has the same structure AFTER both are canonicalized
+      2. Has the same SEMANTIC hash (different from structural hash)
     """
     if lang_code != 'python':
         return []
@@ -645,22 +676,12 @@ def _semantic_function_matches(
     funcs_a = _extract_functions(tree_a.root_node, bytes_a)
     funcs_b = _extract_functions(tree_b.root_node, bytes_b)
 
-    # Canonicalize all B function bodies and hash them
-    canon_b_hashes: Dict[int, List[int]] = {}
-    canon_b_bodies: Dict[int, str] = {}
+    # Index B functions by semantic hash (not structural hash)
+    # This catches semantically equivalent code that structurally differs
+    sem_b_hashes: Dict[int, List[int]] = {}
     for j, fb in enumerate(funcs_b):
-        func_lines_b = set(range(fb['start_line'], fb['end_line'] + 1))
-        if func_lines_b & used_lines_b:
-            continue
-        body = source_b.split('\n')[fb['start_line']:fb['end_line'] + 1]
-        body_str = '\n'.join(body)
-        # Canonicalize: type4 rules + identifier normalization
-        canon = canonicalize_type4(body_str)
-        canon = normalize_identifiers(canon, lang_code)
-        canon_h = _line_hash(canon.strip())
-        if canon_h:
-            canon_b_hashes.setdefault(canon_h, []).append(j)
-            canon_b_bodies[j] = canon
+        if fb['semantic_hash']:
+            sem_b_hashes.setdefault(fb['semantic_hash'], []).append(j)
 
     used_b_idx: Set[int] = set()
     matches: List[Match] = []
@@ -669,22 +690,23 @@ def _semantic_function_matches(
         func_lines_a = set(range(fa['start_line'], fa['end_line'] + 1))
         if func_lines_a & used_lines_a:
             continue
-
-        body_a = source_a.split('\n')[fa['start_line']:fa['end_line'] + 1]
-        body_str_a = '\n'.join(body_a)
-        canon_a = canonicalize_type4(body_str_a)
-        canon_a = normalize_identifiers(canon_a, lang_code)
-        canon_h_a = _line_hash(canon_a.strip())
-        if not canon_h_a:
+        if not fa['semantic_hash']:
             continue
 
-        candidates = canon_b_hashes.get(canon_h_a, [])
+        # Only match by semantic hash if structural hashes differ
+        # (if structural hashes match, they would have been caught at Level 3)
+        candidates = sem_b_hashes.get(fa['semantic_hash'], [])
         for j in candidates:
             if j in used_b_idx:
                 continue
             fb = funcs_b[j]
             func_lines_b = set(range(fb['start_line'], fb['end_line'] + 1))
             if func_lines_b & used_lines_b:
+                continue
+
+            # Only classify as SEMANTIC if structural hashes differ
+            # If they're the same, it would have been caught at Level 3
+            if fa['struct_hash'] == fb['struct_hash']:
                 continue
 
             matches.append(Match(

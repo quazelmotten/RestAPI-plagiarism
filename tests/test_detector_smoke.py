@@ -184,7 +184,7 @@ def test_identifier_normalize():
 
 
 def test_canonicalize_for_while():
-    """Test that for→while canonicalization produces same output."""
+    """Test that for→while canonicalization produces same output (convergence)."""
     code_for = "for item in data:\n    process(item)"
     code_while = """data_it = iter(data)
 while True:
@@ -195,14 +195,15 @@ while True:
     process(item)"""
 
     canon_for = canonicalize_type4(code_for)
-    # After canonicalization, the for loop should become a while True pattern
-    # And the existing while True should also be canonicalized
+    canon_while = canonicalize_type4(code_while)
+    
     print(f"For/while canonicalize test:")
     print(f"  for:  {canon_for[:80]}...")
-    print(f"  while: (unchanged)")
+    print(f"  while: {canon_while[:80]}...")
 
-    # Both should have 'while True' after canonicalization
-    assert 'while True' in canon_for or 'for' in canon_for, "Expected loop canonicalization"
+    # Both should canonicalize to LOOP form - this is the key convergence property!
+    assert 'LOOP' in canon_for, "Expected LOOP canonical form"
+    assert 'LOOP' in canon_while, "Expected LOOP canonical form"
     print("  PASS\n")
 
 

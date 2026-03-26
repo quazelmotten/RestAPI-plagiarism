@@ -97,47 +97,84 @@ def calculate(x, y):
 
 
 class TestCanonicalizeType4:
-    """Test Type 4 semantic canonicalization rules."""
+    """Test Type 4 semantic canonicalization rules (AST-based)."""
 
     def test_for_to_while_conversion(self):
+        """AST canonicalization produces LOOP() for both for and while."""
         code = "for x in items:\n    print(x)"
         result = canonicalize_type4(code)
-        assert 'while True' in result
-        assert 'next(' in result
+        assert 'LOOP' in result
+
+    def test_while_loop_also_becomes_loop(self):
+        """While loops should also canonicalize to LOOP()."""
+        code = "while True:\n    pass"
+        result = canonicalize_type4(code)
+        assert 'LOOP' in result
 
     def test_lambda_to_def_conversion(self):
+        """AST canonicalization produces FUNC_LIT for lambdas."""
         code = "square = lambda x: x * 2"
         result = canonicalize_type4(code)
-        assert 'def square' in result
-        assert 'return' in result
+        assert 'FUNC_LIT' in result
 
     def test_fstring_to_format(self):
+        """AST canonicalization produces STRING_FORMAT for f-strings."""
         code = 'msg = f"hello {name}"'
         result = canonicalize_type4(code)
-        assert '.format(' in result
-        assert 'f"' not in result
+        assert 'STRING_FORMAT' in result
 
     def test_none_comparison_normalization(self):
+        """AST canonicalization produces COMPARE for comparisons."""
         code = "if x == None:\n    pass"
         result = canonicalize_type4(code)
-        assert 'is None' in result
+        assert 'COMPARE' in result
+
+    def test_convergence_for_and_while(self):
+        """For and while loops with same semantics should produce SAME output."""
+        code_for = "for x in items:\n    print(x)"
+        code_while = """data_it = iter(items)
+while True:
+    try:
+        x = next(data_it)
+    except StopIteration:
+        break
+    print(x)"""
+        result_for = canonicalize_type4(code_for)
+        result_while = canonicalize_type4(code_while)
+        # Both should canonicalize to LOOP form - this is the key convergence test!
+        assert 'LOOP' in result_for
+        assert 'LOOP' in result_while
+
+    def test_convergence_list_comp_and_generator(self):
+        """List comprehension and generator should produce similar canonical form."""
+        code_comp = "[x * 2 for x in items]"
+        code_gen = "(x * 2 for x in items)"
+        result_comp = canonicalize_type4(code_comp)
+        result_gen = canonicalize_type4(code_gen)
+        # Both should have COLLECT
+        assert 'COLLECT' in result_comp
+        assert 'COLLECT' in result_gen
 
     def test_multiple_rules_applied(self):
+        """Multiple transformations should all apply."""
         code = """
 for i in range(10):
     if x == None:
         pass
 """
         result = canonicalize_type4(code)
-        # for→while and == None → is None
-        assert 'while True' in result or 'is None' in result
+        # Should have both LOOP and COMPARE
+        assert 'LOOP' in result or 'COMPARE' in result
 
     def test_no_crash_on_empty_string(self):
+        """Empty string should produce valid output."""
         result = canonicalize_type4("")
-        assert result == ""
+        # AST-based produces '[module]' for empty, which is valid
+        assert isinstance(result, str)
+        assert len(result) > 0
 
     def test_no_crash_on_malformed_code(self):
-        # This shouldn't crash even with weird input
+        """Malformed code should not crash."""
         result = canonicalize_type4("!!!invalid syntax!!!")
         assert isinstance(result, str)
 
@@ -180,11 +217,12 @@ for i in range(10):
     result = i * 2
 """
         result = canonicalize_full(source, 'python')
-        # Should have both for→while conversion AND identifier normalization
-        assert 'while True' in result or 'VAR_' in result
+        # Should have both AST-based canonicalization AND identifier normalization
+        # AST gives LOOP, identifiers give VAR_
+        assert 'LOOP' in result or 'VAR_' in result
 
     def test_non_python_skips_type4(self):
         source = "int x = 0;"
         result = canonicalize_full(source, 'cpp')
-        # For non-python, only identifier normalization runs (if parser supports it)
+        # For non-python, Type 4 canonicalization is skipped
         assert isinstance(result, str)

@@ -4,7 +4,7 @@ Core data structures for plagiarism detection.
 
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Dict, Any, Optional
 
 
 class PlagiarismType(IntEnum):
@@ -23,23 +23,6 @@ PLAGIARISM_TYPE_LABELS = {
     PlagiarismType.REORDERED: "Reordered code",
     PlagiarismType.SEMANTIC: "Semantic equivalent",
 }
-
-
-@dataclass
-class Fingerprint:
-    """A winnowed fingerprint representing a code fragment."""
-    hash: int
-    start: Tuple[int, int]  # (line, col)
-    end: Tuple[int, int]    # (line, col)
-    kgram_idx: int = 0
-
-
-@dataclass
-class Token:
-    """A syntax token from tree-sitter."""
-    type: str
-    start: Tuple[int, int]
-    end: Tuple[int, int]
 
 
 @dataclass
