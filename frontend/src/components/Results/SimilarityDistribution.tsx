@@ -14,6 +14,7 @@ import {
   Tooltip,
   Spinner,
   Button,
+  useColorModeValue,
 } from '@chakra-ui/react';
 import { FiBarChart2 } from 'react-icons/fi';
 import api, { API_ENDPOINTS } from '../../services/api';
@@ -52,6 +53,12 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [highResCounts, setHighResCounts] = useState<number[] | null>(null);
+
+  const textColor = useColorModeValue('gray.700', 'gray.200');
+  const rangeColor = useColorModeValue('gray.600', 'gray.400');
+  const chartBorderColor = useColorModeValue('gray.200', 'gray.600');
+  const scrollbarTrackBg = useColorModeValue('gray.100', 'gray.700');
+  const scrollbarThumbBg = useColorModeValue('gray.400', 'gray.500');
 
   // Cache high-res histogram per task: stores raw counts array for 200 bins
   const highResCacheRef = useRef<Map<string, number[]>>(new Map());
@@ -225,19 +232,19 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
               w="100%"
               overflowX="auto"
               py={4}
-              css={{
-                '&::-webkit-scrollbar': {
-                  height: '8px',
-                },
-                '&::-webkit-scrollbar-track': {
-                  bg: 'gray.100',
-                  borderRadius: '4px',
-                },
-                '&::-webkit-scrollbar-thumb': {
-                  bg: 'gray.400',
-                  borderRadius: '4px',
-                },
-              }}
+               css={{
+                 '&::-webkit-scrollbar': {
+                   height: '8px',
+                 },
+                 '&::-webkit-scrollbar-track': {
+                   bg: scrollbarTrackBg,
+                   borderRadius: '4px',
+                 },
+                 '&::-webkit-scrollbar-thumb': {
+                   bg: scrollbarThumbBg,
+                   borderRadius: '4px',
+                 },
+               }}
             >
               <HStack
                 align="flex-end"
@@ -248,7 +255,7 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
                 mx="auto"
                 px={2}
                 borderBottom="1px solid"
-                borderColor="gray.200"
+                borderColor={chartBorderColor}
               >
                  {displayData.map((bin, index) => {
                    const rawCount = bin.count || 0;
@@ -277,7 +284,7 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
                          minW="20px"
                          cursor="pointer"
                        >
-                         <Text fontSize="xs" fontWeight="bold" color="gray.700" mb={1}>
+                         <Text fontSize="xs" fontWeight="bold" color={textColor} mb={1}>
                            {rawCount > 0 ? rawCount.toLocaleString() : '-'}
                          </Text>
                          <Box
@@ -290,7 +297,7 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
                              transition: 'height 0.2s ease',
                            }}
                          />
-                         <Text fontSize="10px" color="gray.600" mt={1} whiteSpace="nowrap" opacity={showLabel ? 1 : 0}>
+                         <Text fontSize="10px" color={rangeColor} mt={1} whiteSpace="nowrap" opacity={showLabel ? 1 : 0}>
                            {bin.range}
                          </Text>
                        </VStack>
@@ -307,25 +314,25 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
               <Text fontSize="sm" fontWeight="bold" color="green.500">
                 {stats?.low?.toLocaleString() ?? '0'}
               </Text>
-              <Text fontSize="xs" color="gray.600">Low (&lt;25%)</Text>
+              <Text fontSize="xs" color={rangeColor}>Low (&lt;25%)</Text>
             </VStack>
             <VStack align="center" spacing={1}>
               <Text fontSize="sm" fontWeight="bold" color="orange.500">
                 {stats?.medium?.toLocaleString() ?? '0'}
               </Text>
-              <Text fontSize="xs" color="gray.600">Medium (25-49%)</Text>
+              <Text fontSize="xs" color={rangeColor}>Medium (25-49%)</Text>
             </VStack>
             <VStack align="center" spacing={1}>
               <Text fontSize="sm" fontWeight="bold" color="red.500">
                 {stats?.high?.toLocaleString() ?? '0'}
               </Text>
-              <Text fontSize="xs" color="gray.600">High (≥50%)</Text>
+              <Text fontSize="xs" color={rangeColor}>High (≥50%)</Text>
             </VStack>
             <VStack align="center" spacing={1}>
               <Text fontSize="sm" fontWeight="bold" color="blue.500">
                 {totalPairs.toLocaleString()}
               </Text>
-              <Text fontSize="xs" color="gray.600">Total</Text>
+              <Text fontSize="xs" color={rangeColor}>Total</Text>
             </VStack>
           </HStack>
         </VStack>

@@ -10,6 +10,7 @@ import {
   Spinner,
   Alert,
   AlertIcon,
+  useColorModeValue,
 } from '@chakra-ui/react';
 import { FiFolder } from 'react-icons/fi';
 import type { FileInfo, PlagiarismResult } from '../../types';
@@ -35,6 +36,8 @@ const ComparisonHeader: React.FC<ComparisonHeaderProps> = ({
   contentError,
   bgColor,
 }) => {
+  const instructionColor = useColorModeValue('gray.600', 'gray.400');
+
   return (
     <Card mb={4} bg={bgColor}>
       <CardBody>
@@ -69,7 +72,7 @@ const ComparisonHeader: React.FC<ComparisonHeaderProps> = ({
             )}
           </HStack>
 
-          <Text fontSize="sm" color="gray.600" textAlign="center">
+          <Text fontSize="sm" color={instructionColor} textAlign="center">
             Click any highlighted region to jump to the matching region in the other file
           </Text>
 

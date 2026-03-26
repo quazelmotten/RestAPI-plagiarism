@@ -32,6 +32,8 @@ const Sidebar: React.FC = () => {
   const hoverBg = useColorModeValue('gray.100', 'gray.700');
   const [isBlinking, setIsBlinking] = useState(false);
 
+  const logoColor = useColorModeValue('black', 'white');
+
   return (
     <Box
       as="nav"
@@ -45,29 +47,18 @@ const Sidebar: React.FC = () => {
       py={6}
       px={4}
     >
-      <Box mb={8} textAlign="center" cursor="pointer" onClick={() => setIsBlinking(!isBlinking)} title="Click to toggle blink">
+      <Box mb={8} px={4} cursor="pointer" onClick={() => setIsBlinking(!isBlinking)} title="Click to toggle blink">
         <Text
-          fontSize="2.14rem"
+          fontSize="1.6rem"
           fontWeight="bold"
           fontFamily="monospace"
-          letterSpacing="0.1em"
-          display="inline-block"
-          userSelect="none"
-        >
-          <Box as="span" color="black">plagi</Box>
-          <Box as="span" color="green.500">type</Box>
-          <Box as="span" animation={isBlinking ? `${blink} 1s infinite` : undefined}>_</Box>
-        </Text>
-        <Text
-          fontSize="sm"
-          fontFamily="monospace"
-          color="green.400"
           letterSpacing="0.05em"
-          textAlign="center"
-          width="100%"
+          userSelect="none"
           whiteSpace="nowrap"
         >
-          detect software plagiarism
+          <span style={{ color: logoColor }}>plagi</span>
+          <span style={{ color: '#38A169' }}>type</span>
+          <Box as="span" sx={isBlinking ? { animation: `${blink} 1s infinite` } : undefined}>_</Box>
         </Text>
       </Box>
       

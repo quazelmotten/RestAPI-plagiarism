@@ -376,8 +376,8 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
       )}
 
       {col.selected && (
-        <Box p={2} bg={columnBg} borderRadius="md" borderWidth="1px" borderColor="gray.200">
-          <Text fontSize="xs" fontWeight="semibold" color="gray.600">
+        <Box p={2} bg={columnBg} borderRadius="md" borderWidth="1px" borderColor={listBorderColor}>
+          <Text fontSize="xs" fontWeight="semibold" color={useColorModeValue('gray.600', 'gray.400')}>
             Selected:
           </Text>
           <Text fontSize="sm" isTruncated>

@@ -263,7 +263,7 @@ const Results: React.FC = () => {
   }
   
   return (
-    <Box>
+    <Box display="flex" flexDirection="column" flex={1} minH={0} overflowY="auto">
       {tasks.length === 0 ? (
         <Card bg={cardBg}>
           <CardBody>

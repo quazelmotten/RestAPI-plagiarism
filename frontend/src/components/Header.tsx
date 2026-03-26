@@ -10,12 +10,15 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
+  IconButton,
   useColorModeValue,
+  useColorMode,
 } from '@chakra-ui/react';
-import { FiChevronDown, FiLogOut } from 'react-icons/fi';
+import { FiChevronDown, FiLogOut, FiMoon, FiSun } from 'react-icons/fi';
 
 const Header: React.FC = () => {
   const { user, logout } = useAuth();
+  const { colorMode, toggleColorMode } = useColorMode();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
@@ -38,23 +41,32 @@ const Header: React.FC = () => {
           Teacher Dashboard
         </Text>
 
-        <Menu>
-          <MenuButton
-            as={Button}
+        <Flex align="center" gap={2}>
+          <IconButton
+            aria-label="Toggle dark mode"
+            icon={colorMode === 'light' ? <FiMoon /> : <FiSun />}
+            onClick={toggleColorMode}
             variant="ghost"
-            rightIcon={<FiChevronDown />}
-          >
-            <Flex align="center">
-              <Avatar size="sm" name={user?.username || 'User'} mr={2} />
-              <Text>{user?.username || 'User'}</Text>
-            </Flex>
-          </MenuButton>
-          <MenuList>
-            <MenuItem icon={<FiLogOut />} onClick={logout}>
-              Logout
-            </MenuItem>
-          </MenuList>
-        </Menu>
+            size="md"
+          />
+          <Menu>
+            <MenuButton
+              as={Button}
+              variant="ghost"
+              rightIcon={<FiChevronDown />}
+            >
+              <Flex align="center">
+                <Avatar size="sm" name={user?.username || 'User'} mr={2} />
+                <Text>{user?.username || 'User'}</Text>
+              </Flex>
+            </MenuButton>
+            <MenuList>
+              <MenuItem icon={<FiLogOut />} onClick={logout}>
+                Logout
+              </MenuItem>
+            </MenuList>
+          </Menu>
+        </Flex>
       </Flex>
     </Box>
   );

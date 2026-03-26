@@ -163,9 +163,9 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
   }
 
   return (
-    <Box overflowX="auto" w="100%">
+    <Box overflowX="auto" overflowY="auto" w="100%" h="100%">
       <Table variant="simple" size="sm" layout="fixed" w="100%">
-        <Thead position="sticky" top={0} bg="white" _dark={{ bg: 'gray.800' }}>
+        <Thead position="sticky" top={0} zIndex={1} bg="gray.50" _dark={{ bg: 'gray.700' }}>
           {table.getHeaderGroups().map(headerGroup => (
             <Tr key={headerGroup.id}>
               {headerGroup.headers.map(header => (
@@ -178,7 +178,7 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
                   }}
                   cursor={header.column.getCanSort() ? 'pointer' : undefined}
                   userSelect="none"
-                  _hover={header.column.getCanSort() ? { bg: 'gray.100', _dark: { bg: 'gray.700' } } : undefined}
+                  _hover={header.column.getCanSort() ? { bg: 'gray.100', _dark: { bg: 'gray.600' } } : undefined}
                 >
                   <HStack spacing={1} justify="space-between">
                     <Text as="span">{flexRender(header.column.columnDef.header, header.getContext())}</Text>
@@ -189,7 +189,7 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
             </Tr>
           ))}
         </Thead>
-        <Tbody>
+        <Tbody _dark={{ bg: 'gray.800' }}>
           {table.getRowModel().rows.map(row => (
             <Tr key={row.original.id}>
               {row.getVisibleCells().map(cell => (

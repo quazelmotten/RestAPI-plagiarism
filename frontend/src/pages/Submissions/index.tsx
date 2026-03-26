@@ -7,7 +7,6 @@ import {
   Alert,
   AlertIcon,
   Button,
-  VStack,
 } from '@chakra-ui/react';
 import { useSubmissions } from './hooks/useSubmissions';
 import { useSubmissionsMetadata } from './hooks/useSubmissionsMetadata';
@@ -89,8 +88,8 @@ const SubmissionsContent: React.FC = () => {
   }
 
   return (
-    <Card flex="1" display="flex" flexDirection="column" w="100%">
-      <CardBody flex="1" display="flex" flexDirection="column" p={0} minH="0">
+    <Card flex="1" display="flex" flexDirection="column" minH="0" overflow="hidden" w="100%">
+      <CardBody flex="1" display="flex" flexDirection="column" p={0} minH="0" overflow="hidden">
         {/* Filters */}
         <SubmissionsFilters
           filters={filters}
@@ -124,9 +123,9 @@ const SubmissionsContent: React.FC = () => {
 
 const SubmissionsPage: React.FC = () => {
   return (
-    <VStack spacing={4} align="stretch" flex="1" p={4}>
+    <Box display="flex" flexDirection="column" flex={1} minH={0} overflow="hidden">
       <SubmissionsContent />
-    </VStack>
+    </Box>
   );
 };
 

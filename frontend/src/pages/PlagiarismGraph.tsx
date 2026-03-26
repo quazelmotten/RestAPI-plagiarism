@@ -241,8 +241,6 @@ const PlagiarismGraph: React.FC = () => {
 
   return (
     <Box>
-      <Heading mb={6}>Plagiarism Network</Heading>
-
       {tasks.length === 0 ? (
         <Card>
           <CardBody>

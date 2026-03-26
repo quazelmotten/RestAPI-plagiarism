@@ -157,10 +157,9 @@ const Overview: React.FC = () => {
   }
   
   return (
-    <Box>
-      <Heading mb={6}>Dashboard Overview</Heading>
+    <Box display="flex" flexDirection="column" flex={1} minH={0} overflow="hidden">
       
-      <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8}>
+      <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8} flexShrink={0}>
         <Card bg={cardBg}>
           <CardBody>
             <Stat>
@@ -224,10 +223,10 @@ const Overview: React.FC = () => {
         </Card>
       </SimpleGrid>
 
-      <Card bg={cardBg} borderColor={borderColor}>
-        <CardBody>
-          <Heading size="md" mb={4}>Recent Activity</Heading>
-          <Text fontSize="sm" color="gray.500" mb={4}>
+      <Card bg={cardBg} borderColor={borderColor} flex={1} minH={0} display="flex" flexDirection="column" overflow="hidden">
+        <CardBody display="flex" flexDirection="column" minH={0} overflow="hidden">
+          <Heading size="md" mb={4} flexShrink={0}>Recent Activity</Heading>
+          <Text fontSize="sm" color="gray.500" mb={4} flexShrink={0}>
             Showing activity from the last 7 days (max 25 entries)
           </Text>
           
@@ -236,7 +235,8 @@ const Overview: React.FC = () => {
               No recent activity. Upload files to get started!
             </Text>
           ) : (
-            <VStack align="stretch" spacing={3}>
+            <Box flex={1} minH={0} overflowY="auto">
+              <VStack align="stretch" spacing={3}>
               {recentActivity.map((item, index) => (
                 <React.Fragment key={item.id}>
                   <Box
@@ -272,6 +272,7 @@ const Overview: React.FC = () => {
                 </React.Fragment>
               ))}
             </VStack>
+            </Box>
           )}
         </CardBody>
       </Card>

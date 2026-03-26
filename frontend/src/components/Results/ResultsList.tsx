@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Card, CardBody, HStack, Text, Badge, VStack, Box } from '@chakra-ui/react';
+import { Card, CardBody, HStack, Text, Badge, VStack, Box, useColorModeValue } from '@chakra-ui/react';
 import type { PlagiarismResult } from '../../types';
 
 interface ResultsListProps {
@@ -23,6 +23,8 @@ const ResultsList: React.FC<ResultsListProps> = ({
   handleCompare,
   cardBg,
 }) => {
+  const listNoticeBg = useColorModeValue('gray.50', 'gray.700');
+  const listNoticeColor = useColorModeValue('gray.600', 'gray.400');
   // Cap at 50 results for Top Similarities view
   const displayResults = useMemo(() => results.slice(0, 50), [results]);
   const showingCount = displayResults.length;
@@ -90,8 +92,8 @@ const ResultsList: React.FC<ResultsListProps> = ({
         </VStack>
 
         {totalPairs > 50 && (
-          <Box textAlign="center" mt={4} py={2} px={4} bg="gray.50" borderRadius="md">
-            <Text fontSize="sm" color="gray.600">
+          <Box textAlign="center" mt={4} py={2} px={4} bg={listNoticeBg} borderRadius="md">
+            <Text fontSize="sm" color={listNoticeColor}>
               Full list contains {totalPairs} pairs. Explore histogram for distribution analysis.
             </Text>
           </Box>

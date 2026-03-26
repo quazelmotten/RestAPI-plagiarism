@@ -16,11 +16,11 @@ import PairComparison from './PairComparison';
 
 const Dashboard: React.FC = () => {
   return (
-    <Flex minH="100vh" bg={useColorModeValue('gray.100', 'gray.900')}>
+    <Flex h="100vh" bg={useColorModeValue('gray.100', 'gray.900')}>
       <Sidebar />
-      <Box flex="1" ml="250px" display="flex" flexDirection="column">
+      <Box flex="1" ml="250px" display="flex" flexDirection="column" overflow="hidden">
         <Header />
-        <Box as="main" p={8} pt={24} flex="1" overflow="hidden" minH="0">
+        <Box as="main" p={8} pt={24} flex="1" overflow="hidden" minH="0" display="flex" flexDirection="column">
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="submissions" element={<Submissions />} />
