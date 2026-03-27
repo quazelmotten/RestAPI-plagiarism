@@ -9,8 +9,10 @@ export interface FileSubmission {
 }
 
 export interface SubmissionsResponse {
-  files: FileSubmission[];
+  items: FileSubmission[];
   total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface Filters {

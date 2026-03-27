@@ -4,12 +4,15 @@ All settings loaded from environment variables with validation.
 """
 
 import os
+import logging
 import secrets
 from functools import lru_cache
 from typing import List, Optional
 
 from pydantic import Field, field_validator, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -20,6 +23,11 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+    # =============================================================================
+    # APPLICATION
+    # =============================================================================
+    app_version: str = Field(default="1.0.0", validation_alias="APP_VERSION")
     
     # =============================================================================
     # DATABASE CONFIGURATION
@@ -204,14 +212,14 @@ def get_settings() -> Settings:
     try:
         return Settings()
     except ValidationError as e:
-        print("❌ Configuration Error:")
-        print("=" * 60)
+        logger.error("Configuration Error:")
+        logger.error("=" * 60)
         for error in e.errors():
             field = " -> ".join(str(x) for x in error['loc'])
-            print(f"  • {field}: {error['msg']}")
-        print("=" * 60)
-        print("\nPlease check your .env file and ensure all required variables are set.")
-        print("Copy .env.example to .env and fill in your values.")
+            logger.error("  • %s: %s", field, error['msg'])
+        logger.error("=" * 60)
+        logger.error("Please check your .env file and ensure all required variables are set.")
+        logger.error("Copy .env.example to .env and fill in your values.")
         raise SystemExit(1)
 
 

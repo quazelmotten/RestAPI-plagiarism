@@ -18,27 +18,30 @@ class PlagiarismTask(Base):
     processed_pairs = Column(Integer, nullable=True)  # Pairs completed so far
     progress = Column(Float, nullable=True)  # Progress percentage (0.0 - 1.0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class File(Base):
     __tablename__ = "files"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    task_id = Column(UUID(as_uuid=True), ForeignKey("plagiarism_tasks.id"), nullable=False)
+    task_id = Column(UUID(as_uuid=True), ForeignKey("plagiarism_tasks.id"), nullable=False, index=True)
     filename = Column(String, nullable=False)
     file_path = Column(String, nullable=False)
     file_hash = Column(String, nullable=False)
     language = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class SimilarityResult(Base):
     __tablename__ = "similarity_results"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    task_id = Column(UUID(as_uuid=True), ForeignKey("plagiarism_tasks.id"), nullable=False)
-    file_a_id = Column(UUID(as_uuid=True), ForeignKey("files.id"), nullable=False)
-    file_b_id = Column(UUID(as_uuid=True), ForeignKey("files.id"), nullable=False)
+    task_id = Column(UUID(as_uuid=True), ForeignKey("plagiarism_tasks.id"), nullable=False, index=True)
+    file_a_id = Column(UUID(as_uuid=True), ForeignKey("files.id"), nullable=False, index=True)
+    file_b_id = Column(UUID(as_uuid=True), ForeignKey("files.id"), nullable=False, index=True)
     ast_similarity = Column(Float, nullable=True)
     matches = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

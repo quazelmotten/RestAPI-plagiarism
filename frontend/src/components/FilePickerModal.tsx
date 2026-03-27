@@ -154,13 +154,13 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
     setError('');
 
     try {
-      const response = await api.get<{ files: FileInfo[] }>(API_ENDPOINTS.FILES, {
+      const response = await api.get<{ items: FileInfo[] }>(API_ENDPOINTS.FILES, {
         params: {
           filename: query,
           limit: 100,
         },
       });
-      const files = response.data.files || [];
+      const files = response.data.items || [];
       setResults(files);
     } catch (err: unknown) {
       const apiError = err as ApiError;
@@ -196,28 +196,28 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
    useEffect(() => {
      if (isOpen && initialFileAId && !selectedFileA) {
        // Could pre-fetch file details for display
-       api.get<FileInfo[]>(API_ENDPOINTS.FILES_LIST).then(res => {
-         const fileA = res.data.find((f) => f.id === initialFileAId);
-         if (fileA) setSelectedFileA(fileA);
-       });
-     }
-     if (isOpen && initialFileBId && !selectedFileB) {
-       api.get<FileInfo[]>(API_ENDPOINTS.FILES_LIST).then(res => {
-         const fileB = res.data.find((f) => f.id === initialFileBId);
-         if (fileB) setSelectedFileB(fileB);
-       });
-     }
-   }, [isOpen, initialFileAId, initialFileBId, selectedFileA, selectedFileB]);
+        api.get<{ items: FileInfo[] }>(API_ENDPOINTS.FILES_LIST).then(res => {
+          const fileA = res.data.items.find((f) => f.id === initialFileAId);
+          if (fileA) setSelectedFileA(fileA);
+        });
+      }
+      if (isOpen && initialFileBId && !selectedFileB) {
+        api.get<{ items: FileInfo[] }>(API_ENDPOINTS.FILES_LIST).then(res => {
+          const fileB = res.data.items.find((f) => f.id === initialFileBId);
+          if (fileB) setSelectedFileB(fileB);
+        });
+      }
+    }, [isOpen, initialFileAId, initialFileBId, selectedFileA, selectedFileB]);
 
-   // Fetch similarities for selected File A to compare against
-   useEffect(() => {
-     if (selectedFileA) {
-       api.get<Array<{ id: string; similarity: number }>>(API_ENDPOINTS.FILE_SIMILARITIES(selectedFileA.id))
-         .then(res => {
-           const map: Record<string, number> = {};
-           res.data.forEach((item) => {
-             map[item.id] = item.similarity;
-           });
+    // Fetch similarities for selected File A to compare against
+    useEffect(() => {
+      if (selectedFileA) {
+        api.get<{ items: Array<{ id: string; similarity: number }> }>(API_ENDPOINTS.FILE_SIMILARITIES(selectedFileA.id))
+          .then(res => {
+            const map: Record<string, number> = {};
+            res.data.items.forEach((item) => {
+              map[item.id] = item.similarity;
+            });
            setSimilaritiesMap(map);
          })
          .catch(err => {

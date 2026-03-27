@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, union_all
 
 from models.models import PlagiarismTask, File as FileModel, SimilarityResult
-from schemas.file import FileResponse, FileContentResponse
+from schemas.file import FileResponse, FileContentResponse, FileInfoListItem
+from schemas.common import PaginatedResponse
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class FileService:
                 id=str(row.id),
                 filename=row.filename,
                 language=row.language,
-                created_at=str(row.created_at) if row.created_at else None,
+                created_at=row.created_at.isoformat() if row.created_at else None,
                 task_id=str(row.task_id),
                 status=row.status,
                 similarity=max_similarities.get(row.id),
@@ -71,8 +72,8 @@ class FileService:
 
     async def get_files(
         self,
-        limit: int | None = None, #TODO: 21.03 переписать так всё
-        offset: Optional[int] = None,
+        limit: int = 50,
+        offset: int = 0,
         filename: Optional[str] = None,
         language: Optional[str] = None,
         status: Optional[str] = None,
@@ -81,7 +82,7 @@ class FileService:
         similarity_max: Optional[float] = None,
         submitted_after: Optional[str] = None,
         submitted_before: Optional[str] = None,
-    ) -> dict:
+    ) -> PaginatedResponse:
         """Get paginated list of files with total count and optional filters."""
         # Build subquery for max similarity per file
         sim_a = select(
@@ -166,11 +167,7 @@ class FileService:
         total = total_result.scalar() or 0
 
         # Main query with filters, ordering, pagination
-        query = apply_filters(base).order_by(FileModel.created_at.desc())
-        if limit is not None:
-            query = query.limit(limit)
-        if offset is not None:
-            query = query.offset(offset)
+        query = apply_filters(base).order_by(FileModel.created_at.desc()).limit(limit).offset(offset)
 
         result = await self.db.execute(query)
         rows = result.all()
@@ -188,9 +185,9 @@ class FileService:
             for row in rows
         ]
 
-        return {"files": files_list, "total": total}
+        return PaginatedResponse(items=files_list, total=total, limit=limit, offset=offset)
 
-    async def get_all_file_info(self) -> List[dict]:
+    async def get_all_file_info(self) -> PaginatedResponse:
         """Get minimal file info for dropdowns (id, filename, language, task_id)."""
         result = await self.db.execute(
             select(
@@ -201,15 +198,16 @@ class FileService:
             ).join(PlagiarismTask, FileModel.task_id == PlagiarismTask.id).order_by(FileModel.filename)
         )
         rows = result.all()
-        return [
-            {
-                "id": str(row.id),
-                "filename": str(row.filename),
-                "language": str(row.language),
-                "task_id": str(row.task_id),
-            }
+        items = [
+            FileInfoListItem(
+                id=str(row.id),
+                filename=str(row.filename),
+                language=str(row.language),
+                task_id=str(row.task_id),
+            )
             for row in rows
         ]
+        return PaginatedResponse(items=items, total=len(items), limit=len(items), offset=0)
 
     async def get_file_content(self, file_id: str, s3_storage) -> Optional[FileContentResponse]:
         file_result = await self.db.get(FileModel, file_id)
@@ -230,3 +228,70 @@ class FileService:
             language=str(file_result.language),
             file_path=str(file_result.file_path)
         )
+
+    async def get_file_similarities(self, file_id: str) -> PaginatedResponse:
+        """Get all similarity results involving a file, with details of the other file."""
+        from schemas.result import FileSimilarityItem
+
+        stmt = select(
+            SimilarityResult.file_a_id,
+            SimilarityResult.file_b_id,
+            SimilarityResult.ast_similarity,
+            SimilarityResult.task_id,
+        ).where(
+            (SimilarityResult.file_a_id == file_id)
+            | (SimilarityResult.file_b_id == file_id)
+        )
+        results = await self.db.execute(stmt)
+        rows = results.all()
+        if not rows:
+            return PaginatedResponse(items=[], total=0, limit=0, offset=0)
+
+        other_file_data = []
+        for row in rows:
+            if str(row.file_a_id) == file_id:
+                other_id = str(row.file_b_id)
+            else:
+                other_id = str(row.file_a_id)
+            other_file_data.append((other_id, row.ast_similarity, str(row.task_id)))
+
+        other_ids = list({fid for fid, _, _ in other_file_data})
+        if not other_ids:
+            return PaginatedResponse(items=[], total=0, limit=0, offset=0)
+
+        file_stmt = (
+            select(
+                FileModel.id,
+                FileModel.filename,
+                FileModel.language,
+                FileModel.task_id,
+                PlagiarismTask.status,
+            )
+            .join(PlagiarismTask, FileModel.task_id == PlagiarismTask.id)
+            .where(FileModel.id.in_(other_ids))
+        )
+        file_results = await self.db.execute(file_stmt)
+        files_map = {}
+        for row in file_results.all():
+            files_map[str(row.id)] = {
+                "filename": row.filename,
+                "language": row.language,
+                "task_id": str(row.task_id),
+                "status": row.status,
+            }
+
+        items = []
+        for fid, sim, task_id in other_file_data:
+            file_info = files_map.get(fid)
+            if file_info:
+                items.append({
+                    "id": fid,
+                    "filename": file_info["filename"],
+                    "language": file_info["language"],
+                    "task_id": file_info["task_id"],
+                    "status": file_info["status"],
+                    "similarity": sim,
+                })
+
+        items.sort(key=lambda x: x["similarity"], reverse=True)
+        return PaginatedResponse(items=items, total=len(items), limit=len(items), offset=0)

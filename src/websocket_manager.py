@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 class ConnectionManager:
     """Manages WebSocket connections and Redis Pub/Sub for task progress."""
 
+    MAX_TOTAL_CONNECTIONS = 100
+    MAX_CONNECTIONS_PER_TASK = 10
+
     def __init__(self):
         self._connections: Dict[str, Set[WebSocket]] = {}
         self._redis: Optional[aioredis.Redis] = None
@@ -92,6 +95,18 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, task_id: str):
         """Accept a WebSocket connection and register it for a task."""
+        total = sum(len(s) for s in self._connections.values())
+        if total >= self.MAX_TOTAL_CONNECTIONS:
+            await websocket.close(code=1013, reason="Too many connections")
+            logger.warning("WebSocket rejected — global limit reached (%d)", total)
+            return
+
+        task_conns = self._connections.get(task_id, set())
+        if len(task_conns) >= self.MAX_CONNECTIONS_PER_TASK:
+            await websocket.close(code=1013, reason="Too many connections for this task")
+            logger.warning("WebSocket rejected — per-task limit reached for %s", task_id)
+            return
+
         await websocket.accept()
         self._connections.setdefault(task_id, set()).add(websocket)
         logger.info(

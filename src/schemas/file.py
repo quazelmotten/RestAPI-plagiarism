@@ -33,3 +33,11 @@ class FileUploadInfo(BaseModel):
 class FilesListResponse(BaseModel):
     files: List[FileResponse]
     total: int
+
+
+class FileInfoListItem(BaseModel):
+    """Minimal file info for dropdowns/lists."""
+    id: str
+    filename: str
+    language: str
+    task_id: str

@@ -1,5 +1,7 @@
 from pydantic import BaseModel
-from typing import Optional, Any, List, Dict
+from typing import Optional, Any, List
+
+from schemas.task import TaskProgress
 
 
 class FileInfo(BaseModel):
@@ -7,41 +9,18 @@ class FileInfo(BaseModel):
     filename: str
 
 
-class ResultFileInfo(BaseModel):
-    id: str
-    filename: str
-
-
 class ResultItem(BaseModel):
-    file_a: ResultFileInfo
-    file_b: ResultFileInfo
+    file_a: FileInfo
+    file_b: FileInfo
     ast_similarity: Optional[float] = None
     matches: Optional[Any] = None
     created_at: Optional[str] = None
-
-
-class ResultResponse(BaseModel):
-    id: str
-    file_a: ResultFileInfo
-    file_b: ResultFileInfo
-    ast_similarity: Optional[float] = None
-    matches: Optional[Any] = None
-    created_at: Optional[str] = None
-    task_id: str
-    task_progress: dict
-
-
-class TaskProgress(BaseModel):
-    completed: int
-    total: int
-    percentage: float
-    display: str
 
 
 class ResultsListResponse(BaseModel):
     id: str
-    file_a: ResultFileInfo
-    file_b: ResultFileInfo
+    file_a: FileInfo
+    file_b: FileInfo
     ast_similarity: Optional[float] = None
     matches: Optional[Any] = None
     created_at: Optional[str] = None
@@ -58,3 +37,25 @@ class TaskResultsResponse(BaseModel):
     files: List[FileInfo]
     results: List[ResultItem]
     overall_stats: Optional[dict] = None  # Contains avg_similarity, high, medium, low counts
+
+
+class FileSimilarityItem(BaseModel):
+    """Similarity result involving a specific file."""
+    id: str
+    filename: str
+    language: str
+    task_id: str
+    status: str
+    similarity: float
+
+
+class HistogramBin(BaseModel):
+    """A single histogram bucket."""
+    range: str
+    count: int
+
+
+class HistogramResponse(BaseModel):
+    """Histogram distribution for a task's similarity results."""
+    histogram: List[HistogramBin]
+    total: int

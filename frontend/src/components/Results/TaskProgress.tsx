@@ -245,7 +245,7 @@ const TaskProgress: React.FC<TaskProgressProps> = ({ taskId, status: initialStat
               const poll = async () => {
                 try {
                   const response = await api.get(API_ENDPOINTS.TASKS);
-                  const task = response.data.find((t: any) => t.task_id === taskId);
+                  const task = response.data.items.find((t: any) => t.task_id === taskId);
                   if (task) {
                     setTarget({
                       completed: task.progress?.completed ?? 0,
@@ -282,7 +282,7 @@ const TaskProgress: React.FC<TaskProgressProps> = ({ taskId, status: initialStat
       const poll = async () => {
         try {
           const response = await api.get(API_ENDPOINTS.TASKS);
-          const task = response.data.find((t: any) => t.task_id === taskId);
+          const task = response.data.items.find((t: any) => t.task_id === taskId);
           if (task && ACTIVE_STATUSES.includes(task.status)) {
             setTarget({
               completed: task.progress?.completed ?? 0,

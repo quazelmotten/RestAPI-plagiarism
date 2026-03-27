@@ -1,3 +1,5 @@
+import logging
+import uuid
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -11,6 +13,8 @@ from rabbit import connect, disconnect
 from redis_client import connect_redis, disconnect_redis, get_redis_client
 from config import settings
 from websocket_manager import get_connection_manager
+
+logger = logging.getLogger(__name__)
 
 
 # Override Starlette's default 1000-file limit for multipart uploads
@@ -26,6 +30,9 @@ subpath_for_routes = subpath.strip("/") if subpath else ""
 
 app = FastAPI(
     title="Plagiarism Detection API",
+    description="API for checking code plagiarism across multiple files using AST analysis and fingerprinting.",
+    version=settings.app_version,
+    contact={"name": "API Support"},
     request_class=CustomRequest,
 )
 
@@ -38,6 +45,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Attach a unique X-Request-ID to every request and response."""
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 # Include API routers with subpath prefix
 app.include_router(router_plagiarism, prefix=f"/{subpath_for_routes}")
 
@@ -45,9 +62,9 @@ add_exception_handler(app)
 
 # Mount static files from React build
 static_path = Path(__file__).parent / "frontend" / "dist"
-print(f"Static path: {static_path}")
-print(f"Static path exists: {static_path.exists()}")
-print(f"Subpath: {subpath}")
+logger.info("Static path: %s", static_path)
+logger.info("Static path exists: %s", static_path.exists())
+logger.info("Subpath: %s", subpath)
 
 # Mount the assets directory to serve static files (JS, CSS)
 if static_path.exists():
@@ -100,14 +117,58 @@ async def on_shutdown():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint"""
-    return {"status": "healthy"}
+    """Health check endpoint — verifies all dependency connectivity."""
+    from database import engine
+
+    checks = {}
+    overall_healthy = True
+
+    # Database
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
+        checks["db"] = "ok"
+    except Exception:
+        checks["db"] = "error"
+        overall_healthy = False
+
+    # Redis
+    try:
+        redis = get_redis_client()
+        if redis:
+            await redis.ping()
+            checks["redis"] = "ok"
+        else:
+            checks["redis"] = "not_connected"
+            overall_healthy = False
+    except Exception:
+        checks["redis"] = "error"
+        overall_healthy = False
+
+    # RabbitMQ
+    try:
+        from rabbit import _connection
+        if _connection and _connection.is_open:
+            checks["rmq"] = "ok"
+        else:
+            checks["rmq"] = "not_connected"
+            overall_healthy = False
+    except Exception:
+        checks["rmq"] = "error"
+        overall_healthy = False
+
+    status_code = 200 if overall_healthy else 503
+    from starlette.responses import JSONResponse
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": "healthy" if overall_healthy else "degraded", "checks": checks},
+    )
 
 
 @app.get("/version")
 async def version():
     """API version endpoint"""
-    return {"version": "1.0.0", "service": "plagiarism-api"}
+    return {"version": settings.app_version, "service": "plagiarism-api"}
 
 
 @app.get("/")
@@ -121,14 +182,14 @@ async def root(request: Request):
 if subpath_for_routes:
     @app.get(f"/{subpath_for_routes}/health")
     async def health_subpath():
-        """Health check endpoint"""
-        return {"status": "healthy"}
+        """Health check endpoint — delegates to /health."""
+        return await health()
 
 
     @app.get(f"/{subpath_for_routes}/version")
     async def version_subpath():
         """API version endpoint"""
-        return {"version": "1.0.0", "service": "plagiarism-api"}
+        return {"version": settings.app_version, "service": "plagiarism-api"}
 
 
     @app.get(f"/{subpath_for_routes}/")

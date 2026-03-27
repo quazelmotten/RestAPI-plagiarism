@@ -41,14 +41,14 @@ const PlagiarismGraph: React.FC = () => {
   const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api.get<TaskListItem[]>(API_ENDPOINTS.TASKS);
-      if (!Array.isArray(response.data)) {
-        console.error('Expected array from /plagiarism/tasks, got:', typeof response.data, response.data);
+      const response = await api.get<{ items: TaskListItem[] }>(API_ENDPOINTS.TASKS);
+      if (!Array.isArray(response.data.items)) {
+        console.error('Expected array from /plagiarism/tasks, got:', typeof response.data.items, response.data);
         setError('Invalid data format received from server');
         setTasks([]);
         return;
       }
-      const taskList = response.data;
+      const taskList = response.data.items;
       setTasks(taskList);
       // Select the first completed task with results by default (only once)
       if (!hasSetInitialTask) {

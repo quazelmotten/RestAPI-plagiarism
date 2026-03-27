@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import BinaryIO, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class S3Storage:
@@ -28,7 +28,7 @@ class S3Storage:
     
     def _generate_key(self, filename: str) -> str:
         """Generate a unique S3 key for the file."""
-        timestamp = datetime.utcnow().strftime("%Y/%m/%d")
+        timestamp = datetime.now(timezone.utc).strftime("%Y/%m/%d")
         unique_id = str(uuid.uuid4())[:8]
         safe_filename = "".join(c for c in filename if c.isalnum() or c in "._-")
         return f"{timestamp}/{unique_id}_{safe_filename}"

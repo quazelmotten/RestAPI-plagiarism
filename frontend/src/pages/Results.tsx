@@ -99,8 +99,8 @@ const Results: React.FC = () => {
    const loadTasks = useCallback(async () => {
       try {
         setLoading(true);
-        const response = await api.get<TaskListItem[]>(API_ENDPOINTS.TASKS);
-        const taskList = response.data;
+        const response = await api.get<{ items: TaskListItem[] }>(API_ENDPOINTS.TASKS);
+        const taskList = response.data.items;
 
         if (!Array.isArray(taskList)) {
           console.error('Expected array from /plagiarism/tasks, got:', typeof taskList, taskList);

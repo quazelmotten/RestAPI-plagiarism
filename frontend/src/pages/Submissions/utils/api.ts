@@ -2,9 +2,17 @@ import type { SubmissionsResponse } from '../types';
 import api, { API_ENDPOINTS } from '../../../services/api';
 
 interface FileMetadata {
-  task_id: string;
+  id: string;
   filename: string;
   language: string;
+  task_id: string;
+}
+
+interface PaginatedFileMetadata {
+  items: FileMetadata[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export async function fetchSubmissions(
@@ -58,10 +66,10 @@ export async function fetchSubmissions(
 
 export async function fetchSubmissionsMetadata(): Promise<{ taskIds: string[]; languages: string[] }> {
   try {
-    const response = await api.get<FileMetadata[]>(API_ENDPOINTS.FILES_LIST);
-    const data = response.data;
-    const taskIds = [...new Set(data.map((item) => item.task_id))].sort();
-    const languages = [...new Set(data.map((item) => item.language))].sort();
+    const response = await api.get<PaginatedFileMetadata>(API_ENDPOINTS.FILES_LIST);
+    const items = response.data.items;
+    const taskIds = [...new Set(items.map((item) => item.task_id))].sort();
+    const languages = [...new Set(items.map((item) => item.language))].sort();
     return { taskIds, languages };
   } catch (err) {
     console.error('Failed to fetch metadata:', err);

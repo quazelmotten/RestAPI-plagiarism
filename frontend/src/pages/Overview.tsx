@@ -102,15 +102,14 @@ const Overview: React.FC = () => {
      try {
        setLoading(true);
        const response = await api.get(API_ENDPOINTS.TASKS);
-       
-       if (!Array.isArray(response.data)) {
-         console.error('Expected array from /plagiarism/tasks, got:', typeof response.data);
-         setTasks([]);
-         return;
-       }
-       
-       // Backend now includes files_count and high_similarity_count in TaskListResponse
-       setTasks(response.data);
+        
+        if (!Array.isArray(response.data.items)) {
+          console.error('Expected array from /plagiarism/tasks, got:', typeof response.data.items);
+          setTasks([]);
+          return;
+        }
+        
+        setTasks(response.data.items);
      } catch (err) {
        console.error('Failed to fetch tasks:', err);
      } finally {

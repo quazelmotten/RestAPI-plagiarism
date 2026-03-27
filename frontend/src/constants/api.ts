@@ -7,8 +7,8 @@ export const API_ENDPOINTS = {
   // Plagiarism checks
   CHECK: '/plagiarism/check',
   TASKS: '/plagiarism/tasks',
-  TASK_DETAILS: (taskId: string) => `/plagiarism/${taskId}/results`,
-  TASK_HISTOGRAM: (taskId: string, bins: number) => `/plagiarism/${taskId}/histogram?bins=${bins}`,
+  TASK_DETAILS: (taskId: string) => `/plagiarism/tasks/${taskId}/results`,
+  TASK_HISTOGRAM: (taskId: string, bins: number) => `/plagiarism/tasks/${taskId}/histogram?bins=${bins}`,
   FILE_PAIR: '/plagiarism/file-pair',
   FILE_PAIR_ANALYZE: '/plagiarism/file-pair/analyze',
   FILES_LIST: '/plagiarism/files/list',

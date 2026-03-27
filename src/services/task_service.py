@@ -6,6 +6,7 @@ from sqlalchemy import select, func
 from models.models import PlagiarismTask, File as FileModel, SimilarityResult
 from schemas.task import TaskCreateResponse, TaskResponse, TaskListResponse, TaskProgress
 from schemas.file import FileUploadInfo
+from schemas.common import PaginatedResponse
 
 
 BUCKET_NAME = "plagiarism-files"
@@ -94,7 +95,7 @@ class TaskService:
             similarity=task.similarity,
             matches=task.matches,
             error=task.error,
-            created_at=str(task.created_at) if task.created_at else None,
+            created_at=task.created_at.isoformat() if task.created_at else None,
             progress=TaskProgress(
                 completed=task.processed_pairs or 0,
                 total=task.total_pairs or 0,
@@ -103,22 +104,21 @@ class TaskService:
             ) if task else None
         )
 
-    async def get_all_tasks(self, limit: Optional[int] = None, offset: Optional[int] = None) -> List[TaskListResponse]:
-        """Get all plagiarism tasks with optional pagination and aggregated stats."""
+    async def get_all_tasks(self, limit: int = 50, offset: int = 0) -> PaginatedResponse:
+        """Get all plagiarism tasks with pagination and aggregated stats."""
+        # Get total count
+        count_result = await self.db.execute(select(func.count()).select_from(PlagiarismTask))
+        total = count_result.scalar_one()
+
         # Base query with ordering and pagination
-        query = select(PlagiarismTask).order_by(PlagiarismTask.id.desc())
-        
-        if limit is not None:
-            query = query.limit(limit)
-        if offset is not None:
-            query = query.offset(offset)
-            
+        query = select(PlagiarismTask).order_by(PlagiarismTask.id.desc()).limit(limit).offset(offset)
+
         result = await self.db.execute(query)
         tasks = result.scalars().all()
 
         # If no tasks, return early
         if not tasks:
-            return []
+            return PaginatedResponse(items=[], total=total, limit=limit, offset=offset)
 
         # Collect task IDs for aggregate queries
         task_ids = [task.id for task in tasks]
@@ -142,14 +142,14 @@ class TaskService:
         high_sim_result = await self.db.execute(high_sim_query)
         high_sim_map = {row.task_id: row.high_count for row in high_sim_result.all()}
 
-        return [
+        items = [
             TaskListResponse(
                 task_id=str(task.id),
                 status=task.status,
                 similarity=task.similarity,
                 matches=task.matches,
                 error=task.error,
-                created_at=str(task.created_at) if task.created_at else None,
+                created_at=task.created_at.isoformat() if task.created_at else None,
                 progress=TaskProgress(
                     completed=task.processed_pairs or 0,
                     total=task.total_pairs or 0,
@@ -162,3 +162,5 @@ class TaskService:
             )
             for task in tasks
         ]
+
+        return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)

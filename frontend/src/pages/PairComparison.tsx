@@ -88,10 +88,10 @@ const PairComparison: React.FC = () => {
      const fileBId = searchParams.get('file_b');
      if (fileAId && fileBId && !selectedFileA && !selectedFileB) {
        // Fetch files list to get full file objects
-       api.get<FileInfo[]>(API_ENDPOINTS.FILES_LIST)
-         .then(res => {
-           const fileA = res.data.find((f) => f.id === fileAId);
-           const fileB = res.data.find((f) => f.id === fileBId);
+        api.get<{ items: FileInfo[] }>(API_ENDPOINTS.FILES_LIST)
+          .then(res => {
+            const fileA = res.data.items.find((f) => f.id === fileAId);
+            const fileB = res.data.items.find((f) => f.id === fileBId);
            if (fileA && fileB) {
              setSelectedFileA(fileA);
              setSelectedFileB(fileB);

@@ -36,7 +36,7 @@ const SubmissionsContent: React.FC = () => {
   });
 
   const total = submissionsData?.total ?? 0;
-  const files = submissionsData?.files ?? [];
+  const files = submissionsData?.items ?? [];
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const showingStart = total > 0 ? offset + 1 : 0;

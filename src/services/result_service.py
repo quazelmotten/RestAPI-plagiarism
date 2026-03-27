@@ -1,4 +1,6 @@
 from typing import List, Optional
+from uuid import uuid4
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func, case, or_, Integer
 
@@ -10,6 +12,8 @@ from schemas.result import (
     FileInfo,
     TaskProgress,
 )
+from exceptions.exceptions import NotFoundError
+from schemas.common import PaginatedResponse
 
 
 class ResultService:
@@ -17,11 +21,11 @@ class ResultService:
         self.db = db
 
     async def get_all_results(
-        self, 
-        limit: Optional[int] = None, 
-        offset: Optional[int] = None
-    ) -> List[ResultsListResponse]:
-        """Get all similarity results across all tasks with optional pagination."""
+        self,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> PaginatedResponse:
+        """Get all similarity results across all tasks with pagination."""
         # Get tasks map (no pagination for tasks - need all for progress display)
         tasks_result = await self.db.execute(
             select(
@@ -43,6 +47,10 @@ class ResultService:
             for row in tasks_result.all()
         }
 
+        # Count total results
+        count_result = await self.db.execute(select(func.count()).select_from(SimilarityResult))
+        total = count_result.scalar_one()
+
         # Build query for results with pagination
         results_query = (
             select(
@@ -58,12 +66,9 @@ class ResultService:
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
             .join(FileModel, SimilarityResult.file_a_id == FileModel.id)
             .order_by(SimilarityResult.ast_similarity.desc())
+            .limit(limit)
+            .offset(offset)
         )
-        
-        if limit is not None:
-            results_query = results_query.limit(limit)
-        if offset is not None:
-            results_query = results_query.offset(offset)
 
         results_result = await self.db.execute(results_query)
         results = results_result.all()
@@ -78,19 +83,21 @@ class ResultService:
             )
             file_map = {str(row.id): row.filename for row in files_result.all()}
 
-        return [
+        items = [
             ResultsListResponse(
                 id=str(result.id),
                 file_a={"id": str(result.file_a_id), "filename": result.file_a_filename},
                 file_b={"id": str(result.file_b_id), "filename": file_map.get(str(result.file_b_id), "Unknown")},
                 ast_similarity=result.ast_similarity,
                 matches=result.matches,
-                created_at=str(result.created_at) if result.created_at else None,
+                created_at=result.created_at.isoformat() if result.created_at else None,
                 task_id=str(result.task_id),
                 task_progress=tasks_map.get(str(result.task_id), {})
             )
             for result in results
         ]
+
+        return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
 
     async def get_task_results(
         self, 
@@ -181,7 +188,7 @@ class ResultService:
         return TaskResultsResponse(
             task_id=task_id,
             status=task.status,
-            created_at=str(task.created_at) if task.created_at else None,
+            created_at=task.created_at.isoformat() if task.created_at else None,
             progress=TaskProgress(
                 completed=task.processed_pairs or 0,
                 total=actual_total_pairs,
@@ -222,7 +229,7 @@ class ResultService:
             file_b={"id": str(sr.file_b_id), "filename": file_map.get(str(sr.file_b_id), "Unknown")},
             ast_similarity=sr.ast_similarity,
             matches=sr.matches or [],
-            created_at=str(sr.created_at) if sr.created_at else None
+            created_at=sr.created_at.isoformat() if sr.created_at else None
         )
 
     async def get_task_histogram(self, task_id: str, bins: int = 200) -> dict:
@@ -278,3 +285,66 @@ class ResultService:
             'histogram': histogram,
             'total': total
         }
+
+    async def analyze_file_pair(self, file_a_id: str, file_b_id: str) -> ResultItem:
+        """Run full plagiarism analysis on-demand for a file pair. Updates DB with matches."""
+        from worker.services.analysis_service import AnalysisService
+        from redis_client import get_fingerprint_cache
+
+        cache = get_fingerprint_cache()
+        analysis_service = AnalysisService(cache)
+
+        file_a_result = await self.db.execute(select(FileModel).where(FileModel.id == file_a_id))
+        file_a_model = file_a_result.scalar_one_or_none()
+        if not file_a_model:
+            raise NotFoundError("File A not found")
+
+        file_b_result = await self.db.execute(select(FileModel).where(FileModel.id == file_b_id))
+        file_b_model = file_b_result.scalar_one_or_none()
+        if not file_b_model:
+            raise NotFoundError("File B not found")
+
+        result = analysis_service.analyze_pair(
+            file_a_model.file_path,
+            file_b_model.file_path,
+            file_a_model.language,
+            file_a_model.file_hash,
+            file_b_model.file_hash,
+        )
+
+        legacy_matches = result["matches"]
+
+        existing = await self.db.execute(
+            select(SimilarityResult).where(
+                or_(
+                    (SimilarityResult.file_a_id == file_a_id) & (SimilarityResult.file_b_id == file_b_id),
+                    (SimilarityResult.file_a_id == file_b_id) & (SimilarityResult.file_b_id == file_a_id),
+                )
+            )
+        )
+        sr = existing.scalar_one_or_none()
+
+        if sr:
+            sr.matches = legacy_matches
+        else:
+            sr = SimilarityResult(
+                id=uuid4(),
+                task_id=file_a_model.task_id,
+                file_a_id=file_a_id,
+                file_b_id=file_b_id,
+                ast_similarity=result["similarity_ratio"],
+                matches=legacy_matches,
+            )
+            self.db.add(sr)
+
+        await self.db.commit()
+        await self.db.refresh(sr)
+
+        now = datetime.now(timezone.utc).isoformat()
+        return ResultItem(
+            file_a={"id": str(file_a_model.id), "filename": file_a_model.filename},
+            file_b={"id": str(file_b_model.id), "filename": file_b_model.filename},
+            ast_similarity=sr.ast_similarity,
+            matches=legacy_matches,
+            created_at=now,
+        )

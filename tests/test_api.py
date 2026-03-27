@@ -66,9 +66,15 @@ class TestHealthEndpoint:
         from fastapi.testclient import TestClient
         client = TestClient(app)
         response = client.get("/health")
-        assert response.status_code == 200
-        assert response.json() == {"status": "healthy"}
-    
+        # Returns 200 if all deps healthy, 503 if degraded
+        assert response.status_code in (200, 503)
+        data = response.json()
+        assert data["status"] in ("healthy", "degraded")
+        assert "checks" in data
+        assert "db" in data["checks"]
+        assert "redis" in data["checks"]
+        assert "rmq" in data["checks"]
+
     def test_version_endpoint(self):
         from app import app
         from fastapi.testclient import TestClient
@@ -78,7 +84,7 @@ class TestHealthEndpoint:
         data = response.json()
         assert "version" in data
         assert "service" in data
-    
+
     def test_root_endpoint(self):
         from app import app
         from fastapi.testclient import TestClient
@@ -92,31 +98,56 @@ class TestPlagiarismEndpoints:
         from app import app
         from fastapi.testclient import TestClient
         client = TestClient(app)
-        response = client.get("/plagiarism/nonexistent-id")
+        response = client.get("/plagitype/plagiarism/tasks/00000000-0000-0000-0000-000000000000")
         assert response.status_code == 404
-    
+
+    def test_get_task_invalid_uuid(self):
+        from app import app
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        response = client.get("/plagitype/plagiarism/tasks/not-a-uuid")
+        assert response.status_code == 422
+
     def test_get_task_results_not_found(self):
         from app import app
         from fastapi.testclient import TestClient
         client = TestClient(app)
-        response = client.get("/plagiarism/nonexistent-id/results")
+        response = client.get("/plagitype/plagiarism/tasks/00000000-0000-0000-0000-000000000000/results")
         assert response.status_code == 404
 
-
-class TestFileEndpoints:
-    def test_get_all_files(self):
+    def test_get_task_results_invalid_uuid(self):
         from app import app
         from fastapi.testclient import TestClient
         client = TestClient(app)
-        response = client.get("/plagiarism/files/all")
+        response = client.get("/plagitype/plagiarism/tasks/not-a-uuid/results")
+        assert response.status_code == 422
+
+
+class TestFileEndpoints:
+    def test_get_files(self):
+        from app import app
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        response = client.get("/plagitype/plagiarism/files")
         assert response.status_code == 200
-        assert isinstance(response.json(), list)
-    
+        data = response.json()
+        assert "items" in data
+        assert "total" in data
+        assert "limit" in data
+        assert "offset" in data
+
+    def test_get_file_content_invalid_uuid(self):
+        from app import app
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        response = client.get("/plagitype/plagiarism/files/not-a-uuid/content")
+        assert response.status_code == 422
+
     def test_get_file_content_not_found(self):
         from app import app
         from fastapi.testclient import TestClient
         client = TestClient(app)
-        response = client.get("/plagiarism/files/nonexistent-id/content")
+        response = client.get("/plagitype/plagiarism/files/00000000-0000-0000-0000-000000000000/content")
         assert response.status_code == 404
 
 
@@ -125,6 +156,8 @@ class TestResultsEndpoints:
         from app import app
         from fastapi.testclient import TestClient
         client = TestClient(app)
-        response = client.get("/plagiarism/results/all")
+        response = client.get("/plagitype/plagiarism/results")
         assert response.status_code == 200
-        assert isinstance(response.json(), list)
+        data = response.json()
+        assert "items" in data
+        assert isinstance(data["items"], list)
