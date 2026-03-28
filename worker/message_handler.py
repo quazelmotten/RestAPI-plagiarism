@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 class MessageHandler:
     """Handles incoming RabbitMQ messages."""
-    
+
     def __init__(self, task_service: TaskService):
         """
         Initialize message handler.
@@ -27,7 +27,7 @@ class MessageHandler:
             task_service: TaskService instance
         """
         self.task_service = task_service
-    
+
     def on_message(
         self,
         ch: "BlockingChannel",

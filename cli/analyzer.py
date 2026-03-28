@@ -6,33 +6,9 @@ backward compatibility with existing CLI and tests.
 """
 
 import logging
-from typing import List, Dict, Any, Tuple
+from typing import Any
 
 # Re-export core functions
-from plagiarism_core.fingerprints import (
-    tokenize_with_tree_sitter,
-    compute_fingerprints,
-    winnow_fingerprints,
-    compute_and_winnow,
-    index_fingerprints,
-    parse_file_once,
-    tokenize_and_hash_ast,
-)
-from plagiarism_core.ast_hash import (
-    extract_ast_hashes,
-    ast_similarity,
-    hash_ast_subtrees,
-)
-from plagiarism_core.matcher import (
-    find_paired_occurrences,
-    build_fragments,
-    squash_fragments,
-    matches_from_fragments,
-)
-from plagiarism_core.similarity import (
-    longest_common_subsequence,
-    compute_similarity_metrics,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -41,11 +17,12 @@ logger = logging.getLogger(__name__)
 # Compatibility functions matching old API
 # ============================================================
 
+
 def analyze_plagiarism(
     file1: str,
     file2: str,
-    language: str = 'python',
-) -> Tuple[float, List[Dict[str, Any]], Dict[str, Any]]:
+    language: str = "python",
+) -> tuple[float, list[dict[str, Any]], dict[str, Any]]:
     """
     Standalone function matching old API.
 
@@ -61,29 +38,31 @@ def analyze_plagiarism(
     # positions to 1-indexed line numbers for consistency with the API.
     matches_data = []
     for match in result.matches:
-        matches_data.append({
-            'file1': {
-                'start_line': match.file1['start_line'] + 1,
-                'start_col': match.file1['start_col'],
-                'end_line': match.file1['end_line'] + 1,
-                'end_col': match.file1['end_col'],
-            },
-            'file2': {
-                'start_line': match.file2['start_line'] + 1,
-                'start_col': match.file2['start_col'],
-                'end_line': match.file2['end_line'] + 1,
-                'end_col': match.file2['end_col'],
-            },
-            'kgram_count': match.kgram_count
-        })
+        matches_data.append(
+            {
+                "file1": {
+                    "start_line": match.file1["start_line"] + 1,
+                    "start_col": match.file1["start_col"],
+                    "end_line": match.file1["end_line"] + 1,
+                    "end_col": match.file1["end_col"],
+                },
+                "file2": {
+                    "start_line": match.file2["start_line"] + 1,
+                    "start_col": match.file2["start_col"],
+                    "end_line": match.file2["end_line"] + 1,
+                    "end_col": match.file2["end_col"],
+                },
+                "kgram_count": match.kgram_count,
+            }
+        )
 
     metrics_dict = {
-        'left_covered': result.metrics.left_covered,
-        'right_covered': result.metrics.right_covered,
-        'left_total': result.metrics.left_total,
-        'right_total': result.metrics.right_total,
-        'similarity': result.metrics.similarity,
-        'longest_fragment': result.metrics.longest_fragment,
+        "left_covered": result.metrics.left_covered,
+        "right_covered": result.metrics.right_covered,
+        "left_total": result.metrics.left_total,
+        "right_total": result.metrics.right_total,
+        "similarity": result.metrics.similarity,
+        "longest_fragment": result.metrics.longest_fragment,
     }
 
     return result.similarity_ratio, matches_data, metrics_dict
@@ -95,8 +74,8 @@ def analyze_plagiarism_cached(
     file1_hash: str,
     file2_hash: str,
     cache=None,
-    language: str = 'python',
-) -> Tuple[float, List[Dict[str, Any]], Dict[str, Any]]:
+    language: str = "python",
+) -> tuple[float, list[dict[str, Any]], dict[str, Any]]:
     """
     Cached analysis using Redis. For compatibility - uses in-memory cache.
 
@@ -108,28 +87,35 @@ def analyze_plagiarism_cached(
 
 
 def analyze_plagiarism_batch(
-    pairs_data: List[Dict[str, Any]],
-) -> List[Tuple[float, List[Dict[str, Any]], Dict[str, Any]]]:
+    pairs_data: list[dict[str, Any]],
+) -> list[tuple[float, list[dict[str, Any]], dict[str, Any]]]:
     """
     Batch analyze multiple pairs. Simple wrapper.
     """
     results = []
     for pair in pairs_data:
-        file_a_path = pair.get('file_a_path')
-        file_b_path = pair.get('file_b_path')
-        language = pair.get('language', 'python')
+        file_a_path = pair.get("file_a_path")
+        file_b_path = pair.get("file_b_path")
+        language = pair.get("language", "python")
 
         if file_a_path and file_b_path:
-            ast_sim, matches, metrics = analyze_plagiarism(
-                file_a_path, file_b_path, language
-            )
+            ast_sim, matches, metrics = analyze_plagiarism(file_a_path, file_b_path, language)
             results.append((ast_sim, matches, metrics))
         else:
-            results.append((0.0, [], {
-                'left_covered': 0, 'right_covered': 0,
-                'left_total': 0, 'right_total': 0,
-                'similarity': 0.0, 'longest_fragment': 0,
-            }))
+            results.append(
+                (
+                    0.0,
+                    [],
+                    {
+                        "left_covered": 0,
+                        "right_covered": 0,
+                        "left_total": 0,
+                        "right_total": 0,
+                        "similarity": 0.0,
+                        "longest_fragment": 0,
+                    },
+                )
+            )
 
     return results
 
@@ -143,14 +129,10 @@ class Analyzer:
 
     def __init__(self):
         from plagiarism_core.analyzer import Analyzer as CoreAnalyzer
+
         self._analyzer = CoreAnalyzer()
 
-    def Start(
-        self,
-        file1: str,
-        file2: str,
-        language: str = 'python'
-    ) -> Dict[str, Any]:
+    def start(self, file1: str, file2: str, language: str = "python") -> dict[str, Any]:
         """
         Start analysis (old API naming).
 
@@ -161,21 +143,23 @@ class Analyzer:
 
         matches_serializable = []
         for match in result.matches:
-            matches_serializable.append({
-                "file1": {
-                    "start_line": match.file1['start_line'] + 1,
-                    "start_col": match.file1['start_col'],
-                    "end_line": match.file1['end_line'] + 1,
-                    "end_col": match.file1['end_col'],
-                },
-                "file2": {
-                    "start_line": match.file2['start_line'] + 1,
-                    "start_col": match.file2['start_col'],
-                    "end_line": match.file2['end_line'] + 1,
-                    "end_col": match.file2['end_col'],
-                },
-                "kgram_count": match.kgram_count
-            })
+            matches_serializable.append(
+                {
+                    "file1": {
+                        "start_line": match.file1["start_line"] + 1,
+                        "start_col": match.file1["start_col"],
+                        "end_line": match.file1["end_line"] + 1,
+                        "end_col": match.file1["end_col"],
+                    },
+                    "file2": {
+                        "start_line": match.file2["start_line"] + 1,
+                        "start_col": match.file2["start_col"],
+                        "end_line": match.file2["end_line"] + 1,
+                        "end_col": match.file2["end_col"],
+                    },
+                    "kgram_count": match.kgram_count,
+                }
+            )
 
         return {
             "similarity": round(result.similarity_ratio * 100, 2),

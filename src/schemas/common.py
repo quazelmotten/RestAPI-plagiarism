@@ -1,10 +1,12 @@
-from pydantic import BaseModel
-from typing import List, Any
+from typing import Any
+
+from .base import CustomBaseModel
 
 
-class PaginatedResponse(BaseModel):
+class PaginatedResponse(CustomBaseModel):
     """Standard paginated response wrapper for all list endpoints."""
-    items: List[Any]
+
+    items: list[Any]
     total: int
     limit: int
     offset: int

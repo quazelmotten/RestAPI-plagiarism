@@ -3,7 +3,6 @@ AST subtree hashing for structural similarity detection.
 """
 
 import logging
-from typing import List, Tuple, Optional
 
 from tree_sitter import Parser
 
@@ -12,7 +11,7 @@ from .fingerprints import get_language, stable_hash
 logger = logging.getLogger(__name__)
 
 
-def hash_ast_subtrees(root, min_depth: int = 3) -> List[int]:
+def hash_ast_subtrees(root, min_depth: int = 3) -> list[int]:
     """
     Hash AST subtrees with depth >= min_depth, ignoring comment nodes.
     Depth is measured as max distance to a leaf.
@@ -53,7 +52,7 @@ def extract_ast_hashes(
     lang_code: str,
     min_depth: int = 3,
     tree = None
-) -> List[int]:
+) -> list[int]:
     """
     Extract AST subtree hashes from a file.
     """
@@ -61,7 +60,7 @@ def extract_ast_hashes(
         language = get_language(lang_code)
         parser = Parser(language)
 
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(file_path, encoding='utf-8', errors='ignore') as f:
             code = f.read()
 
         tree = parser.parse(code.encode('utf-8'))
@@ -69,7 +68,7 @@ def extract_ast_hashes(
     return hash_ast_subtrees(tree.root_node, min_depth)
 
 
-def ast_similarity(hashes_a: List[int], hashes_b: List[int]) -> float:
+def ast_similarity(hashes_a: list[int], hashes_b: list[int]) -> float:
     """
     Compute Jaccard similarity between two sets of AST hashes.
 
@@ -84,7 +83,7 @@ def ast_similarity(hashes_a: List[int], hashes_b: List[int]) -> float:
     return intersection / union if union else 0.0
 
 
-def hash_ast_subtrees_with_positions(root, min_depth: int = 3) -> List[Tuple[int, Tuple[int, int], Tuple[int, int]]]:
+def hash_ast_subtrees_with_positions(root, min_depth: int = 3) -> list[tuple[int, tuple[int, int], tuple[int, int]]]:
     """
     Hash AST subtrees with their source positions.
 
@@ -125,7 +124,7 @@ def find_ast_matches(
     file2_path: str,
     lang_code: str,
     min_depth: int = 3,
-) -> List[dict]:
+) -> list[dict]:
     """
     Find matching AST subtrees between two files.
 
@@ -133,14 +132,14 @@ def find_ast_matches(
     Uses structural hashing to find identical subtrees,
     then merges adjacent matches.
     """
-    from .matcher import merge_adjacent_matches, Match
+    from .matcher import Match, merge_adjacent_matches
 
     language = get_language(lang_code)
     parser = Parser(language)
 
-    with open(file1_path, 'r', encoding='utf-8', errors='ignore') as f:
+    with open(file1_path, encoding='utf-8', errors='ignore') as f:
         code1 = f.read()
-    with open(file2_path, 'r', encoding='utf-8', errors='ignore') as f:
+    with open(file2_path, encoding='utf-8', errors='ignore') as f:
         code2 = f.read()
 
     tree1 = parser.parse(code1.encode('utf-8'))

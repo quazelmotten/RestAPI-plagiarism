@@ -5,10 +5,9 @@ Maps fingerprint hashes to files, enabling quick similarity candidate discovery.
 """
 
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Any
 
 import redis
-
 from shared.interfaces import CandidateIndex
 
 logger = logging.getLogger(__name__)
@@ -73,7 +72,7 @@ class RedisInvertedIndex(CandidateIndex):
     def add_file_fingerprints(
         self,
         file_hash: str,
-        fingerprints: List[Dict[str, Any]],
+        fingerprints: list[dict[str, Any]],
         language: str = "python"
     ) -> None:
         """Add file fingerprints to the inverted index."""
@@ -100,9 +99,9 @@ class RedisInvertedIndex(CandidateIndex):
 
     def find_candidates(
         self,
-        hash_values: List[str],
+        hash_values: list[str],
         language: str = "python"
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Find candidate files with similarity scores using Jaccard overlap.
 
@@ -130,7 +129,7 @@ class RedisInvertedIndex(CandidateIndex):
         )
 
         # Parse flat array: [file_hash, sim, file_hash, sim, ...]
-        result: Dict[str, float] = {}
+        result: dict[str, float] = {}
         for i in range(0, len(flat), 2):
             result[flat[i]] = float(flat[i + 1])
         return result
@@ -139,7 +138,7 @@ class RedisInvertedIndex(CandidateIndex):
         self,
         file_hash: str,
         language: str = "python"
-    ) -> Optional[List[str]]:
+    ) -> list[str] | None:
         """Get stored fingerprint hash strings for a file."""
         file_key = f"{self.FILE_TO_HASHES_PREFIX}:{language}:{file_hash}"
         hashes = self.redis.smembers(file_key)
@@ -147,9 +146,9 @@ class RedisInvertedIndex(CandidateIndex):
 
     def get_file_fingerprints_batch(
         self,
-        file_hashes: List[str],
+        file_hashes: list[str],
         language: str = "python"
-    ) -> Dict[str, Optional[List[str]]]:
+    ) -> dict[str, list[str] | None]:
         """
         Batch-fetch fingerprint sets for multiple files in a single pipeline.
 
@@ -167,8 +166,8 @@ class RedisInvertedIndex(CandidateIndex):
 
         raw_results = pipe.execute()
 
-        result: Dict[str, Optional[List[str]]] = {}
-        for fh, hashes in zip(ordered, raw_results):
+        result: dict[str, list[str] | None] = {}
+        for fh, hashes in zip(ordered, raw_results, strict=False):
             result[fh] = list(hashes) if hashes else None
         return result
 

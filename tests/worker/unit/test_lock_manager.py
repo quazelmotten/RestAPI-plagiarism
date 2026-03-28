@@ -3,8 +3,9 @@ Unit tests for RedisLockManager.
 Tests lock acquisition and release.
 """
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 from worker.infrastructure.lock_manager import RedisLockManager
 
 
@@ -33,8 +34,8 @@ class TestRedisLockManager:
         # Verify key format and parameters
         call_args = mock_redis.set.call_args
         assert call_args[0][0] == "lock:key123"
-        assert call_args[1].get('nx') is True
-        assert call_args[1].get('px') == 300000  # ms
+        assert call_args[1].get("nx") is True
+        assert call_args[1].get("px") == 300000  # ms
 
     def test_lock_returns_false_if_already_locked(self, lock_mgr, mock_redis):
         """Test lock returns False if key already exists."""

@@ -7,12 +7,9 @@ Responsible for:
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Any
 
 from plagiarism_core.fingerprints import (
-    tokenize_with_tree_sitter,
-    compute_fingerprints,
-    winnow_fingerprints,
     compute_and_winnow,
     parse_file_once,
     tokenize_and_hash_ast,
@@ -36,9 +33,9 @@ class FingerprintService:
 
     def ensure_fingerprinted(
         self,
-        file_info: Dict[str, Any],
+        file_info: dict[str, Any],
         language: str
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Ensure file has fingerprints cached. Generate if missing.
 
@@ -56,7 +53,7 @@ class FingerprintService:
         file_path = file_info.get('file_path') or file_info.get('path')
 
         if not file_hash or not file_path:
-            raise ValueError(f"Invalid file info: missing hash or path")
+            raise ValueError("Invalid file info: missing hash or path")
 
         # Check cache first
         cached = self.cache.batch_get([file_hash])
@@ -89,12 +86,12 @@ class FingerprintService:
     def get_fingerprints(
         self,
         file_hash: str
-    ) -> Optional[List[Dict[str, Any]]]:
+    ) -> list[dict[str, Any]] | None:
         """Get fingerprints from cache if available."""
         cached = self.cache.batch_get([file_hash])
         return cached.get(file_hash, {}).get('fingerprints')
 
-    def get_ast_hashes(self, file_hash: str) -> Optional[List[int]]:
+    def get_ast_hashes(self, file_hash: str) -> list[int] | None:
         """Get AST hashes from cache if available."""
         cached = self.cache.batch_get([file_hash])
         return cached.get(file_hash, {}).get('ast_hashes')

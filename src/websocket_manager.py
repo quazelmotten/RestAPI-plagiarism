@@ -8,7 +8,6 @@ progress messages to all connected WebSocket clients per task.
 import asyncio
 import json
 import logging
-from typing import Dict, Set, Optional
 
 import redis.asyncio as aioredis
 from starlette.websockets import WebSocket, WebSocketState
@@ -25,9 +24,9 @@ class ConnectionManager:
     MAX_CONNECTIONS_PER_TASK = 10
 
     def __init__(self):
-        self._connections: Dict[str, Set[WebSocket]] = {}
-        self._redis: Optional[aioredis.Redis] = None
-        self._subscriber_task: Optional[asyncio.Task] = None
+        self._connections: dict[str, set[WebSocket]] = {}
+        self._redis: aioredis.Redis | None = None
+        self._subscriber_task: asyncio.Task | None = None
         self._running = False
 
     async def start(self):
@@ -59,9 +58,7 @@ class ConnectionManager:
 
             while self._running:
                 try:
-                    message = await pubsub.get_message(
-                        ignore_subscribe_messages=True, timeout=0.01
-                    )
+                    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=0.01)
                     if message is None:
                         continue
 
@@ -80,7 +77,7 @@ class ConnectionManager:
                             len(self._connections.get(task_id, set())),
                         )
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 except json.JSONDecodeError as e:
                     logger.warning("Invalid JSON in Redis message: %s", e)
@@ -165,7 +162,7 @@ class ConnectionManager:
         logger.info("WebSocket connection manager stopped")
 
 
-_manager: Optional[ConnectionManager] = None
+_manager: ConnectionManager | None = None
 
 
 def get_connection_manager() -> ConnectionManager:

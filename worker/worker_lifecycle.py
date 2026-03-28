@@ -3,16 +3,16 @@ Worker lifecycle management using Pika's async SelectConnection.
 Handles RabbitMQ connection setup, teardown, and message consumption with auto-reconnect.
 """
 
+import functools
 import logging
 import signal
 import time
-import functools
-from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
 
 import pika
 
 from worker.config import settings
-from worker.dependencies import get_redis_client, get_analysis_executor
+from worker.dependencies import get_analysis_executor, get_redis_client
 
 log = logging.getLogger(__name__)
 
@@ -23,36 +23,33 @@ class AsyncWorker:
     """Asynchronous worker using Pika SelectConnection with auto-reconnect."""
 
     def __init__(
-        self,
-        message_handler,
-        worker_concurrency: Optional[int] = None,
-        log_level: Optional[int] = None
+        self, message_handler, worker_concurrency: int | None = None, log_level: int | None = None
     ):
         self.message_handler = message_handler
-        self.worker_concurrency = worker_concurrency or getattr(settings, 'worker_concurrency', 4)
-        self.log_level = log_level or self._parse_log_level(getattr(settings, 'log_level', 'INFO'))
+        self.worker_concurrency = worker_concurrency or getattr(settings, "worker_concurrency", 4)
+        self.log_level = log_level or self._parse_log_level(getattr(settings, "log_level", "INFO"))
 
-        self._connection: Optional[pika.SelectConnection] = None
-        self._channel: Optional[pika.channel.Channel] = None
-        self._consumer_tag: Optional[str] = None
+        self._connection: pika.SelectConnection | None = None
+        self._channel: pika.channel.Channel | None = None
+        self._consumer_tag: str | None = None
         self._closing = False
         self._stopping = False
         self._consuming = False
         self._should_reconnect = False
         self._reconnect_delay = 0
 
-        self.executor: Optional[ThreadPoolExecutor] = None
+        self.executor: ThreadPoolExecutor | None = None
 
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
 
     def _parse_log_level(self, level_str: str) -> int:
         levels = {
-            'DEBUG': logging.DEBUG,
-            'INFO': logging.INFO,
-            'WARNING': logging.WARNING,
-            'ERROR': logging.ERROR,
-            'CRITICAL': logging.CRITICAL
+            "DEBUG": logging.DEBUG,
+            "INFO": logging.INFO,
+            "WARNING": logging.WARNING,
+            "ERROR": logging.ERROR,
+            "CRITICAL": logging.CRITICAL,
         }
         return levels.get(level_str.upper(), logging.INFO)
 
@@ -117,8 +114,7 @@ class AsyncWorker:
             host=settings.rmq_host,
             port=settings.rmq_port,
             credentials=pika.PlainCredentials(
-                username=settings.rmq_user,
-                password=settings.rmq_pass
+                username=settings.rmq_user, password=settings.rmq_pass
             ),
             heartbeat=600,
             blocked_connection_timeout=300,
@@ -185,7 +181,9 @@ class AsyncWorker:
             exchange=settings.rmq_queue_exchange,
             exchange_type="direct",
             durable=True,
-            callback=functools.partial(self._on_exchange_declareok, exchange=settings.rmq_queue_exchange)
+            callback=functools.partial(
+                self._on_exchange_declareok, exchange=settings.rmq_queue_exchange
+            ),
         )
 
     def _on_exchange_declareok(self, _unused_frame, exchange: str):
@@ -197,7 +195,7 @@ class AsyncWorker:
                 "x-dead-letter-exchange": settings.rmq_queue_dead_letter_exchange,
                 "x-dead-letter-routing-key": settings.rmq_queue_routing_key_dead_letter,
             },
-            callback=self._on_queue_declareok
+            callback=self._on_queue_declareok,
         )
 
     def _on_queue_declareok(self, _unused_frame):
@@ -206,13 +204,15 @@ class AsyncWorker:
             queue=settings.rmq_queue_name,
             exchange=settings.rmq_queue_exchange,
             routing_key=settings.rmq_queue_routing_key,
-            callback=self._on_bindok
+            callback=self._on_bindok,
         )
         self._channel.exchange_declare(
             exchange=settings.rmq_queue_dead_letter_exchange,
             exchange_type="direct",
             durable=True,
-            callback=functools.partial(self._on_dlx_exchange_declareok, exchange=settings.rmq_queue_dead_letter_exchange)
+            callback=functools.partial(
+                self._on_dlx_exchange_declareok, exchange=settings.rmq_queue_dead_letter_exchange
+            ),
         )
 
     def _on_dlx_exchange_declareok(self, _unused_frame, exchange: str):
@@ -220,7 +220,7 @@ class AsyncWorker:
         self._channel.queue_declare(
             queue=settings.rmq_queue_dead_letter_name,
             durable=True,
-            callback=self._on_dlx_queue_declareok
+            callback=self._on_dlx_queue_declareok,
         )
 
     def _on_dlx_queue_declareok(self, _unused_frame):
@@ -229,7 +229,7 @@ class AsyncWorker:
             queue=settings.rmq_queue_dead_letter_name,
             exchange=settings.rmq_queue_dead_letter_exchange,
             routing_key=settings.rmq_queue_routing_key_dead_letter,
-            callback=lambda _: log.info("DLQ bound")
+            callback=lambda _: log.info("DLQ bound"),
         )
         self._set_qos()
 
@@ -241,8 +241,8 @@ class AsyncWorker:
         if not self._channel:
             return
         self._channel.basic_qos(
-            prefetch_count=getattr(settings, 'worker_prefetch_count', 1),
-            callback=self._on_basic_qos_ok
+            prefetch_count=getattr(settings, "worker_prefetch_count", 1),
+            callback=self._on_basic_qos_ok,
         )
 
     def _on_basic_qos_ok(self, _unused_frame):
@@ -254,8 +254,7 @@ class AsyncWorker:
         self._channel.add_on_close_callback(self._on_channel_closed)
         self._channel.add_on_cancel_callback(self._on_consumer_cancelled)
         self._consumer_tag = self._channel.basic_consume(
-            queue=settings.rmq_queue_name,
-            on_message_callback=self._on_message_wrapper
+            queue=settings.rmq_queue_name, on_message_callback=self._on_message_wrapper
         )
         self._consuming = True
         log.info(f"Consumer started with tag: {self._consumer_tag}")
@@ -297,7 +296,9 @@ class AsyncWorker:
 
         if self._channel and self._consuming:
             self._stop_consuming()
-        elif self._connection and not self._connection.is_closing and not self._connection.is_closed:
+        elif (
+            self._connection and not self._connection.is_closing and not self._connection.is_closed
+        ):
             try:
                 self._connection.close()
             except Exception:

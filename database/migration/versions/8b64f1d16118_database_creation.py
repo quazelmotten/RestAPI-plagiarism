@@ -1,12 +1,12 @@
 """Database creation
 
 Revision ID: 8b64f1d16118
-Revises: 
+Revises:
 Create Date: 2024-12-13 23:52:16.557170
 
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.

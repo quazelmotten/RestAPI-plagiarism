@@ -3,19 +3,19 @@ Pytest configuration and shared fixtures for worker tests.
 """
 
 import contextlib
-import pytest
-import tempfile
 import os
 import sys
+import tempfile
 from unittest.mock import MagicMock, patch
-import json
+
+import pytest
 
 # Setup paths for imports (project root is set via pytest.ini pythonpath)
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from worker.config import settings  # noqa: F401
+from worker.config import settings  # noqa: E402, F401
 
 
 class _MockLuaScript:
@@ -58,8 +58,8 @@ class SimpleRedis:
     """A simple in-memory Redis mock supporting common operations with pipeline simulation."""
 
     def __init__(self):
-        self.hashes = {}    # key -> dict(field->value)
-        self.sets = {}      # key -> set(members)
+        self.hashes = {}  # key -> dict(field->value)
+        self.sets = {}  # key -> set(members)
         self.counters = {}  # key -> int
         self.strings = {}
         self._pipeline_results = None  # list to collect results during pipeline
@@ -71,8 +71,8 @@ class SimpleRedis:
         return value
 
     def hset(self, name, field=None, value=None, **kwargs):
-        if 'mapping' in kwargs:
-            mapping = kwargs['mapping']
+        if "mapping" in kwargs:
+            mapping = kwargs["mapping"]
             if name not in self.hashes:
                 self.hashes[name] = {}
             for f, v in mapping.items():
@@ -142,7 +142,12 @@ class SimpleRedis:
     def delete(self, *names):
         deleted = 0
         for name in names:
-            if name in self.hashes or name in self.sets or name in self.counters or name in self.strings:
+            if (
+                name in self.hashes
+                or name in self.sets
+                or name in self.counters
+                or name in self.strings
+            ):
                 deleted += 1
             self.hashes.pop(name, None)
             self.sets.pop(name, None)
@@ -157,13 +162,23 @@ class SimpleRedis:
         self.strings.clear()
 
     def exists(self, name):
-        result = name in self.hashes or name in self.sets or name in self.counters or name in self.strings
+        result = (
+            name in self.hashes
+            or name in self.sets
+            or name in self.counters
+            or name in self.strings
+        )
         return self._record(result)
 
     def scan_iter(self, match=None):
-        keys = set(self.hashes.keys()) | set(self.sets.keys()) | set(self.counters.keys()) | set(self.strings.keys())
+        keys = (
+            set(self.hashes.keys())
+            | set(self.sets.keys())
+            | set(self.counters.keys())
+            | set(self.strings.keys())
+        )
         if match:
-            if match.endswith('*'):
+            if match.endswith("*"):
                 prefix = match[:-1]
                 keys = [k for k in keys if k.startswith(prefix)]
             else:
@@ -210,7 +225,7 @@ def temp_dir():
 @pytest.fixture(scope="function")
 def mock_redis():
     """Mock Redis client that behaves like real one but in-memory (MagicMock)."""
-    with patch('redis.Redis') as mock:
+    with patch("redis.Redis") as mock:
         mock_instance = MagicMock()
         mock.return_value = mock_instance
         mock_instance.ping.return_value = True
@@ -241,10 +256,11 @@ def redis_test_instance():
     """Provide a simple in-memory Redis mock for integration tests."""
     redis_mock = SimpleRedis()
     # Patch redis.Redis to return our mock
-    with patch('redis.Redis', return_value=redis_mock):
+    with patch("redis.Redis", return_value=redis_mock):
         # Ensure inverted_index uses this mock if already imported
         try:
             from worker.inverted_index import inverted_index
+
             inverted_index.redis = redis_mock
         except ImportError:
             pass
@@ -275,9 +291,11 @@ def mock_rabbitmq():
 @pytest.fixture(scope="function")
 def test_config():
     """Override settings for tests."""
-    with patch.object(settings, 'worker_concurrency', 2), \
-         patch.object(settings, 'redis_ttl', 3600), \
-         patch.object(settings, 'inverted_index_min_overlap_threshold', 0.15):
+    with (
+        patch.object(settings, "worker_concurrency", 2),
+        patch.object(settings, "redis_ttl", 3600),
+        patch.object(settings, "inverted_index_min_overlap_threshold", 0.15),
+    ):
         yield settings
 
 
@@ -285,14 +303,18 @@ def test_config():
 def mock_get_session(monkeypatch, mock_db_session):
     """Patch get_session in database module to return a mock sync context manager."""
     import worker.database as db_module
+
     @contextlib.contextmanager
     def fake_get_session():
         yield mock_db_session
-    monkeypatch.setattr(db_module, 'get_session', fake_get_session)
+
+    monkeypatch.setattr(db_module, "get_session", fake_get_session)
 
 
 # Markers for test categorization
 def pytest_configure(config):
-    config.addinivalue_line("markers", "integration: marks tests as integration (requires Redis/DB)")
+    config.addinivalue_line(
+        "markers", "integration: marks tests as integration (requires Redis/DB)"
+    )
     config.addinivalue_line("markers", "performance: marks tests as performance benchmarks")
     config.addinivalue_line("markers", "slow: marks tests as slow-running")

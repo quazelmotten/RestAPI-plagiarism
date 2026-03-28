@@ -4,10 +4,11 @@ Tests result persistence and task lifecycle updates.
 """
 
 import logging
-import pytest
 from unittest.mock import MagicMock
-from worker.services.result_service import ResultService
+
+import pytest
 from shared.interfaces import TaskRepository
+from worker.services.result_service import ResultService
 
 
 class TestResultService:
@@ -31,9 +32,9 @@ class TestResultService:
         """Test that results are stored in batches."""
         task_id = "task123"
         pairs = [
-            ({'id': 'a1'}, {'id': 'b1'}, 0.8),
-            ({'id': 'a2'}, {'id': 'b2'}, 0.6),
-            ({'id': 'a3'}, {'id': 'b3'}, 0.9)
+            ({"id": "a1"}, {"id": "b1"}, 0.8),
+            ({"id": "a2"}, {"id": "b2"}, 0.6),
+            ({"id": "a3"}, {"id": "b3"}, 0.9),
         ]
         # batch_size default is 100, so all at once
         service.store_similarity_scores(task_id, pairs, batch_size=2)
@@ -49,9 +50,9 @@ class TestResultService:
         """Test pairs missing file_a_id or file_b_id are skipped."""
         task_id = "task123"
         pairs = [
-            ({'id': 'a1'}, {'id': 'b1'}, 0.8),  # valid
-            ({}, {'id': 'b2'}, 0.6),  # missing a id -> skip
-            ({'id': 'a3'}, {}, 0.9),  # missing b id -> skip
+            ({"id": "a1"}, {"id": "b1"}, 0.8),  # valid
+            ({}, {"id": "b2"}, 0.6),  # missing a id -> skip
+            ({"id": "a3"}, {}, 0.9),  # missing b id -> skip
         ]
         mock_repo.bulk_insert_results.return_value = None
 
@@ -60,7 +61,7 @@ class TestResultService:
         # Only first pair should be inserted
         inserted = mock_repo.bulk_insert_results.call_args[0][0]
         assert len(inserted) == 1
-        assert inserted[0]['file_a_id'] == 'a1'
+        assert inserted[0]["file_a_id"] == "a1"
 
     def test_store_similarity_scores_empty_list_returns_early(self, service, mock_repo):
         """Test empty pairs list returns without DB calls."""
@@ -74,10 +75,7 @@ class TestResultService:
         service.update_progress(task_id, processed=50, total=100)
 
         mock_repo.update_task.assert_called_once_with(
-            task_id=task_id,
-            status="storing_results",
-            processed_pairs=50,
-            total_pairs=100
+            task_id=task_id, status="storing_results", processed_pairs=50, total_pairs=100
         )
 
     def test_update_progress_logs_milestones(self, service, mock_repo, caplog):
@@ -100,12 +98,9 @@ class TestResultService:
             task_id=task_id,
             status="completed",
             similarity=0.95,
-            matches={
-                "total_pairs": total_pairs,
-                "processed_pairs": processed_count
-            },
+            matches={"total_pairs": total_pairs, "processed_pairs": processed_count},
             total_pairs=total_pairs,
-            processed_pairs=processed_count
+            processed_pairs=processed_count,
         )
 
     def test_mark_failed_updates_with_error(self, service, mock_repo):
@@ -114,7 +109,5 @@ class TestResultService:
         error_msg = "Something went wrong"
         service.mark_failed(task_id, error_msg)
         mock_repo.update_task.assert_called_once_with(
-            task_id=task_id,
-            status="failed",
-            error=error_msg[:1000]
+            task_id=task_id, status="failed", error=error_msg[:1000]
         )

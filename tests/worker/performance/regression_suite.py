@@ -5,34 +5,38 @@ Fails if throughput drops below thresholds.
 Run: python tests/worker/performance/regression_suite.py
 """
 
-import sys
 import os
-import time
-import tempfile
 import shutil
-from pathlib import Path
+import sys
+import tempfile
+import time
 
 # Add paths
-worker_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'worker')
+worker_dir = os.path.join(os.path.dirname(__file__), "..", "..", "worker")
 sys.path.insert(0, worker_dir)
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
-from worker.services.analysis_service import AnalysisService
-from worker.services.similarity_service import SimilarityService
-from worker.services.result_service import ResultService
-from worker.services.processor_service import ProcessorService
-from worker.redis_cache import cache
-from cli.analyzer import parse_file, tokenize_with_tree_sitter, \
-    compute_fingerprints, winnow_fingerprints, extract_ast_hashes
-from concurrent.futures import ProcessPoolExecutor
-from inverted_index import inverted_index
+from concurrent.futures import ProcessPoolExecutor  # noqa: E402
+
+from cli.analyzer import (  # noqa: E402
+    compute_fingerprints,
+    extract_ast_hashes,
+    parse_file,
+    tokenize_with_tree_sitter,
+    winnow_fingerprints,
+)
+from inverted_index import inverted_index  # noqa: E402
+from worker.redis_cache import cache  # noqa: E402
+from worker.services.analysis_service import AnalysisService  # noqa: E402
+from worker.services.result_service import ResultService  # noqa: E402
+from worker.services.similarity_service import SimilarityService  # noqa: E402
 
 # Thresholds - adjust based on your baseline measurements
 THRESHOLDS = {
-    'pairs_per_second_min': 60,  # Should maintain at least 60 pairs/sec
-    'indexing_30_files_max_seconds': 2.0,
-    'similarity_match_tolerance': 0.001,
-    'analysis_100_pairs_max_seconds': 10.0,  # 100 pairs should complete in under 10s
+    "pairs_per_second_min": 60,  # Should maintain at least 60 pairs/sec
+    "indexing_30_files_max_seconds": 2.0,
+    "similarity_match_tolerance": 0.001,
+    "analysis_100_pairs_max_seconds": 10.0,  # 100 pairs should complete in under 10s
 }
 
 
@@ -69,20 +73,18 @@ def generate_files(tmpdir, count=30):
     files = []
     for i in range(count):
         path = os.path.join(tmpdir, f"file{i}.py")
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             f.write(f"def func{i}():\n    return {i}\n")
-        files.append({
-            'id': str(i),
-            'file_hash': f"hash{i}",
-            'file_path': path,
-            'filename': f"file{i}.py"
-        })
+        files.append(
+            {"id": str(i), "file_hash": f"hash{i}", "file_path": path, "filename": f"file{i}.py"}
+        )
     return files, tmpdir
 
 
 def precompute_fingerprints(analysis_service, similarity_service, files):
     """Pre-cache fingerprints for all files using processor."""
     from worker.services.processor_service import ProcessorService
+
     proc = ProcessorService(analysis_service, similarity_service)
     # Clear inverted index first
     inverted_index.clear_all()
@@ -99,9 +101,9 @@ def test_similarity_accuracy(analysis_service, similarity_service, result_servic
     code = "def add(a, b):\n    return a + b\n"
     file1 = os.path.join(tmpdir, "a.py")
     file2 = os.path.join(tmpdir, "b.py")
-    with open(file1, 'w') as f:
+    with open(file1, "w") as f:
         f.write(code)
-    with open(file2, 'w') as f:
+    with open(file2, "w") as f:
         f.write(code)
 
     # Compute fingerprints
@@ -115,17 +117,18 @@ def test_similarity_accuracy(analysis_service, similarity_service, result_servic
     cache.cache_fingerprints(hash2, fps1, ast1, tokens1)
 
     # Cached analysis via result service
-    file_a_info = {'id': '1', 'file_hash': hash1, 'file_path': file1, 'filename': 'a.py'}
-    file_b_info = {'id': '2', 'file_hash': hash2, 'file_path': file2, 'filename': 'b.py'}
+    file_a_info = {"id": "1", "file_hash": hash1, "file_path": file1, "filename": "a.py"}
+    file_b_info = {"id": "2", "file_hash": hash2, "file_path": file2, "filename": "b.py"}
 
     result_cached = result_service.process_pair(file_a_info, file_b_info, "python", "accuracy_test")
 
     # Direct analyzer
     direct = Analyzer().Start(file1, file2, "python")
 
-    diff = abs(result_cached['ast_similarity'] - direct['similarity_ratio'])
-    assert diff < THRESHOLDS['similarity_match_tolerance'], \
+    diff = abs(result_cached["ast_similarity"] - direct["similarity_ratio"])
+    assert diff < THRESHOLDS["similarity_match_tolerance"], (
         f"Accuracy regression: cached={result_cached['ast_similarity']} direct={direct['similarity_ratio']} diff={diff}"
+    )
 
     print(f"  ✓ Accuracy test passed (diff={diff:.6f})")
 
@@ -142,7 +145,7 @@ def test_analysis_throughput(analysis_service, similarity_service, result_servic
     # Select 100 pairs (use first 50 files to create 100 pairs)
     pairs = []
     for i in range(min(50, len(files))):
-        for j in range(i+1, min(50, len(files))):
+        for j in range(i + 1, min(50, len(files))):
             pairs.append((files[i], files[j]))
             if len(pairs) >= n_pairs:
                 break
@@ -158,19 +161,21 @@ def test_analysis_throughput(analysis_service, similarity_service, result_servic
     start = time.time()
     for a, b in pairs:
         result = result_service.process_pair(a, b, "python", "throughput_test")
-        assert result['ast_similarity'] is not None
+        assert result["ast_similarity"] is not None
     elapsed = time.time() - start
 
     throughput = n_pairs / elapsed
     print(f"  Throughput: {throughput:.2f} pairs/sec")
     print(f"  Total time: {elapsed:.2f}s for {n_pairs} pairs")
 
-    assert throughput >= THRESHOLDS['pairs_per_second_min'], \
+    assert throughput >= THRESHOLDS["pairs_per_second_min"], (
         f"Throughput too low: {throughput:.2f} < {THRESHOLDS['pairs_per_second_min']}"
-    assert elapsed <= THRESHOLDS['analysis_100_pairs_max_seconds'], \
+    )
+    assert elapsed <= THRESHOLDS["analysis_100_pairs_max_seconds"], (
         f"Analysis took too long: {elapsed:.2f}s > {THRESHOLDS['analysis_100_pairs_max_seconds']}s"
+    )
 
-    print(f"  ✓ Throughput test passed")
+    print("  ✓ Throughput test passed")
 
 
 def test_indexing_performance(analysis_service, similarity_service, tmpdir):
@@ -192,10 +197,11 @@ def test_indexing_performance(analysis_service, similarity_service, tmpdir):
     elapsed = time.time() - start
 
     print(f"  Indexing 30 files: {elapsed:.2f}s")
-    assert elapsed < THRESHOLDS['indexing_30_files_max_seconds'], \
+    assert elapsed < THRESHOLDS["indexing_30_files_max_seconds"], (
         f"Indexing too slow: {elapsed:.2f}s > {THRESHOLDS['indexing_30_files_max_seconds']}s"
+    )
 
-    print(f"  ✓ Indexing performance test passed")
+    print("  ✓ Indexing performance test passed")
 
 
 def test_pair_generation_efficiency(analysis_service, similarity_service, tmpdir):
@@ -226,7 +232,7 @@ def test_pair_generation_efficiency(analysis_service, similarity_service, tmpdir
     assert intra_time < 1.0, f"Intra-task pair gen too slow: {intra_time:.3f}s"
     assert cross_time < 1.0, f"Cross-task pair gen too slow: {cross_time:.3f}s"
 
-    print(f"  ✓ Pair generation efficiency test passed")
+    print("  ✓ Pair generation efficiency test passed")
 
 
 def main():
@@ -258,6 +264,7 @@ def main():
     except Exception as e:
         print(f"\n✗ ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         teardown(executor, tmpdir)
         return 1

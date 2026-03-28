@@ -8,9 +8,11 @@ Responsible for:
 
 import logging
 import time
-from typing import Dict, List, Any, Optional, Callable
+from collections.abc import Callable
+from typing import Any
 
 from shared.interfaces import CandidateIndex, FingerprintCache
+
 from worker.services.fingerprint_service import FingerprintService
 
 logger = logging.getLogger(__name__)
@@ -26,7 +28,7 @@ class IndexingService:
 
     def index_file(
         self,
-        file_info: Dict[str, Any],
+        file_info: dict[str, Any],
         language: str
     ) -> None:
         """
@@ -40,7 +42,7 @@ class IndexingService:
         file_path = file_info.get('file_path') or file_info.get('path')
 
         if not file_hash or not file_path:
-            logger.warning(f"Skipping file with missing hash/path")
+            logger.warning("Skipping file with missing hash/path")
             return
 
         try:
@@ -54,11 +56,11 @@ class IndexingService:
 
     def ensure_files_indexed(
         self,
-        files: List[Dict[str, Any]],
+        files: list[dict[str, Any]],
         language: str,
-        existing_files: Optional[List[Dict[str, Any]]] = None,
-        on_progress: Optional[Callable[[int, int], None]] = None,
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        existing_files: list[dict[str, Any]] | None = None,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
         """
         Ensure all files are indexed. Returns fingerprint map.
 

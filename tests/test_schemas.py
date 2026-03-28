@@ -1,8 +1,16 @@
-import pytest
-from pydantic import ValidationError
-from src.schemas.task import TaskCreate, TaskResponse, TaskListResponse, TaskCreateResponse, TaskProgress
-from src.schemas.file import FileResponse, FileContentResponse, FileUploadInfo
-from src.schemas.result import ResultItem, ResultsListResponse, TaskResultsResponse
+"""
+Tests for schema models - importing directly from domain modules.
+"""
+
+from files.schemas import FileContentResponse, FileResponse, FileUploadInfo
+from results.schemas import ResultItem, ResultsListResponse, TaskResultsResponse
+from tasks.schemas import (
+    TaskCreate,
+    TaskCreateResponse,
+    TaskListResponse,
+    TaskProgress,
+    TaskResponse,
+)
 
 
 class TestTaskSchemas:
@@ -37,7 +45,7 @@ class TestTaskSchemas:
         task = TaskResponse(
             task_id="123",
             status="queued",
-            progress=TaskProgress(completed=0, total=0, percentage=0.0, display="0/0")
+            progress=TaskProgress(completed=0, total=0, percentage=0.0, display="0/0"),
         )
         assert task.task_id == "123"
         assert task.status == "queued"
@@ -48,18 +56,14 @@ class TestTaskSchemas:
             task_id="123",
             status="completed",
             similarity=0.85,
-            progress=TaskProgress(completed=10, total=10, percentage=100.0, display="10/10")
+            progress=TaskProgress(completed=10, total=10, percentage=100.0, display="10/10"),
         )
         assert task.task_id == "123"
         assert task.similarity == 0.85
 
     def test_task_create_response(self):
         """Test TaskCreateResponse."""
-        response = TaskCreateResponse(
-            task_id="abc-123",
-            status="queued",
-            files_count=3
-        )
+        response = TaskCreateResponse(task_id="abc-123", status="queued", files_count=3)
         assert response.task_id == "abc-123"
         assert response.status == "queued"
         assert response.files_count == 3
@@ -69,10 +73,7 @@ class TestFileSchemas:
     def test_file_upload_info(self):
         """Test FileUploadInfo."""
         info = FileUploadInfo(
-            id="file-123",
-            path="s3://bucket/file.py",
-            hash="abc123",
-            filename="test.py"
+            id="file-123", path="s3://bucket/file.py", hash="abc123", filename="test.py"
         )
         assert info.id == "file-123"
         assert info.filename == "test.py"
@@ -85,7 +86,7 @@ class TestFileSchemas:
             language="python",
             task_id="task-123",
             status="completed",
-            similarity=0.75
+            similarity=0.75,
         )
         assert file.id == "file-123"
         assert file.similarity == 0.75
@@ -97,7 +98,7 @@ class TestFileSchemas:
             filename="test.py",
             content="print('hello')",
             language="python",
-            file_path="s3://bucket/test.py"
+            file_path="s3://bucket/test.py",
         )
         assert content.id == "file-123"
         assert "hello" in content.content
@@ -110,7 +111,13 @@ class TestResultSchemas:
             file_a={"id": "file-1", "filename": "a.py"},
             file_b={"id": "file-2", "filename": "b.py"},
             ast_similarity=0.85,
-            matches=[{"line": 1, "text": "test"}]
+            matches=[
+                {
+                    "file1": {"start_line": 1, "start_col": 0, "end_line": 5, "end_col": 10},
+                    "file2": {"start_line": 1, "start_col": 0, "end_line": 5, "end_col": 10},
+                    "kgram_count": 3,
+                }
+            ],
         )
         assert item.ast_similarity == 0.85
         assert item.file_a.filename == "a.py"
@@ -123,7 +130,7 @@ class TestResultSchemas:
             file_b={"id": "file-2", "filename": "b.py"},
             ast_similarity=0.85,
             task_id="task-123",
-            task_progress={"status": "completed", "total_pairs": 10}
+            task_progress={"status": "completed", "total_pairs": 10},
         )
         assert response.task_id == "task-123"
         assert response.task_progress["status"] == "completed"
@@ -136,7 +143,7 @@ class TestResultSchemas:
             progress={"completed": 10, "total": 10, "percentage": 100.0, "display": "10/10"},
             total_pairs=10,
             files=[{"id": "file-1", "filename": "a.py"}],
-            results=[]
+            results=[],
         )
         assert response.task_id == "task-123"
         assert len(response.files) == 1

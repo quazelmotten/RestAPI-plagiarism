@@ -5,12 +5,10 @@ Database connection and session management for the worker.
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
 
 from worker.config import settings
-
-Base = declarative_base()
 
 engine = create_engine(
     settings.db_sync_url,

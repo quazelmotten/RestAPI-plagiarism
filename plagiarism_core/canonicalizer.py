@@ -12,11 +12,10 @@ semantically equivalent code to the same canonical form.
 
 import logging
 import re
-from typing import Dict, List, Set, Tuple, Optional, Any
 
-from tree_sitter import Parser, Node
+from tree_sitter import Node, Parser
 
-from .fingerprints import get_language, parse_file_once, stable_hash
+from .fingerprints import get_language
 
 logger = logging.getLogger(__name__)
 
@@ -26,36 +25,36 @@ logger = logging.getLogger(__name__)
 # Maps AST node types to canonical semantic types for Type 4 matching
 # ---------------------------------------------------------------------------
 
-SEMANTIC_NODE_MAP: Dict[str, str] = {
+SEMANTIC_NODE_MAP: dict[str, str] = {
     # Loops - all canonicalize to LOOP
     'for_statement': 'LOOP',
     'while_statement': 'LOOP',
-    
+
     # Collection comprehensions - canonicalize to COLLECTION
     'list_comprehension': 'COLLECTION',
     'generator_expression': 'COLLECTION',
     'set_comprehension': 'COLLECTION',
     'dict_comprehension': 'DICT_COLLECTION',
-    
+
     # String formatting - canonicalize to STRING_FORMAT
     'fstring': 'STRING_FORMAT',
     'string': 'STRING_FORMAT',  # tree-sitter uses 'string' for both f-string and regular
-    
+
     # Lambda - canonicalize to FUNCTION_LITERAL
     'lambda': 'FUNCTION_LITERAL',
-    
+
     # Augmented assignment - canonicalize to ASSIGN
     'augmented_assignment': 'ASSIGN',
-    
+
     # Comparison operators - normalize to canonical comparison
     'comparison_operator': 'COMPARISON',
-    
+
     # Boolean operations - normalize to canonical form
     'boolean_operator': 'BOOLEAN_OP',
 }
 
 # Node types that should be ignored entirely (comments, whitespace, etc.)
-IGNORABLE_NODE_TYPES: Set[str] = {
+IGNORABLE_NODE_TYPES: set[str] = {
     'comment', 'integer', 'float', 'true', 'false', 'none',
     'line_continue', 'indent', 'dedent', 'NEWLINE', 'END_MARKER',
 }
@@ -66,11 +65,11 @@ def _semantic_node_type(node: Node) -> str:
     # First check our semantic map
     if node.type in SEMANTIC_NODE_MAP:
         return SEMANTIC_NODE_MAP[node.type]
-    
+
     # Then check if it's ignorable
     if node.type in IGNORABLE_NODE_TYPES:
         return ''
-    
+
     # Return the node type itself for unknown types
     return node.type
 
@@ -80,7 +79,7 @@ def _semantic_node_type(node: Node) -> str:
 # Walks the AST and emits a canonical string representation
 # ---------------------------------------------------------------------------
 
-def _get_child_by_type(node: Node, child_type: str) -> Optional[Node]:
+def _get_child_by_type(node: Node, child_type: str) -> Node | None:
     """Get the first child of a specific type."""
     for child in node.children:
         if child.type == child_type:
@@ -96,18 +95,18 @@ def _get_source_text(node: Node, source_bytes: bytes) -> str:
 def _emit_canonical(node: Node, source_bytes: bytes, depth: int = 0) -> str:
     """
     Emit a canonical string representation of an AST subtree.
-    
+
     Two semantically equivalent code snippets should produce identical canonical strings.
     """
     if depth > 50:  # Prevent runaway recursion
         return '<RECURSION_LIMIT>'
-    
+
     sem_type = _semantic_node_type(node)
-    
+
     # If this node maps to a semantic type, emit that instead of the raw type
     if sem_type and sem_type not in (node.type,):
         return _emit_semantic_node(node, source_bytes, sem_type, depth)
-    
+
     # Otherwise, recursively emit children joined
     parts = []
     for child in node.children:
@@ -116,17 +115,17 @@ def _emit_canonical(node: Node, source_bytes: bytes, depth: int = 0) -> str:
         child_text = _emit_canonical(child, source_bytes, depth + 1)
         if child_text:
             parts.append(child_text)
-    
+
     # For leaf nodes without semantic mapping, emit the type
     if not parts:
         return f'[{node.type}]'
-    
+
     return ''.join(parts)
 
 
 def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: int) -> str:
     """Emit a canonical representation for a semantically-mapped node type."""
-    
+
     if sem_type == 'LOOP':
         # Both for and while loops canonicalize to LOOP(ITERABLE)
         iterable = ''
@@ -139,12 +138,12 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
             if cond_node:
                 iterable = _emit_canonical(cond_node, source_bytes, depth + 1)
         return f'LOOP({iterable})'
-    
+
     elif sem_type == 'COLLECTION':
         # List comprehensions, generator expressions, list(map(...))
         element = ''
         iter_src = ''
-        
+
         if node.type == 'list_comprehension':
             # Find element (the expression before 'for') - it's the first non-bracket child
             for child in node.children:
@@ -202,14 +201,14 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
                                             elem = _emit_canonical(inner_args.children[0], source_bytes, depth + 1)
                                             iterable = _emit_canonical(inner_args.children[1], source_bytes, depth + 1)
                                             return f'COLLECT({elem}, {iterable})'
-        
+
         return f'COLLECT({element}, {iter_src})'
-    
+
     elif sem_type == 'DICT_COLLECTION':
         key_expr = ''
         val_expr = ''
         iter_src = ''
-        
+
         pair_node = _get_child_by_type(node, 'pair')
         if pair_node:
             key_node = _get_child_by_type(pair_node, 'key')
@@ -218,16 +217,16 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
                 key_expr = _emit_canonical(key_node, source_bytes, depth + 1)
             if val_node:
                 val_expr = _emit_canonical(val_node, source_bytes, depth + 1)
-        
+
         iter_node = _get_child_by_type(node, 'iterable')
         if iter_node:
             iter_src = _emit_canonical(iter_node, source_bytes, depth + 1)
-        
+
         return f'DICT_COLLECT({key_expr}, {val_expr}, {iter_src})'
-    
+
     elif sem_type == 'STRING_FORMAT':
         parts = []
-        
+
         if node.type in ('fstring', 'string'):
             for child in node.children:
                 if child.type in ('string_content', 'string_start', 'string_end'):
@@ -239,13 +238,13 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
                     for sub in child.children:
                         if sub.type not in ('{', '}'):
                             parts.append(_emit_canonical(sub, source_bytes, depth + 1))
-        
+
         return f'STRING_FORMAT({", ".join(parts)})'
-    
+
     elif sem_type == 'FUNCTION_LITERAL':
         params = ''
         body = ''
-        
+
         param_list = _get_child_by_type(node, 'parameters')
         if param_list:
             param_parts = []
@@ -253,18 +252,18 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
                 if child.type == 'identifier':
                     param_parts.append('VAR')
             params = ', '.join(param_parts)
-        
+
         body_node = _get_child_by_type(node, 'body')
         if body_node:
             body = _emit_canonical(body_node, source_bytes, depth + 1)
-        
+
         return f'FUNC_LIT({params}, {body})'
-    
+
     elif sem_type == 'ASSIGN':
         target = ''
         op = ''
         value = ''
-        
+
         for child in node.children:
             if child.type == 'variable':
                 target = _emit_canonical(child, source_bytes, depth + 1)
@@ -272,14 +271,14 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
                 op = _get_source_text(child, source_bytes)
             elif child.type in ('integer', 'identifier', 'call'):
                 value = _emit_canonical(child, source_bytes, depth + 1)
-        
+
         return f'ASSIGN({target}, {op}, {value})'
-    
+
     elif sem_type == 'COMPARISON':
         left = ''
         right = ''
         ops = []
-        
+
         for child in node.children:
             text = _get_source_text(child, source_bytes)
             if text in ('==', '!=', '<', '>', '<=', '>=', 'in', 'not in', 'is', 'is not'):
@@ -288,9 +287,9 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
                 left = _emit_canonical(child, source_bytes, depth + 1)
             else:
                 right = _emit_canonical(child, source_bytes, depth + 1)
-        
+
         return f'COMPARE({left}, {", ".join(ops)}, {right})'
-    
+
     elif sem_type == 'BOOLEAN_OP':
         ops = []
         operands = []
@@ -299,11 +298,11 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
                 ops.append(child.type)
             else:
                 operands.append(_emit_canonical(child, source_bytes, depth + 1))
-        
+
         if 'not' in ops:
             return f'BOOL_OP(NOT, {operands[0]})'
         return f'BOOL_OP({", ".join(operands)})'
-    
+
     # Fallback: emit semantic type with children
     parts = []
     for child in node.children:
@@ -311,17 +310,17 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
             child_text = _emit_canonical(child, source_bytes, depth + 1)
             if child_text:
                 parts.append(child_text)
-    
+
     return f'{sem_type}({", ".join(parts)})'
 
 
 def ast_canonicalize(source: str, lang_code: str = 'python') -> str:
     """
     AST-based semantic canonicalization.
-    
+
     Parses the source code with tree-sitter and emits a canonical string representation
     where semantically equivalent code produces identical output.
-    
+
     This is the core of Approach B - replacing the old regex-based canonicalization.
     """
     try:
@@ -329,23 +328,23 @@ def ast_canonicalize(source: str, lang_code: str = 'python') -> str:
     except Exception:
         logger.warning("Failed to parse source for AST canonicalization (lang=%s)", lang_code, exc_info=True)
         return source
-    
+
     return _emit_canonical(tree.root_node, source_bytes)
 
 
 def ast_canonicalize_with_identifiers(source: str, lang_code: str = 'python') -> str:
     """
     Full canonicalization: AST-based semantic normalization + identifier normalization.
-    
+
     This produces the most aggressive normalization where two files with identical
     output differ only in naming and code style, not semantics.
     """
     # First apply AST-based semantic canonicalization
     semantic_result = ast_canonicalize(source, lang_code)
-    
+
     # Then normalize identifiers
     normalized = normalize_identifiers(semantic_result, lang_code)
-    
+
     return normalized
 
 
@@ -358,7 +357,7 @@ def ast_canonicalize_with_identifiers(source: str, lang_code: str = 'python') ->
 # Identifier normalization (Type 2)
 # ---------------------------------------------------------------------------
 
-def _collect_identifiers(root_node: Node, source_bytes: bytes) -> List[Tuple[int, int, str]]:
+def _collect_identifiers(root_node: Node, source_bytes: bytes) -> list[tuple[int, int, str]]:
     """Collect identifier nodes from AST with (start_byte, end_byte, name)."""
     identifiers = []
 
@@ -374,7 +373,7 @@ def _collect_identifiers(root_node: Node, source_bytes: bytes) -> List[Tuple[int
     return identifiers
 
 
-def _assign_placeholders(identifiers: List[Tuple[int, int, str]]) -> Dict[str, str]:
+def _assign_placeholders(identifiers: list[tuple[int, int, str]]) -> dict[str, str]:
     """
     Map identifier names to placeholders, ordered by first occurrence in file.
 
@@ -382,7 +381,7 @@ def _assign_placeholders(identifiers: List[Tuple[int, int, str]]) -> Dict[str, s
     This keeps the hash stable even when the same name is used in different
     contexts (e.g., 'data' as both variable and parameter).
     """
-    seen: Dict[str, int] = {}
+    seen: dict[str, int] = {}
     for _, _, name in identifiers:
         if name not in seen:
             seen[name] = len(seen)
@@ -391,8 +390,8 @@ def _assign_placeholders(identifiers: List[Tuple[int, int, str]]) -> Dict[str, s
 
 def _replace_identifiers(
     source_bytes: bytes,
-    identifiers: List[Tuple[int, int, str]],
-    placeholders: Dict[str, str],
+    identifiers: list[tuple[int, int, str]],
+    placeholders: dict[str, str],
 ) -> str:
     """
     Replace identifiers in source with their placeholders.
@@ -460,7 +459,7 @@ def _normalize_identifiers_from_tree(tree, source_bytes: bytes, fallback: str) -
     return _replace_identifiers(source_bytes, identifiers, placeholders)
 
 
-def get_identifier_renames(source_a: str, source_b: str, lang_code: str = 'python') -> List[Dict]:
+def get_identifier_renames(source_a: str, source_b: str, lang_code: str = 'python') -> list[dict]:
     """
     Find specific identifier renames between two files.
 
@@ -507,7 +506,7 @@ def get_identifier_renames(source_a: str, source_b: str, lang_code: str = 'pytho
     return renames
 
 
-def _find_line_for_name(lines: List[str], name: str) -> int:
+def _find_line_for_name(lines: list[str], name: str) -> int:
     """Find the first line (1-indexed) containing the given name as a word."""
     pattern = re.compile(r'\b' + re.escape(name) + r'\b')
     for i, line in enumerate(lines):
@@ -580,7 +579,7 @@ def _normalize_string_formatting(code: str) -> str:
         fmt_str = re.sub(r'{.*?}', '{}', content)
         if placeholders:
             return '"{}".format({})'.format(fmt_str, ', '.join(placeholders))
-        return '"{}"'.format(content)
+        return f'"{content}"'
 
     return fstring.sub(f_to_format, code)
 
@@ -766,7 +765,7 @@ def canonicalize_full(source: str, lang_code: str = 'python', use_ast: bool = Tr
 # Helper: parse a string (not file path) with tree-sitter
 # ---------------------------------------------------------------------------
 
-def parse_file_once_from_string(source: str, lang_code: str = 'python') -> Tuple:
+def parse_file_once_from_string(source: str, lang_code: str = 'python') -> tuple:
     """
     Parse source code string with tree-sitter.
 

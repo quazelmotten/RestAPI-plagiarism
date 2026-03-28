@@ -5,29 +5,35 @@ Factory functions for creating service instances with proper dependencies.
 Uses singleton patterns for shared resources (Redis client, etc.).
 """
 
+from __future__ import annotations
+
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 import redis
+from plagiarism_core.analyzer import Analyzer as CoreAnalyzer
+from shared.interfaces import CandidateIndex, FingerprintCache, LockManager, TaskRepository
 
 from worker.config import settings as worker_settings
-from shared.interfaces import (
-    FingerprintCache,
-    CandidateIndex,
-    TaskRepository,
-    LockManager
-)
-from worker.infrastructure.redis_cache import RedisFingerprintCache
 from worker.infrastructure.inverted_index import RedisInvertedIndex
 from worker.infrastructure.lock_manager import RedisLockManager
 from worker.infrastructure.postgres_repository import PostgresRepository
-from plagiarism_core.analyzer import Analyzer as CoreAnalyzer
+from worker.infrastructure.redis_cache import RedisFingerprintCache
+
+if TYPE_CHECKING:
+    from worker.services.analysis_service import AnalysisService
+    from worker.services.candidate_service import CandidateService
+    from worker.services.fingerprint_service import FingerprintService
+    from worker.services.indexing_service import IndexingService
+    from worker.services.result_service import ResultService
+    from worker.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
 
 
-@lru_cache()
+@lru_cache
 def get_redis_client() -> redis.Redis:
     """Get or create singleton Redis client."""
     client = redis.Redis(
@@ -41,11 +47,13 @@ def get_redis_client() -> redis.Redis:
         socket_timeout=5,
         health_check_interval=30,
     )
-    logger.info(f"Redis client initialized for {worker_settings.redis_host}:{worker_settings.redis_port}")
+    logger.info(
+        f"Redis client initialized for {worker_settings.redis_host}:{worker_settings.redis_port}"
+    )
     return client
 
 
-@lru_cache()
+@lru_cache
 def get_cache() -> FingerprintCache:
     """Get or create singleton fingerprint cache."""
     client = get_redis_client()
@@ -54,19 +62,18 @@ def get_cache() -> FingerprintCache:
     return cache
 
 
-@lru_cache()
+@lru_cache
 def get_index() -> CandidateIndex:
     """Get or create singleton inverted index."""
     client = get_redis_client()
     index = RedisInvertedIndex(
-        client,
-        min_overlap_threshold=worker_settings.inverted_index_min_overlap_threshold
+        client, min_overlap_threshold=worker_settings.inverted_index_min_overlap_threshold
     )
     logger.info("Inverted index initialized")
     return index
 
 
-@lru_cache()
+@lru_cache
 def get_lock_manager() -> LockManager:
     """Get or create singleton lock manager."""
     client = get_redis_client()
@@ -75,28 +82,24 @@ def get_lock_manager() -> LockManager:
     return lock_mgr
 
 
-@lru_cache()
+@lru_cache
 def get_repository() -> TaskRepository:
     """Get or create singleton task repository."""
-    from worker.database import engine
-    # Ensure models are created
-    from worker.models import Base
-    Base.metadata.create_all(bind=engine)
 
     repo = PostgresRepository()
-    
+
     # Attach Redis client for progress publishing (non-critical)
     try:
         redis_client = get_redis_client()
         repo.redis_client = redis_client
     except Exception as e:
         logger.warning("Redis not available for progress publishing: %s", e)
-    
+
     logger.info("Task repository initialized")
     return repo
 
 
-@lru_cache()
+@lru_cache
 def get_analyzer() -> CoreAnalyzer:
     """Get or create singleton core analyzer."""
     analyzer = CoreAnalyzer()
@@ -104,7 +107,7 @@ def get_analyzer() -> CoreAnalyzer:
     return analyzer
 
 
-@lru_cache()
+@lru_cache
 def get_analysis_executor() -> ThreadPoolExecutor:
     """Get or create singleton thread pool for analysis and message processing."""
     executor = ThreadPoolExecutor(max_workers=worker_settings.worker_concurrency)
@@ -112,45 +115,50 @@ def get_analysis_executor() -> ThreadPoolExecutor:
     return executor
 
 
-def get_fingerprint_service() -> 'FingerprintService':
+def get_fingerprint_service() -> FingerprintService:
     """Create fingerprint service with dependencies."""
     from worker.services.fingerprint_service import FingerprintService
+
     cache = get_cache()
     return FingerprintService(cache)
 
 
-def get_indexing_service() -> 'IndexingService':
+def get_indexing_service() -> IndexingService:
     """Create indexing service with dependencies."""
     from worker.services.indexing_service import IndexingService
+
     cache = get_cache()
     index = get_index()
     fingerprint_svc = get_fingerprint_service()
     return IndexingService(index, cache, fingerprint_svc)
 
 
-def get_candidate_service() -> 'CandidateService':
+def get_candidate_service() -> CandidateService:
     """Create candidate service with dependencies."""
     from worker.services.candidate_service import CandidateService
+
     index = get_index()
     return CandidateService(index)
 
 
-def get_analysis_service() -> 'AnalysisService':
+def get_analysis_service() -> AnalysisService:
     """Create analysis service with dependencies."""
     from worker.services.analysis_service import AnalysisService
+
     cache = get_cache()
     executor = get_analysis_executor()
     return AnalysisService(cache, executor)
 
 
-def get_result_service() -> 'ResultService':
+def get_result_service() -> ResultService:
     """Create result service with dependencies."""
     from worker.services.result_service import ResultService
+
     repository = get_repository()
     return ResultService(repository)
 
 
-def get_task_service() -> 'TaskService':
+def get_task_service() -> TaskService:
     """
     Create the main task service (orchestrator) with all dependencies.
 
@@ -171,7 +179,7 @@ def get_task_service() -> 'TaskService':
         candidate_service=candidate_svc,
         analysis_service=analysis_svc,
         result_service=result_svc,
-        repository=repository
+        repository=repository,
     )
 
     logger.info("Task service initialized with all dependencies")

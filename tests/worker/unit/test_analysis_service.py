@@ -3,11 +3,12 @@ Unit tests for AnalysisService.
 Tests plagiarism analysis with cache integration and timeout support.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
 from concurrent.futures import TimeoutError
-from worker.services.analysis_service import AnalysisService
+from unittest.mock import MagicMock, patch
+
+import pytest
 from shared.interfaces import FingerprintCache
+from worker.services.analysis_service import AnalysisService
 
 
 class TestAnalysisService:
@@ -34,44 +35,40 @@ class TestAnalysisService:
         future.result.return_value = (0.8, [], None)  # (ast_sim, matches, _)
         return AnalysisService(mock_cache, analysis_executor=executor), future, executor
 
-    def test_analyze_pair_with_cache_calls_analyzer_analyze_cached(
-        self, mock_cache
-    ):
+    def test_analyze_pair_with_cache_calls_analyzer_analyze_cached(self, mock_cache):
         """Test analyze_pair uses cached fingerprints via analyzer."""
-        with patch('worker.services.analysis_service.CoreAnalyzer') as MockAnalyzer:
-            analyzer = MockAnalyzer.return_value
+        with patch("worker.services.analysis_service.CoreAnalyzer") as mock_analyzer:
+            analyzer = mock_analyzer.return_value
             analyzer.analyze_cached.return_value = (0.75, [], None)
             service = AnalysisService(mock_cache, analysis_executor=None)
 
             result = service.analyze_pair(
-                file1_path='/f1.py',
-                file2_path='/f2.py',
-                language='python',
-                file1_hash='h1',
-                file2_hash='h2',
+                file1_path="/f1.py",
+                file2_path="/f2.py",
+                language="python",
+                file1_hash="h1",
+                file2_hash="h2",
             )
 
-            assert result['similarity_ratio'] == 0.75
+            assert result["similarity_ratio"] == 0.75
             analyzer.analyze_cached.assert_called_once()
             call_kwargs = analyzer.analyze_cached.call_args[1]
-            assert call_kwargs['file1_path'] == '/f1.py'
-            assert call_kwargs['file2_path'] == '/f2.py'
-            assert call_kwargs['get_fingerprints'] == service._get_fingerprints
-            assert call_kwargs['get_ast_hashes'] == service._get_ast_hashes
-            assert call_kwargs['cache_fingerprints'] == service._cache_fingerprints
-            assert call_kwargs['language'] == 'python'
+            assert call_kwargs["file1_path"] == "/f1.py"
+            assert call_kwargs["file2_path"] == "/f2.py"
+            assert call_kwargs["get_fingerprints"] == service._get_fingerprints
+            assert call_kwargs["get_ast_hashes"] == service._get_ast_hashes
+            assert call_kwargs["cache_fingerprints"] == service._cache_fingerprints
+            assert call_kwargs["language"] == "python"
 
     def test_analyze_pair_with_executor_uses_timeout(self, service_async):
         """Test analyze_pair submits to executor and waits with timeout."""
         service, future, executor = service_async
 
-        result = service.analyze_pair(
-            '/f1.py', '/f2.py', 'python', 'h1', 'h2', timeout=30
-        )
+        result = service.analyze_pair("/f1.py", "/f2.py", "python", "h1", "h2", timeout=30)
 
         executor.submit.assert_called_once()
         future.result.assert_called_once_with(timeout=30)
-        assert result['similarity_ratio'] == 0.8
+        assert result["similarity_ratio"] == 0.8
 
     def test_analyze_pair_timeout_raises(self, service_async):
         """Test timeout causes cancellation and raises TimeoutError."""
@@ -79,75 +76,70 @@ class TestAnalysisService:
         future.result.side_effect = TimeoutError()
 
         with pytest.raises(TimeoutError) as exc_info:
-            service.analyze_pair('/f1.py', '/f2.py', 'python', 'h1', 'h2', timeout=10)
+            service.analyze_pair("/f1.py", "/f2.py", "python", "h1", "h2", timeout=10)
 
         assert "timed out" in str(exc_info.value)
         future.cancel.assert_called_once()
 
     def test_analyze_pair_full_without_cache(self, mock_cache):
         """Test analyze_pair_full performs full analysis bypassing cache."""
-        with patch('worker.services.analysis_service.CoreAnalyzer') as MockAnalyzer:
-            analyzer = MockAnalyzer.return_value
+        with patch("worker.services.analysis_service.CoreAnalyzer") as mock_analyzer:
+            analyzer = mock_analyzer.return_value
             # Simulate full analysis result
             mock_result = MagicMock()
             mock_result.similarity_ratio = 0.9
             mock_result.matches = [
-                MagicMock(file1={'start_line': 1}, file2={'start_line': 2}, kgram_count=5)
+                MagicMock(file1={"start_line": 1}, file2={"start_line": 2}, kgram_count=5)
             ]
             analyzer.analyze.return_value = mock_result
             service = AnalysisService(mock_cache, analysis_executor=None)
 
-            result = service.analyze_pair_full(
-                '/f1.py', '/f2.py', 'python', timeout=300
-            )
+            result = service.analyze_pair_full("/f1.py", "/f2.py", "python", timeout=300)
 
-            assert result['similarity_ratio'] == 0.9
-            assert len(result['matches']) == 1
-            analyzer.analyze.assert_called_once_with(
-                '/f1.py', '/f2.py', 'python'
-            )
+            assert result["similarity_ratio"] == 0.9
+            assert len(result["matches"]) == 1
+            analyzer.analyze.assert_called_once_with("/f1.py", "/f2.py", "python")
 
     def test_generate_fingerprints_creates_and_returns_data(self, service_sync):
         """Test generate_fingerprints returns structured fingerprint data."""
-        with patch('plagiarism_core.fingerprints.tokenize_with_tree_sitter') as mock_tokenize, \
-             patch('plagiarism_core.fingerprints.compute_fingerprints') as mock_compute, \
-             patch('plagiarism_core.fingerprints.winnow_fingerprints') as mock_winnow, \
-             patch('plagiarism_core.ast_hash.extract_ast_hashes') as mock_ast:
-
-            mock_tokenize.return_value = [
-                {'type': 'def', 'start': (0,0), 'end': (0,3)}
-            ]
-            raw_fps = [{'hash': 1, 'start': (0,0), 'end': (1,0)}]
+        with (
+            patch("plagiarism_core.fingerprints.tokenize_with_tree_sitter") as mock_tokenize,
+            patch("plagiarism_core.fingerprints.compute_fingerprints") as mock_compute,
+            patch("plagiarism_core.fingerprints.winnow_fingerprints") as mock_winnow,
+            patch("plagiarism_core.ast_hash.extract_ast_hashes") as mock_ast,
+        ):
+            mock_tokenize.return_value = [{"type": "def", "start": (0, 0), "end": (0, 3)}]
+            raw_fps = [{"hash": 1, "start": (0, 0), "end": (1, 0)}]
             mock_compute.return_value = raw_fps
-            fps = [{'hash': 1, 'start': [0,0], 'end': [1,0]}]
+            fps = [{"hash": 1, "start": [0, 0], "end": [1, 0]}]
             mock_winnow.return_value = fps
             mock_ast.return_value = [100, 200]
 
-            result = service_sync.generate_fingerprints('/f.py', 'python')
+            result = service_sync.generate_fingerprints("/f.py", "python")
 
-            assert result['file'] == '/f.py'
-            assert result['language'] == 'python'
-            assert result['fingerprints'] == fps
-            assert result['ast_hashes'] == [100, 200]
-            assert result['token_count'] == 1
-            assert result['fingerprint_count'] == 1
+            assert result["file"] == "/f.py"
+            assert result["language"] == "python"
+            assert result["fingerprints"] == fps
+            assert result["ast_hashes"] == [100, 200]
+            assert result["token_count"] == 1
+            assert result["fingerprint_count"] == 1
 
     def test_cache_helpers_get_and_cache(self, service_sync, mock_cache):
         """Test cache helper methods use batch_get/batch_cache."""
         # Test _get_fingerprints
-        mock_cache.batch_get.return_value = {'k1': {'fingerprints': [{'hash': 1}]}}
-        fps = service_sync._get_fingerprints('k1')
-        assert fps == [{'hash': 1}]
-        mock_cache.batch_get.assert_called_with(['k1'])
+        mock_cache.batch_get.return_value = {"k1": {"fingerprints": [{"hash": 1}]}}
+        fps = service_sync._get_fingerprints("k1")
+        assert fps == [{"hash": 1}]
+        mock_cache.batch_get.assert_called_with(["k1"])
 
         # Test _get_ast_hashes
-        mock_cache.batch_get.return_value = {'k1': {'ast_hashes': [100]}}
-        ast = service_sync._get_ast_hashes('k1')
+        mock_cache.batch_get.return_value = {"k1": {"ast_hashes": [100]}}
+        ast = service_sync._get_ast_hashes("k1")
         assert ast == [100]
 
         # Test _cache_fingerprints
-        service_sync._cache_fingerprints('k1', [{'hash': 1}], [100])
-        mock_cache.batch_cache.assert_called_with([('k1', [{'hash': 1}], [100])])
+        service_sync._cache_fingerprints("k1", [{"hash": 1}], [100])
+        mock_cache.batch_cache.assert_called_with([("k1", [{"hash": 1}], [100])])
 
     def test_shutdown_does_not_shut_down_shared_executor(self):
         """Test shutdown is a no-op since executor is managed externally."""

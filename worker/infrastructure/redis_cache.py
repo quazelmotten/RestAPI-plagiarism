@@ -6,11 +6,10 @@ Only handles caching - no analysis logic, no similarity calculations.
 
 import json
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
 
 import redis
 from redis.exceptions import RedisError
-
 from shared.interfaces import FingerprintCache
 
 logger = logging.getLogger(__name__)
@@ -37,8 +36,8 @@ class RedisFingerprintCache(FingerprintCache):
     def cache_fingerprints(
         self,
         file_hash: str,
-        fingerprints: List[Dict[str, Any]],
-        ast_hashes: List[int]
+        fingerprints: list[dict[str, Any]],
+        ast_hashes: list[int]
     ) -> bool:
         """
         Cache fingerprints and AST hashes for a file.
@@ -91,7 +90,7 @@ class RedisFingerprintCache(FingerprintCache):
             logger.warning(f"Failed to cache fingerprints for {file_hash[:16]}...: {e}")
             return False
 
-    def get_fingerprints(self, file_hash: str) -> Optional[List[Dict[str, Any]]]:
+    def get_fingerprints(self, file_hash: str) -> list[dict[str, Any]] | None:
         """
         Get cached fingerprints for a file.
 
@@ -119,7 +118,7 @@ class RedisFingerprintCache(FingerprintCache):
             logger.warning(f"Failed to get fingerprints for {file_hash[:16]}...: {e}")
             return None
 
-    def get_ast_hashes(self, file_hash: str) -> Optional[List[int]]:
+    def get_ast_hashes(self, file_hash: str) -> list[int] | None:
         """
         Get cached AST hashes for a file.
 
@@ -155,8 +154,8 @@ class RedisFingerprintCache(FingerprintCache):
 
     def batch_get(
         self,
-        file_hashes: List[str]
-    ) -> Dict[str, Dict[str, Any]]:
+        file_hashes: list[str]
+    ) -> dict[str, dict[str, Any]]:
         """
         Batch-fetch fingerprints and AST hashes.
 
@@ -217,7 +216,7 @@ class RedisFingerprintCache(FingerprintCache):
 
     def batch_cache(
         self,
-        items: List[Tuple[str, List[Dict[str, Any]], List[int]]]
+        items: list[tuple[str, list[dict[str, Any]], list[int]]]
     ) -> None:
         """
         Batch-cache fingerprints and AST hashes.

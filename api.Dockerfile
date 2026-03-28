@@ -36,4 +36,5 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8000
 
-ENTRYPOINT ["uvicorn", "app:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+# Production mode - no reload
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

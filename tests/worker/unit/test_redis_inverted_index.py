@@ -20,17 +20,17 @@ class TestRedisInvertedIndex:
         """Test that adding fingerprints updates both hash->files and file->hashes."""
         file_hash = "file123"
         fingerprints = [
-            {'hash': 'fp1', 'start': (0, 0), 'end': (1, 0)},
-            {'hash': 'fp2', 'start': (2, 0), 'end': (3, 0)}
+            {"hash": "fp1", "start": (0, 0), "end": (1, 0)},
+            {"hash": "fp2", "start": (2, 0), "end": (3, 0)},
         ]
         language = "python"
 
         index.add_file_fingerprints(file_hash, fingerprints, language)
 
         # Check both directions
-        hash_key1 = f"inv:hash:python:fp1"
-        hash_key2 = f"inv:hash:python:fp2"
-        file_key = f"inv:file:python:file123"
+        hash_key1 = "inv:hash:python:fp1"
+        hash_key2 = "inv:hash:python:fp2"
+        file_key = "inv:file:python:file123"
 
         assert file_hash in redis_test_instance.smembers(hash_key1)
         assert file_hash in redis_test_instance.smembers(hash_key2)
@@ -47,12 +47,16 @@ class TestRedisInvertedIndex:
     def test_find_candidates_returns_jaccard_similarity(self, index, redis_test_instance):
         """Test that find_candidates returns Jaccard similarity scores."""
         # Prepare: add two files with overlapping fingerprints
-        index.add_file_fingerprints("file_a", [{'hash': 'h1'}, {'hash': 'h2'}, {'hash': 'h3'}], "py")
-        index.add_file_fingerprints("file_b", [{'hash': 'h2'}, {'hash': 'h3'}, {'hash': 'h4'}], "py")
-        index.add_file_fingerprints("file_c", [{'hash': 'h1'}], "py")
+        index.add_file_fingerprints(
+            "file_a", [{"hash": "h1"}, {"hash": "h2"}, {"hash": "h3"}], "py"
+        )
+        index.add_file_fingerprints(
+            "file_b", [{"hash": "h2"}, {"hash": "h3"}, {"hash": "h4"}], "py"
+        )
+        index.add_file_fingerprints("file_c", [{"hash": "h1"}], "py")
 
         # Query for file_a's fingerprints
-        hash_values = ['h1', 'h2', 'h3']
+        hash_values = ["h1", "h2", "h3"]
         result = index.find_candidates(hash_values, "py")
 
         # Note: find_candidates returns self as well if file is indexed; that's OK,
@@ -61,17 +65,21 @@ class TestRedisInvertedIndex:
         # file_b shares h2 and h3 -> 2 overlaps. file_b has 3 unique hashes. query has 3. Jaccard = 2/(3+3-2)=0.5
         assert abs(result.get("file_b", 0) - 0.5) < 0.01
         # file_c shares h1 only -> 1 overlap, file_c has 1. Jaccard = 1/(3+1-1)=0.333
-        assert abs(result.get("file_c", 0) - (1/3.0)) < 0.01
+        assert abs(result.get("file_c", 0) - (1 / 3.0)) < 0.01
 
     def test_find_candidates_filters_by_min_overlap_threshold(self, index, redis_test_instance):
         """Test that candidates below threshold are filtered out."""
         # File with many fingerprints, threshold 15% => need >=15 overlaps for 100 query hashes
         # We'll create candidate with only 10 overlaps
-        index.add_file_fingerprints("query_file", [{'hash': f'q{i}'} for i in range(100)], "py")
+        index.add_file_fingerprints("query_file", [{"hash": f"q{i}"} for i in range(100)], "py")
         # Candidate shares only first 10
-        index.add_file_fingerprints("candidate", [{'hash': f'q{i}'} for i in range(10)] + [{'hash': f'unique{i}'} for i in range(90)], "py")
+        index.add_file_fingerprints(
+            "candidate",
+            [{"hash": f"q{i}"} for i in range(10)] + [{"hash": f"unique{i}"} for i in range(90)],
+            "py",
+        )
 
-        query_hashes = [f'q{i}' for i in range(100)]
+        query_hashes = [f"q{i}" for i in range(100)]
         result = index.find_candidates(query_hashes, "py")
 
         assert "candidate" not in result
@@ -85,7 +93,7 @@ class TestRedisInvertedIndex:
         """Test get_file_fingerprints returns list of hash strings."""
         file_hash = "file123"
         language = "python"
-        index.add_file_fingerprints(file_hash, [{'hash': 'fp1'}, {'hash': 'fp2'}], language)
+        index.add_file_fingerprints(file_hash, [{"hash": "fp1"}, {"hash": "fp2"}], language)
 
         hashes = index.get_file_fingerprints(file_hash, language)
 
@@ -101,13 +109,13 @@ class TestRedisInvertedIndex:
         """Test that removing a file deletes from inv:hash:* sets and inv:file:* key."""
         file_hash = "file123"
         language = "python"
-        index.add_file_fingerprints(file_hash, [{'hash': 'fp1'}, {'hash': 'fp2'}], language)
+        index.add_file_fingerprints(file_hash, [{"hash": "fp1"}, {"hash": "fp2"}], language)
 
         index.remove_file(file_hash, language)
 
-        hash_key1 = f"inv:hash:python:fp1"
-        hash_key2 = f"inv:hash:python:fp2"
-        file_key = f"inv:file:python:file123"
+        hash_key1 = "inv:hash:python:fp1"
+        hash_key2 = "inv:hash:python:fp2"
+        file_key = "inv:file:python:file123"
         # Candidate should no longer be in hash sets (they may be empty or key deleted)
         # Our remove_file uses SREM, doesn't delete hash keys if they still have other files
         # Since we only had this one file, the sets become empty; but we don't delete hash keys automatically
@@ -125,8 +133,8 @@ class TestRedisInvertedIndex:
 
     def test_get_file_fingerprints_batch_returns_all_at_once(self, index, redis_test_instance):
         """Test batch fetch returns fingerprints for multiple files in one call."""
-        index.add_file_fingerprints("f1", [{'hash': 'a'}, {'hash': 'b'}], "py")
-        index.add_file_fingerprints("f2", [{'hash': 'c'}], "py")
+        index.add_file_fingerprints("f1", [{"hash": "a"}, {"hash": "b"}], "py")
+        index.add_file_fingerprints("f2", [{"hash": "c"}], "py")
 
         result = index.get_file_fingerprints_batch(["f1", "f2", "f3"], "py")
 

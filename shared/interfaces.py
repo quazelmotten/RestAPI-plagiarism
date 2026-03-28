@@ -5,9 +5,7 @@ These protocols define the interfaces that infrastructure components
 must implement. This allows swapping implementations and clean testing.
 """
 
-from typing import Protocol, runtime_checkable, List, Dict, Any, Tuple, Optional
-from pathlib import Path
-
+from typing import Any, Protocol, runtime_checkable
 
 # ============================================================
 # Fingerprint Cache Interface
@@ -20,24 +18,24 @@ class FingerprintCache(Protocol):
     def cache_fingerprints(
         self,
         file_hash: str,
-        fingerprints: List[Dict[str, Any]],
-        ast_hashes: List[int]
+        fingerprints: list[dict[str, Any]],
+        ast_hashes: list[int]
     ) -> bool: ...
 
-    def get_fingerprints(self, file_hash: str) -> Optional[List[Dict[str, Any]]]: ...
+    def get_fingerprints(self, file_hash: str) -> list[dict[str, Any]] | None: ...
 
-    def get_ast_hashes(self, file_hash: str) -> Optional[List[int]]: ...
+    def get_ast_hashes(self, file_hash: str) -> list[int] | None: ...
 
     def has_fingerprints(self, file_hash: str) -> bool: ...
 
     def batch_get(
         self,
-        file_hashes: List[str]
-    ) -> Dict[str, Dict[str, Any]]: ...
+        file_hashes: list[str]
+    ) -> dict[str, dict[str, Any]]: ...
 
     def batch_cache(
         self,
-        items: List[Tuple[str, List[Dict[str, Any]], List[int]]]
+        items: list[tuple[str, list[dict[str, Any]], list[int]]]
     ) -> None: ...
 
 
@@ -52,27 +50,27 @@ class CandidateIndex(Protocol):
     def add_file_fingerprints(
         self,
         file_hash: str,
-        fingerprints: List[Dict[str, Any]],
+        fingerprints: list[dict[str, Any]],
         language: str = "python"
     ) -> None: ...
 
     def find_candidates(
         self,
-        hash_values: List[str],
+        hash_values: list[str],
         language: str = "python"
-    ) -> Dict[str, float]: ...
+    ) -> dict[str, float]: ...
 
     def get_file_fingerprints(
         self,
         file_hash: str,
         language: str = "python"
-    ) -> Optional[List[str]]: ...
+    ) -> list[str] | None: ...
 
     def get_file_fingerprints_batch(
         self,
-        file_hashes: List[str],
+        file_hashes: list[str],
         language: str = "python"
-    ) -> Dict[str, Optional[List[str]]]: ...
+    ) -> dict[str, list[str] | None]: ...
 
     def remove_file(self, file_hash: str, language: str = "python") -> None: ...
 
@@ -85,22 +83,22 @@ class CandidateIndex(Protocol):
 class TaskRepository(Protocol):
     """Repository for task and file persistence."""
 
-    def get_all_files(self, exclude_task_id: Optional[str] = None) -> List[Dict[str, Any]]: ...
+    def get_all_files(self, exclude_task_id: str | None = None) -> list[dict[str, Any]]: ...
 
     def update_task(
         self,
         task_id: str,
         status: str,
-        similarity: Optional[float] = None,
-        matches: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None,
-        total_pairs: Optional[int] = None,
-        processed_pairs: Optional[int] = None
+        similarity: float | None = None,
+        matches: dict[str, Any] | None = None,
+        error: str | None = None,
+        total_pairs: int | None = None,
+        processed_pairs: int | None = None
     ) -> None: ...
 
     def bulk_insert_results(
         self,
-        results: List[Dict[str, Any]]
+        results: list[dict[str, Any]]
     ) -> None: ...
 
     def get_max_similarity(self, task_id: str) -> float: ...

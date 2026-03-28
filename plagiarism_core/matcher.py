@@ -3,10 +3,9 @@ Match detection and fragment building for plagiarism visualization.
 """
 
 import logging
-from typing import List, Dict, Any, Tuple
+from typing import Any
 
 from .models import Match
-from .fingerprints import index_fingerprints
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +16,10 @@ class PairedOccurrence:
         self,
         left_idx: int,
         right_idx: int,
-        left_start: Tuple[int, int],
-        left_end: Tuple[int, int],
-        right_start: Tuple[int, int],
-        right_end: Tuple[int, int],
+        left_start: tuple[int, int],
+        left_end: tuple[int, int],
+        right_start: tuple[int, int],
+        right_end: tuple[int, int],
         fingerprint_hash: int
     ):
         self.left_index = left_idx
@@ -67,9 +66,9 @@ class Fragment:
 
 
 def find_paired_occurrences(
-    index_a: Dict[int, List[Dict[str, Any]]],
-    index_b: Dict[int, List[Dict[str, Any]]]
-) -> List[PairedOccurrence]:
+    index_a: dict[int, list[dict[str, Any]]],
+    index_b: dict[int, list[dict[str, Any]]]
+) -> list[PairedOccurrence]:
     """
     Find all paired occurrences of matching fingerprints between two files.
 
@@ -117,9 +116,9 @@ def find_paired_occurrences(
 
 
 def build_fragments(
-    occurrences: List[PairedOccurrence],
+    occurrences: list[PairedOccurrence],
     minimum_occurrences: int = 1
-) -> List[Fragment]:
+) -> list[Fragment]:
     """
     Build fragments from paired occurrences.
 
@@ -131,10 +130,10 @@ def build_fragments(
 
     occurrences.sort(key=lambda x: (x.left_index, x.right_index))
 
-    fragment_start: Dict[str, Fragment] = {}
-    fragment_end: Dict[str, Fragment] = {}
+    fragment_start: dict[str, Fragment] = {}
+    fragment_end: dict[str, Fragment] = {}
 
-    for i, occ in enumerate(occurrences):
+    for _i, occ in enumerate(occurrences):
         start_key = f"{occ.left_index}|{occ.right_index}"
         end_key = f"{occ.left_index + 1}|{occ.right_index + 1}"
 
@@ -182,7 +181,7 @@ def build_fragments(
     return merged
 
 
-def squash_fragments(fragments: List[Fragment]) -> List[Fragment]:
+def squash_fragments(fragments: list[Fragment]) -> list[Fragment]:
     """
     Remove fragments that are contained within other fragments.
     """
@@ -219,7 +218,7 @@ def squash_fragments(fragments: List[Fragment]) -> List[Fragment]:
     return result
 
 
-def matches_from_fragments(fragments: List[Fragment]) -> List[Match]:
+def matches_from_fragments(fragments: list[Fragment]) -> list[Match]:
     """
     Convert fragments to Match objects.
     """
@@ -233,7 +232,7 @@ def matches_from_fragments(fragments: List[Fragment]) -> List[Match]:
     return matches
 
 
-def merge_adjacent_matches(matches: List[Match], gap: int = 2) -> List[Match]:
+def merge_adjacent_matches(matches: list[Match], gap: int = 2) -> list[Match]:
     """
     Merge matches that are adjacent or overlapping in line ranges.
 

@@ -8,33 +8,30 @@ Measures:
   - Distribution: similarity score buckets for both methods
 """
 
-import os
-import sys
-import time
-import statistics
-import random
 import argparse
+import os
+import random
+import statistics
+import sys
 import tempfile
-import shutil
-from pathlib import Path
+import time
 from itertools import combinations
-from collections import Counter
+from pathlib import Path
 
 # Setup paths
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, root_dir)
-sys.path.insert(0, os.path.join(root_dir, 'worker'))
-sys.path.insert(0, os.path.join(root_dir, 'tests', 'plagiarism'))
+sys.path.insert(0, os.path.join(root_dir, "worker"))
+sys.path.insert(0, os.path.join(root_dir, "tests", "plagiarism"))
 
-from cli.analyzer import (
-    tokenize_with_tree_sitter,
-    compute_fingerprints,
-    winnow_fingerprints,
-    extract_ast_hashes,
+from cli.analyzer import (  # noqa: E402
     ast_similarity,
-    analyze_plagiarism,
+    compute_fingerprints,
+    extract_ast_hashes,
+    tokenize_with_tree_sitter,
+    winnow_fingerprints,
 )
-from py_clone_generator import CloneGenerator
+from py_clone_generator import CloneGenerator  # noqa: E402
 
 DATASET_PATH = "/home/bobbybrown/RestAPI-plagiarism/dataset"
 
@@ -52,16 +49,16 @@ def get_dataset_files(max_files=None, min_size=50):
 
 def prepare_file(path):
     """Extract fingerprints and AST hashes for a file."""
-    tokens = tokenize_with_tree_sitter(path, 'python')
+    tokens = tokenize_with_tree_sitter(path, "python")
     fps = winnow_fingerprints(compute_fingerprints(tokens))
-    ast_hashes = extract_ast_hashes(path, 'python', min_depth=3)
+    ast_hashes = extract_ast_hashes(path, "python", min_depth=3)
     return fps, ast_hashes
 
 
 def fp_similarity(fps_a, fps_b):
     """New method: Jaccard on fingerprint hash sets."""
-    ha = {str(fp['hash']) for fp in fps_a}
-    hb = {str(fp['hash']) for fp in fps_b}
+    ha = {str(fp["hash"]) for fp in fps_a}
+    hb = {str(fp["hash"]) for fp in fps_b}
     inter = len(ha & hb)
     union = len(ha | hb)
     return inter / union if union else 0.0
@@ -105,10 +102,15 @@ def benchmark_speed(files, n_pairs, seed=42):
         file_fps[f] = fps
         file_ast[f] = ast
     index_time = time.perf_counter() - t0
-    print(f"  Indexing: {index_time:.2f}s ({len(files)/index_time:.0f} files/sec)")
+    print(f"  Indexing: {index_time:.2f}s ({len(files) / index_time:.0f} files/sec)")
 
     # OLD pipeline: AST similarity + full analysis (fragment building etc.)
-    from cli.analyzer import find_paired_occurrences, build_fragments, squash_fragments, index_fingerprints, compute_similarity_metrics
+    from cli.analyzer import (
+        build_fragments,
+        compute_similarity_metrics,
+        find_paired_occurrences,
+        index_fingerprints,
+    )
 
     print("  Running OLD pipeline (AST + fragments)...")
     old_times = []
@@ -148,7 +150,9 @@ def benchmark_speed(files, n_pairs, seed=42):
             "mean_ms": statistics.mean(new_times) * 1000,
             "pairs_per_sec": len(pairs) / new_total if new_total > 0 else 0,
         },
-        "speedup": (len(pairs) / new_total) / (len(pairs) / old_total) if old_total > 0 and new_total > 0 else 0,
+        "speedup": (len(pairs) / new_total) / (len(pairs) / old_total)
+        if old_total > 0 and new_total > 0
+        else 0,
     }
 
 
@@ -167,7 +171,7 @@ def benchmark_accuracy(files, n_source, clone_types, seed=42):
         "new": {t: {"similarities": [], "detected": 0, "total": 0} for t in clone_types},
     }
 
-    THRESHOLD = 0.30
+    threshold = 0.30
 
     for source_path in source_files:
         with open(source_path) as f:
@@ -194,7 +198,7 @@ def benchmark_accuracy(files, n_source, clone_types, seed=42):
 
             for clone_code in clones:
                 # Write clone to temp file
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as tmp:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as tmp:
                     tmp.write(clone_code)
                     clone_path = tmp.name
 
@@ -205,14 +209,14 @@ def benchmark_accuracy(files, n_source, clone_types, seed=42):
                     old_sim = ast_similarity(source_ast, clone_ast)
                     results["old"][clone_type]["similarities"].append(old_sim)
                     results["old"][clone_type]["total"] += 1
-                    if old_sim >= THRESHOLD:
+                    if old_sim >= threshold:
                         results["old"][clone_type]["detected"] += 1
 
                     # NEW: FP overlap
                     new_sim = fp_similarity(source_fps, clone_fps)
                     results["new"][clone_type]["similarities"].append(new_sim)
                     results["new"][clone_type]["total"] += 1
-                    if new_sim >= THRESHOLD:
+                    if new_sim >= threshold:
                         results["new"][clone_type]["detected"] += 1
                 finally:
                     os.unlink(clone_path)
@@ -255,7 +259,10 @@ def benchmark_correlation(files, n_pairs, seed=42):
 
     mean_old = sum(old_scores) / n
     mean_new = sum(new_scores) / n
-    cov = sum((o - mean_old) * (nw - mean_new) for o, nw in zip(old_scores, new_scores)) / n
+    cov = (
+        sum((o - mean_old) * (nw - mean_new) for o, nw in zip(old_scores, new_scores, strict=False))
+        / n
+    )
     std_old = (sum((o - mean_old) ** 2 for o in old_scores) / n) ** 0.5
     std_new = (sum((nw - mean_new) ** 2 for nw in new_scores) / n) ** 0.5
 
@@ -269,8 +276,9 @@ def benchmark_correlation(files, n_pairs, seed=42):
     rank_agreement = 1 - (rank_diff / max_rank_diff) if max_rank_diff > 0 else 1
 
     # Bucket agreement
-    agreements = sum(1 for o, nw in zip(old_scores, new_scores)
-                     if categorize(o) == categorize(nw))
+    agreements = sum(
+        1 for o, nw in zip(old_scores, new_scores, strict=False) if categorize(o) == categorize(nw)
+    )
 
     return {
         "n_pairs": n,
@@ -291,9 +299,15 @@ def main():
     parser = argparse.ArgumentParser(description="Benchmark: AST vs FP overlap")
     parser.add_argument("--max-files", type=int, default=50, help="Max files to use")
     parser.add_argument("--speed-pairs", type=int, default=200, help="Pairs for speed test")
-    parser.add_argument("--accuracy-files", type=int, default=20, help="Source files for accuracy test")
-    parser.add_argument("--correlation-pairs", type=int, default=500, help="Pairs for correlation test")
-    parser.add_argument("--clone-types", type=int, nargs="+", default=[1, 2, 3, 4, 5], help="Clone types to test")
+    parser.add_argument(
+        "--accuracy-files", type=int, default=20, help="Source files for accuracy test"
+    )
+    parser.add_argument(
+        "--correlation-pairs", type=int, default=500, help="Pairs for correlation test"
+    )
+    parser.add_argument(
+        "--clone-types", type=int, nargs="+", default=[1, 2, 3, 4, 5], help="Clone types to test"
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
     args = parser.parse_args()
@@ -304,8 +318,10 @@ def main():
 
     files = get_dataset_files(args.max_files)
     print(f"\nDataset: {len(files)} files from {DATASET_PATH}")
-    print(f"File sizes: {min(f.stat().st_size for f in map(Path, files))}-"
-          f"{max(f.stat().st_size for f in map(Path, files))} bytes")
+    print(
+        f"File sizes: {min(f.stat().st_size for f in map(Path, files))}-"
+        f"{max(f.stat().st_size for f in map(Path, files))} bytes"
+    )
 
     # --- Speed benchmark ---
     print(f"\n{'=' * 70}")
@@ -313,15 +329,23 @@ def main():
     print("=" * 70)
     speed = benchmark_speed(files, args.speed_pairs, args.seed)
 
-    print(f"\n  {'Metric':<25} {'Old (full pipeline)':>20} {'New (overlap only)':>20} {'Speedup':>10}")
-    print(f"  {'-'*25} {'-'*20} {'-'*20} {'-'*10}")
-    print(f"  {'Total time':<25} {speed['old']['total_s']:>19.2f}s {speed['new']['total_s']:>19.4f}s")
-    print(f"  {'Mean latency':<25} {speed['old']['mean_ms']:>18.2f}ms {speed['new']['mean_ms']:>18.4f}ms")
-    print(f"  {'Pairs/sec':<25} {speed['old']['pairs_per_sec']:>19.1f} {speed['new']['pairs_per_sec']:>19.0f} {speed['speedup']:>9.0f}x")
-    print(f"\n  Scale projection (10,000 pairs):")
-    old_10k = 10000 / speed['old']['pairs_per_sec']
-    new_10k = 10000 / speed['new']['pairs_per_sec']
-    print(f"    Old: {old_10k:.0f}s ({old_10k/60:.1f} min)")
+    print(
+        f"\n  {'Metric':<25} {'Old (full pipeline)':>20} {'New (overlap only)':>20} {'Speedup':>10}"
+    )
+    print(f"  {'-' * 25} {'-' * 20} {'-' * 20} {'-' * 10}")
+    print(
+        f"  {'Total time':<25} {speed['old']['total_s']:>19.2f}s {speed['new']['total_s']:>19.4f}s"
+    )
+    print(
+        f"  {'Mean latency':<25} {speed['old']['mean_ms']:>18.2f}ms {speed['new']['mean_ms']:>18.4f}ms"
+    )
+    print(
+        f"  {'Pairs/sec':<25} {speed['old']['pairs_per_sec']:>19.1f} {speed['new']['pairs_per_sec']:>19.0f} {speed['speedup']:>9.0f}x"
+    )
+    print("\n  Scale projection (10,000 pairs):")
+    old_10k = 10000 / speed["old"]["pairs_per_sec"]
+    new_10k = 10000 / speed["new"]["pairs_per_sec"]
+    print(f"    Old: {old_10k:.0f}s ({old_10k / 60:.1f} min)")
     print(f"    New: {new_10k:.2f}s")
 
     # --- Correlation benchmark ---
@@ -352,7 +376,7 @@ def main():
 
     acc = benchmark_accuracy(files, args.accuracy_files, args.clone_types, args.seed)
 
-    THRESHOLD = 0.30
+    threshold = 0.30
     for clone_type in sorted(args.clone_types):
         name = type_names.get(clone_type, f"Type {clone_type}")
         old_data = acc["old"].get(clone_type, {})

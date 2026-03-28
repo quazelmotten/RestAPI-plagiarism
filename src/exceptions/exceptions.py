@@ -7,7 +7,7 @@ class NotFoundError(Exception):
         return self.message
 
 
-class ValidationError(Exception):
+class PlagiarismValidationError(Exception):
     def __init__(self, message: str = "Validation error"):
         self.message = message
         super().__init__(self.message)
@@ -16,6 +16,6 @@ class ValidationError(Exception):
         return self.message
 
 
-class ExchangeNotFound(Exception):
+class ExchangeNotFoundError(Exception):
     def __str__(self):
         return "exchange not found"

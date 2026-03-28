@@ -4,8 +4,9 @@ Tests complete plagiarism analysis workflow orchestration.
 """
 
 import logging
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, call
 from worker.services.task_service import TaskService
 
 
@@ -23,12 +24,12 @@ class TestTaskService:
         repo = MagicMock()
         repo.get_all_files.return_value = []
         return {
-            'fingerprint_service': fp_svc,
-            'indexing_service': idx_svc,
-            'candidate_service': cand_svc,
-            'analysis_service': analysis_svc,
-            'result_service': result_svc,
-            'repository': repo
+            "fingerprint_service": fp_svc,
+            "indexing_service": idx_svc,
+            "candidate_service": cand_svc,
+            "analysis_service": analysis_svc,
+            "result_service": result_svc,
+            "repository": repo,
         }
 
     @pytest.fixture
@@ -41,134 +42,133 @@ class TestTaskService:
         caplog.set_level(logging.INFO)
         task_id = "task123"
         files = [
-            {'file_hash': 'h1', 'file_path': '/f1.py'},
-            {'file_hash': 'h2', 'file_path': '/f2.py'}
+            {"file_hash": "h1", "file_path": "/f1.py"},
+            {"file_hash": "h2", "file_path": "/f2.py"},
         ]
-        language = 'python'
+        language = "python"
 
         # Setup mock returns
-        idx_map = {'h1': [{'hash': 1}], 'h2': [{'hash': 2}]}
-        mock_services['indexing_service'].ensure_files_indexed.return_value = idx_map
-        mock_services['repository'].get_all_files.return_value = []
+        idx_map = {"h1": [{"hash": 1}], "h2": [{"hash": 2}]}
+        mock_services["indexing_service"].ensure_files_indexed.return_value = idx_map
+        mock_services["repository"].get_all_files.return_value = []
         intra_pairs = [(files[0], files[0], 0.5)]
         cross_pairs = [(files[0], files[1], 0.3)]
-        mock_services['candidate_service'].find_candidate_pairs.side_effect = [intra_pairs, cross_pairs]
-        mock_services['result_service'].finalize_task.return_value = None
-        mock_services['repository'].get_max_similarity.return_value = 0.5
+        mock_services["candidate_service"].find_candidate_pairs.side_effect = [
+            intra_pairs,
+            cross_pairs,
+        ]
+        mock_services["result_service"].finalize_task.return_value = None
+        mock_services["repository"].get_max_similarity.return_value = 0.5
 
         service.process_task(task_id, files, language)
 
         # Verify phase sequence via update_task calls
-        repo_update_calls = mock_services['repository'].update_task.call_args_list
+        repo_update_calls = mock_services["repository"].update_task.call_args_list
 
         # 1. Indexing phase
-        assert any(
-            call[1]['status'] == 'indexing' for call in repo_update_calls
-        )
-        mock_services['indexing_service'].ensure_files_indexed.assert_called_once_with(
+        assert any(call[1]["status"] == "indexing" for call in repo_update_calls)
+        mock_services["indexing_service"].ensure_files_indexed.assert_called_once_with(
             files=files, language=language, existing_files=[]
         )
 
         # 2. Finding pairs phase
-        assert any(
-            call[1]['status'] == 'finding_pairs' for call in repo_update_calls
-        )
-        assert mock_services['candidate_service'].find_candidate_pairs.call_count == 2
+        assert any(call[1]["status"] == "finding_pairs" for call in repo_update_calls)
+        assert mock_services["candidate_service"].find_candidate_pairs.call_count == 2
 
         # 3. Processing phase (store similarity scores)
         assert any(
-            call[1]['status'] == 'processing' and call[1].get('total_pairs') == 2
+            call[1]["status"] == "processing" and call[1].get("total_pairs") == 2
             for call in repo_update_calls
         )
-        mock_services['result_service'].store_similarity_scores.assert_called_once_with(
+        mock_services["result_service"].store_similarity_scores.assert_called_once_with(
             task_id, intra_pairs + cross_pairs
         )
 
         # 4. Completion
-        mock_services['result_service'].finalize_task.assert_called_once_with(task_id, 2, 2)
+        mock_services["result_service"].finalize_task.assert_called_once_with(task_id, 2, 2)
 
         assert "COMPLETED successfully" in caplog.text
 
     def test_process_task_indexing_phase_calls_with_existing_files(self, service, mock_services):
         """Test indexing phase passes existing files from database."""
         task_id = "task123"
-        files = [{'file_hash': 'h1', 'file_path': '/f1.py'}]
-        existing = [{'file_hash': 'h_old', 'file_path': '/old.py'}]
-        mock_services['repository'].get_all_files.return_value = existing
-        mock_services['indexing_service'].ensure_files_indexed.return_value = {}
-        mock_services['candidate_service'].find_candidate_pairs.return_value = []
-        mock_services['result_service'].finalize_task.return_value = None
+        files = [{"file_hash": "h1", "file_path": "/f1.py"}]
+        existing = [{"file_hash": "h_old", "file_path": "/old.py"}]
+        mock_services["repository"].get_all_files.return_value = existing
+        mock_services["indexing_service"].ensure_files_indexed.return_value = {}
+        mock_services["candidate_service"].find_candidate_pairs.return_value = []
+        mock_services["result_service"].finalize_task.return_value = None
 
-        service.process_task(task_id, files, 'python')
+        service.process_task(task_id, files, "python")
 
-        mock_services['indexing_service'].ensure_files_indexed.assert_called_once_with(
-            files=files,
-            language='python',
-            existing_files=existing
+        mock_services["indexing_service"].ensure_files_indexed.assert_called_once_with(
+            files=files, language="python", existing_files=existing
         )
 
     def test_process_task_zero_pairs_skips_processing(self, service, mock_services, caplog):
         """Test zero candidate pairs skips storage and finalizes early."""
         caplog.set_level(logging.INFO)
         task_id = "task123"
-        files = [{'file_hash': 'h1'}]
-        mock_services['repository'].get_all_files.return_value = []
-        mock_services['indexing_service'].ensure_files_indexed.return_value = {}
-        mock_services['candidate_service'].find_candidate_pairs.return_value = []
-        mock_services['result_service'].finalize_task.return_value = None
+        files = [{"file_hash": "h1"}]
+        mock_services["repository"].get_all_files.return_value = []
+        mock_services["indexing_service"].ensure_files_indexed.return_value = {}
+        mock_services["candidate_service"].find_candidate_pairs.return_value = []
+        mock_services["result_service"].finalize_task.return_value = None
 
-        service.process_task(task_id, files, 'python')
+        service.process_task(task_id, files, "python")
 
-        mock_services['result_service'].store_similarity_scores.assert_not_called()
-        mock_services['result_service'].finalize_task.assert_called_once_with(task_id, 0, 0)
+        mock_services["result_service"].store_similarity_scores.assert_not_called()
+        mock_services["result_service"].finalize_task.assert_called_once_with(task_id, 0, 0)
         assert "Total candidate pairs: 0" in caplog.text
 
     def test_process_task_handles_failure_marks_failed(self, service, mock_services, caplog):
         """Test exception in any phase marks task as failed."""
         task_id = "task123"
-        files = [{'file_hash': 'h1'}]
-        mock_services['repository'].get_all_files.return_value = []
-        mock_services['indexing_service'].ensure_files_indexed.side_effect = Exception("indexing error")
-        mock_services['result_service'].mark_failed.return_value = None
+        files = [{"file_hash": "h1"}]
+        mock_services["repository"].get_all_files.return_value = []
+        mock_services["indexing_service"].ensure_files_indexed.side_effect = Exception(
+            "indexing error"
+        )
+        mock_services["result_service"].mark_failed.return_value = None
 
-        with pytest.raises(Exception):
-            service.process_task(task_id, files, 'python')
+        with pytest.raises(Exception, match="indexing error"):
+            service.process_task(task_id, files, "python")
 
-        mock_services['result_service'].mark_failed.assert_called_once()
+        mock_services["result_service"].mark_failed.assert_called_once()
         assert "FAILED" in caplog.text
 
     def test_process_task_calls_finalize_on_success(self, service, mock_services):
         """Test finalize_task called with correct counts."""
         task_id = "task123"
-        files = [{'file_hash': 'h1'}]
-        mock_services['repository'].get_all_files.return_value = []
-        mock_services['indexing_service'].ensure_files_indexed.return_value = {}
+        files = [{"file_hash": "h1"}]
+        mock_services["repository"].get_all_files.return_value = []
+        mock_services["indexing_service"].ensure_files_indexed.return_value = {}
         pairs = [({}, {}, 0.5)] * 42
-        mock_services['candidate_service'].find_candidate_pairs.return_value = pairs
-        mock_services['result_service'].store_similarity_scores.return_value = None
-        mock_services['result_service'].finalize_task.return_value = None
-        mock_services['repository'].get_max_similarity.return_value = 0.42
+        mock_services["candidate_service"].find_candidate_pairs.return_value = pairs
+        mock_services["result_service"].store_similarity_scores.return_value = None
+        mock_services["result_service"].finalize_task.return_value = None
+        mock_services["repository"].get_max_similarity.return_value = 0.42
 
-        service.process_task(task_id, files, 'python')
+        service.process_task(task_id, files, "python")
 
-        mock_services['result_service'].finalize_task.assert_called_once_with(task_id, 84, 84)
+        mock_services["result_service"].finalize_task.assert_called_once_with(task_id, 84, 84)
 
     def test_process_task_passes_language_throughout(self, service, mock_services):
         """Test language parameter is propagated correctly."""
         task_id = "task123"
-        files = [{'file_hash': 'h1'}]
-        mock_services['repository'].get_all_files.return_value = []
-        mock_services['indexing_service'].ensure_files_indexed.return_value = {}
-        mock_services['candidate_service'].find_candidate_pairs.return_value = []
-        mock_services['result_service'].finalize_task.return_value = None
+        files = [{"file_hash": "h1"}]
+        mock_services["repository"].get_all_files.return_value = []
+        mock_services["indexing_service"].ensure_files_indexed.return_value = {}
+        mock_services["candidate_service"].find_candidate_pairs.return_value = []
+        mock_services["result_service"].finalize_task.return_value = None
 
-        service.process_task(task_id, files, 'cpp')
+        service.process_task(task_id, files, "cpp")
 
         # Indexing service gets language
-        mock_services['indexing_service'].ensure_files_indexed.assert_called_with(
-            files=files, language='cpp', existing_files=[]
+        mock_services["indexing_service"].ensure_files_indexed.assert_called_with(
+            files=files, language="cpp", existing_files=[]
         )
         # Candidate service gets language in both calls
-        cand_calls = mock_services['candidate_service'].find_candidate_pairs.call_args_list
+        cand_calls = mock_services["candidate_service"].find_candidate_pairs.call_args_list
         for call in cand_calls:
-            assert call[1]['language'] == 'cpp'
+            assert call[1]["language"] == "cpp"

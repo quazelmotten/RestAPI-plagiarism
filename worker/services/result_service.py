@@ -8,7 +8,6 @@ Responsible for:
 """
 
 import logging
-from typing import List, Dict, Any, Optional
 
 from shared.interfaces import TaskRepository
 
@@ -30,7 +29,7 @@ class ResultService:
     def store_similarity_scores(
         self,
         task_id: str,
-        pairs: List[tuple],
+        pairs: list[tuple],
         batch_size: int = 5000
     ) -> None:
         """

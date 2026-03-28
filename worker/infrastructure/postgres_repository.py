@@ -4,17 +4,17 @@ PostgreSQL repository for task and result persistence.
 Implements TaskRepository interface using SQLAlchemy with sync engine.
 """
 
+import json
 import logging
 import time
-import json
-from typing import List, Dict, Any, Optional
-
-from sqlalchemy import select, update, func
-from sqlalchemy.exc import IntegrityError
+from typing import Any
 
 from shared.interfaces import TaskRepository
-from worker.database import get_session, Base
-from worker.models import PlagiarismTask, SimilarityResult, File
+from shared.models import File, PlagiarismTask, SimilarityResult
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
+
+from worker.database import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +25,13 @@ class PostgresRepository(TaskRepository):
     def __init__(self, redis_client=None):
         """
         Initialize repository.
-        
+
         Args:
             redis_client: Optional Redis client for pub/sub progress updates.
         """
         self.redis_client = redis_client
 
-    def get_all_files(self, exclude_task_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_all_files(self, exclude_task_id: str | None = None) -> list[dict[str, Any]]:
         """Get all files from database, optionally excluding a task."""
         with get_session() as session:
             stmt = select(File)
@@ -56,11 +56,11 @@ class PostgresRepository(TaskRepository):
         self,
         task_id: str,
         status: str,
-        similarity: Optional[float] = None,
-        matches: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None,
-        total_pairs: Optional[int] = None,
-        processed_pairs: Optional[int] = None
+        similarity: float | None = None,
+        matches: dict[str, Any] | None = None,
+        error: str | None = None,
+        total_pairs: int | None = None,
+        processed_pairs: int | None = None
     ) -> None:
         """Update a plagiarism task."""
         with get_session() as session:
@@ -104,7 +104,7 @@ class PostgresRepository(TaskRepository):
             except Exception as e:
                 logger.debug("Failed to publish progress to Redis: %s", e)
 
-    def bulk_insert_results(self, results: List[Dict[str, Any]]) -> None:
+    def bulk_insert_results(self, results: list[dict[str, Any]]) -> None:
         """Bulk insert similarity results using SQLAlchemy bulk_insert_mappings."""
         if not results:
             return

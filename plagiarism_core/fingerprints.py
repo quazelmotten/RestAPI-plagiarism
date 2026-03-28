@@ -5,12 +5,12 @@ Tokenization and fingerprinting for plagiarism detection.
 import logging
 from collections import deque
 from functools import lru_cache
-from typing import List, Dict, Any, Tuple
+from typing import Any
 
-from tree_sitter import Language, Parser
-import tree_sitter_python as tspython
 import tree_sitter_cpp as tscpp
+import tree_sitter_python as tspython
 import xxhash
+from tree_sitter import Language, Parser
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def tokenize_with_tree_sitter(
     file_path: str,
     lang_code: str = 'python',
     tree: Any = None
-) -> List[Tuple[str, Tuple[int, int], Tuple[int, int]]]:
+) -> list[tuple[str, tuple[int, int], tuple[int, int]]]:
     """
     Tokenize a file using tree-sitter.
 
@@ -65,7 +65,7 @@ def tokenize_and_hash_ast(
     lang_code: str = 'python',
     tree: Any = None,
     min_depth: int = 3,
-) -> Tuple[List[Tuple[str, Tuple[int, int], Tuple[int, int]]], List[int]]:
+) -> tuple[list[tuple[str, tuple[int, int], tuple[int, int]]], list[int]]:
     """
     Tokenize and extract AST subtree hashes in a single tree walk.
 
@@ -106,11 +106,11 @@ def tokenize_and_hash_ast(
 
 
 def compute_fingerprints(
-    tokens: List[Tuple[str, Tuple[int, int], Tuple[int, int]]],
+    tokens: list[tuple[str, tuple[int, int], tuple[int, int]]],
     k: int = 3,
     base: int = 257,
     mod: int = 10**9 + 7
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Compute k-gram fingerprints using Winnowing algorithm.
     """
@@ -145,13 +145,13 @@ def compute_fingerprints(
 
 
 def winnow_fingerprints(
-    fingerprints: List[Dict[str, Any]],
+    fingerprints: list[dict[str, Any]],
     window_size: int = 3
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Apply winnowing algorithm: select minimum hash in each sliding window.
     """
-    winnowed: List[Dict[str, Any]] = []
+    winnowed: list[dict[str, Any]] = []
     for i in range(len(fingerprints) - window_size + 1):
         window = fingerprints[i:i + window_size]
         min_fp = min(window, key=lambda x: x['hash'])
@@ -161,12 +161,12 @@ def winnow_fingerprints(
 
 
 def compute_and_winnow(
-    tokens: List[Tuple[str, Tuple[int, int], Tuple[int, int]]],
+    tokens: list[tuple[str, tuple[int, int], tuple[int, int]]],
     k: int = 3,
     base: int = 257,
     mod: int = 10**9 + 7,
     window_size: int = 3,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Compute k-gram fingerprints and apply winnowing in a single pass.
 
@@ -193,7 +193,7 @@ def compute_and_winnow(
     # C) Deque-based monotonic queue for winnowing
     # Each entry: (hash_value, kgram_idx, start_point, end_point)
     dq: deque = deque()
-    winnowed: List[Dict[str, Any]] = []
+    winnowed: list[dict[str, Any]] = []
 
     def _process_kgram(kg_hash, kgram_idx):
         """Process one k-gram through the winnowing deque."""
@@ -236,7 +236,7 @@ def compute_and_winnow(
 def parse_file_once(
     file_path: str,
     lang_code: str = 'python'
-) -> Tuple[Any, bytes]:
+) -> tuple[Any, bytes]:
     """
     Parse a file once with tree-sitter, returning the tree and source bytes.
 
@@ -246,7 +246,7 @@ def parse_file_once(
     language = get_language(lang_code)
     parser = Parser(language)
 
-    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+    with open(file_path, encoding='utf-8', errors='ignore') as f:
         code = f.read()
 
     source_bytes = code.encode('utf-8')
@@ -255,8 +255,8 @@ def parse_file_once(
 
 
 def index_fingerprints(
-    fingerprints: List[Dict[str, Any]]
-) -> Dict[int, List[Dict[str, Any]]]:
+    fingerprints: list[dict[str, Any]]
+) -> dict[int, list[dict[str, Any]]]:
     """
     Create hash -> list of fingerprint positions index.
     """

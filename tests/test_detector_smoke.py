@@ -6,11 +6,12 @@ Tests Types 1-4 against known inputs.
 
 import os
 import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from plagiarism_core.plagiarism_detector import detect_plagiarism
-from plagiarism_core.canonicalizer import normalize_identifiers, canonicalize_type4
+from plagiarism_core.canonicalizer import canonicalize_type4, normalize_identifiers
 from plagiarism_core.models import PlagiarismType
+from plagiarism_core.plagiarism_detector import detect_plagiarism
 
 
 def test_type1_exact():
@@ -31,15 +32,18 @@ def multiply(x, y):
     return x * y
 """.strip()
 
-    matches = detect_plagiarism(source_a, source_b, 'python')
+    matches = detect_plagiarism(source_a, source_b, "python")
     print(f"Type 1 test: {len(matches)} matches")
     for m in matches:
-        print(f"  Type={m.plagiarism_type} ({PlagiarismType(m.plagiarism_type).name}) "
-              f"A:{m.file1['start_line']}-{m.file1['end_line']} "
-              f"B:{m.file2['start_line']}-{m.file2['end_line']} "
-              f"desc={m.description}")
-    assert any(m.plagiarism_type == PlagiarismType.EXACT for m in matches), \
+        print(
+            f"  Type={m.plagiarism_type} ({PlagiarismType(m.plagiarism_type).name}) "
+            f"A:{m.file1['start_line']}-{m.file1['end_line']} "
+            f"B:{m.file2['start_line']}-{m.file2['end_line']} "
+            f"desc={m.description}"
+        )
+    assert any(m.plagiarism_type == PlagiarismType.EXACT for m in matches), (
         "Expected at least one EXACT match"
+    )
     print("  PASS\n")
 
 
@@ -61,17 +65,21 @@ def compute_sum(values):
     return total
 """.strip()
 
-    matches = detect_plagiarism(source_a, source_b, 'python')
+    matches = detect_plagiarism(source_a, source_b, "python")
     print(f"Type 2 test: {len(matches)} matches")
     for m in matches:
-        print(f"  Type={m.plagiarism_type} ({PlagiarismType(m.plagiarism_type).name}) "
-              f"A:{m.file1['start_line']}-{m.file1['end_line']} "
-              f"B:{m.file2['start_line']}-{m.file2['end_line']} "
-              f"desc={m.description}")
+        print(
+            f"  Type={m.plagiarism_type} ({PlagiarismType(m.plagiarism_type).name}) "
+            f"A:{m.file1['start_line']}-{m.file1['end_line']} "
+            f"B:{m.file2['start_line']}-{m.file2['end_line']} "
+            f"desc={m.description}"
+        )
         if m.details:
             print(f"    details={m.details}")
     # Should detect RENAMED
-    has_renamed = any(m.plagiarism_type in (PlagiarismType.RENAMED, PlagiarismType.EXACT) for m in matches)
+    has_renamed = any(
+        m.plagiarism_type in (PlagiarismType.RENAMED, PlagiarismType.EXACT) for m in matches
+    )
     assert has_renamed, "Expected RENAMED or EXACT match"
     print("  PASS\n")
 
@@ -100,13 +108,15 @@ def subtract(a, b):
     return a - b
 """.strip()
 
-    matches = detect_plagiarism(source_a, source_b, 'python')
+    matches = detect_plagiarism(source_a, source_b, "python")
     print(f"Type 3 test: {len(matches)} matches")
     for m in matches:
-        print(f"  Type={m.plagiarism_type} ({PlagiarismType(m.plagiarism_type).name}) "
-              f"A:{m.file1['start_line']}-{m.file1['end_line']} "
-              f"B:{m.file2['start_line']}-{m.file2['end_line']} "
-              f"desc={m.description}")
+        print(
+            f"  Type={m.plagiarism_type} ({PlagiarismType(m.plagiarism_type).name}) "
+            f"A:{m.file1['start_line']}-{m.file1['end_line']} "
+            f"B:{m.file2['start_line']}-{m.file2['end_line']} "
+            f"desc={m.description}"
+        )
     # Should detect some form of matching
     assert len(matches) > 0, "Expected at least one match"
     print("  PASS\n")
@@ -135,13 +145,15 @@ def process(data):
     return result
 """.strip()
 
-    matches = detect_plagiarism(source_a, source_b, 'python')
+    matches = detect_plagiarism(source_a, source_b, "python")
     print(f"Type 4 test: {len(matches)} matches")
     for m in matches:
-        print(f"  Type={m.plagiarism_type} ({PlagiarismType(m.plagiarism_type).name}) "
-              f"A:{m.file1['start_line']}-{m.file1['end_line']} "
-              f"B:{m.file2['start_line']}-{m.file2['end_line']} "
-              f"desc={m.description}")
+        print(
+            f"  Type={m.plagiarism_type} ({PlagiarismType(m.plagiarism_type).name}) "
+            f"A:{m.file1['start_line']}-{m.file1['end_line']} "
+            f"B:{m.file2['start_line']}-{m.file2['end_line']} "
+            f"desc={m.description}"
+        )
     # Should find some match (Type 2/4 for the shared lines)
     assert len(matches) > 0, "Expected at least one match"
     print("  PASS\n")
@@ -160,11 +172,13 @@ def sort_list(data):
     return sorted(data)
 """.strip()
 
-    matches = detect_plagiarism(source_a, source_b, 'python')
+    matches = detect_plagiarism(source_a, source_b, "python")
     print(f"No-match test: {len(matches)} matches")
     for m in matches:
-        print(f"  Type={m.plagiarism_type} A:{m.file1['start_line']}-{m.file1['end_line']} "
-              f"B:{m.file2['start_line']}-{m.file2['end_line']}")
+        print(
+            f"  Type={m.plagiarism_type} A:{m.file1['start_line']}-{m.file1['end_line']} "
+            f"B:{m.file2['start_line']}-{m.file2['end_line']}"
+        )
     print("  PASS\n")
 
 
@@ -173,10 +187,10 @@ def test_identifier_normalize():
     code_a = "x = calculate_total(items)"
     code_b = "y = compute_sum(values)"
 
-    norm_a = normalize_identifiers(code_a, 'python')
-    norm_b = normalize_identifiers(code_b, 'python')
+    norm_a = normalize_identifiers(code_a, "python")
+    norm_b = normalize_identifiers(code_b, "python")
 
-    print(f"Identifier normalize test:")
+    print("Identifier normalize test:")
     print(f"  A: {code_a}  →  {norm_a}")
     print(f"  B: {code_b}  →  {norm_b}")
     assert norm_a == norm_b, f"Expected same normalized form, got:\n  {norm_a}\n  {norm_b}"
@@ -196,18 +210,18 @@ while True:
 
     canon_for = canonicalize_type4(code_for)
     canon_while = canonicalize_type4(code_while)
-    
-    print(f"For/while canonicalize test:")
+
+    print("For/while canonicalize test:")
     print(f"  for:  {canon_for[:80]}...")
     print(f"  while: {canon_while[:80]}...")
 
     # Both should canonicalize to LOOP form - this is the key convergence property!
-    assert 'LOOP' in canon_for, "Expected LOOP canonical form"
-    assert 'LOOP' in canon_while, "Expected LOOP canonical form"
+    assert "LOOP" in canon_for, "Expected LOOP canonical form"
+    assert "LOOP" in canon_while, "Expected LOOP canonical form"
     print("  PASS\n")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("=" * 60)
     print("Plagiarism Detector Smoke Tests")
     print("=" * 60 + "\n")

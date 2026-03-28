@@ -3,14 +3,14 @@ Task service - orchestrates the complete plagiarism analysis task.
 
 Coordinates:
 1. File fingerprinting & indexing
-2. Candidate pair generation  
+2. Candidate pair generation
 3. Detailed AST analysis
 4. Result persistence
 """
 
 import logging
 import time
-from typing import List, Dict, Any, Tuple, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ class TaskService:
     def process_task(
         self,
         task_id: str,
-        files: List[Dict[str, Any]],
+        files: list[dict[str, Any]],
         language: str
     ) -> None:
         """
@@ -90,7 +90,7 @@ class TaskService:
                     total_pairs=total
                 )
 
-            fingerprint_map = self.indexing_svc.ensure_files_indexed(
+            self.indexing_svc.ensure_files_indexed(
                 files=files,
                 language=language,
                 existing_files=existing_files,

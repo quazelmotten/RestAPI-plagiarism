@@ -11,8 +11,9 @@ import logging
 import threading
 import time
 import warnings
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Tuple, Dict, Any, Set, Optional, Callable
+from typing import Any
 
 from shared.interfaces import CandidateIndex
 
@@ -27,12 +28,12 @@ class CandidateService:
 
     def find_candidate_pairs(
         self,
-        files_a: List[Dict[str, Any]],
-        files_b: Optional[List[Dict[str, Any]]] = None,
+        files_a: list[dict[str, Any]],
+        files_b: list[dict[str, Any]] | None = None,
         language: str = "python",
         deduplicate: bool = True,
-        on_progress: Optional[Callable[[int, int], None]] = None,
-    ) -> List[Tuple[dict, dict, float]]:
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> list[tuple[dict, dict, float]]:
         """
         Find candidate plagiarism pairs using the inverted index.
 
@@ -53,7 +54,7 @@ class CandidateService:
         t0 = time.perf_counter()
 
         # Build lookup map: file hash -> file dict for files_b
-        files_b_by_hash: Dict[str, Dict] = {}
+        files_b_by_hash: dict[str, dict] = {}
         for fb in files_b:
             fb_hash = fb.get('hash') or fb.get('file_hash')
             if fb_hash:
@@ -85,12 +86,12 @@ class CandidateService:
 
         total_a = len(valid_files)
         lock = threading.Lock()
-        all_pairs: List[Tuple[dict, dict, float]] = []
-        all_seen: Set[frozenset] = set()
+        all_pairs: list[tuple[dict, dict, float]] = []
+        all_seen: set[frozenset] = set()
         checked_counter = [0]
         log_interval = max(1, total_a // 20)  # ~20 progress updates
 
-        def process_batch(batch: List[Dict]):
+        def process_batch(batch: list[dict]):
             local_pairs = []
             local_checked = 0
             for file_a in batch:
@@ -163,9 +164,9 @@ class CandidateService:
     # Backward compatibility
     def find_intra_task_pairs(
         self,
-        files: List[Dict[str, Any]],
+        files: list[dict[str, Any]],
         language: str
-    ) -> List[Tuple[dict, dict, float]]:
+    ) -> list[tuple[dict, dict, float]]:
         """[Deprecated] Use find_candidate_pairs."""
         warnings.warn(
             "find_intra_task_pairs is deprecated; use find_candidate_pairs",
@@ -175,10 +176,10 @@ class CandidateService:
 
     def find_cross_task_pairs(
         self,
-        new_files: List[Dict[str, Any]],
-        existing_files: List[Dict[str, Any]],
+        new_files: list[dict[str, Any]],
+        existing_files: list[dict[str, Any]],
         language: str
-    ) -> List[Tuple[dict, dict, float]]:
+    ) -> list[tuple[dict, dict, float]]:
         """[Deprecated] Use find_candidate_pairs."""
         warnings.warn(
             "find_cross_task_pairs is deprecated; use find_candidate_pairs",

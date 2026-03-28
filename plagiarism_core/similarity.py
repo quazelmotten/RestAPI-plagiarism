@@ -2,12 +2,11 @@
 Similarity metrics computation.
 """
 
-from typing import List, Tuple, Dict, Any
 
 from .models import SimilarityMetrics
 
 
-def longest_common_subsequence(occurrences: List[Tuple[int, int]]) -> int:
+def longest_common_subsequence(occurrences: list[tuple[int, int]]) -> int:
     """
     Find longest common subsequence of consecutive indices.
     """
@@ -17,16 +16,16 @@ def longest_common_subsequence(occurrences: List[Tuple[int, int]]) -> int:
     sorted_occ = sorted(occurrences, key=lambda x: (x[0], x[1]))
 
     left_indices = [occ[0] for occ in sorted_occ]
-    right_indices = [occ[1] for occ in sorted_occ]
+    [occ[1] for occ in sorted_occ]
 
-    left_to_right: Dict[int, List[int]] = {}
+    left_to_right: dict[int, list[int]] = {}
     for occ in sorted_occ:
         if occ[0] not in left_to_right:
             left_to_right[occ[0]] = []
         left_to_right[occ[0]].append(occ[1])
 
     longest = 0
-    dp: Dict[Tuple[int, int], int] = {}
+    dp: dict[tuple[int, int], int] = {}
 
     for left_idx in left_indices:
         for right_idx in left_to_right.get(left_idx, []):
@@ -39,7 +38,7 @@ def longest_common_subsequence(occurrences: List[Tuple[int, int]]) -> int:
 
 
 def compute_similarity_metrics(
-    occurrences: List[tuple],
+    occurrences: list[tuple],
     total_left: int,
     total_right: int
 ) -> SimilarityMetrics:
@@ -64,8 +63,8 @@ def compute_similarity_metrics(
             longest_fragment=0
         )
 
-    left_covered = len(set(occ[0] for occ in occurrences))
-    right_covered = len(set(occ[1] for occ in occurrences))
+    left_covered = len({occ[0] for occ in occurrences})
+    right_covered = len({occ[1] for occ in occurrences})
 
     denominator = total_left + total_right
     if denominator > 0:

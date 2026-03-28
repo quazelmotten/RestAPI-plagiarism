@@ -12,10 +12,10 @@ project_root = os.path.dirname(worker_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from worker.worker_lifecycle import AsyncWorker
-from worker.message_handler import MessageHandler
-from worker.config import settings
-from worker.dependencies import get_task_service, shutdown_dependencies
+from worker.config import settings  # noqa: E402
+from worker.dependencies import get_task_service, shutdown_dependencies  # noqa: E402
+from worker.message_handler import MessageHandler  # noqa: E402
+from worker.worker_lifecycle import AsyncWorker  # noqa: E402
 
 
 def main():
@@ -24,8 +24,7 @@ def main():
     message_handler = MessageHandler(task_service)
 
     worker = AsyncWorker(
-        message_handler=message_handler,
-        worker_concurrency=settings.worker_concurrency
+        message_handler=message_handler, worker_concurrency=settings.worker_concurrency
     )
 
     try:

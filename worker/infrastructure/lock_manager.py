@@ -3,10 +3,8 @@ Distributed lock manager using Redis.
 """
 
 import logging
-from typing import Optional
 
 import redis
-from redis.exceptions import RedisError
 
 logger = logging.getLogger(__name__)
 
