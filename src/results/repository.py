@@ -113,14 +113,23 @@ class ResultRepository:
         results_result = await self.db.execute(results_query)
         results = results_result.scalars().all()
 
-        # Collect all file IDs and fetch in one query
-        file_ids = {str(r.file_a_id) for r in results} | {str(r.file_b_id) for r in results}
-        file_map = {}
-        if file_ids:
-            files_result = await self.db.execute(
-                select(File.id, File.filename).where(File.id.in_(list(file_ids)))
+        # Collect all file IDs from similarity results for filename lookup
+        result_file_ids = {str(r.file_a_id) for r in results} | {str(r.file_b_id) for r in results}
+
+        # Query ALL files for this task (not just from current page)
+        all_files_result = await self.db.execute(
+            select(File.id, File.filename).where(File.task_id == task_id)
+        )
+        all_files_rows = all_files_result.all()
+        file_map = {str(row.id): row.filename for row in all_files_rows}
+
+        # Also include result-specific files that may not be in the task's file list
+        if result_file_ids:
+            result_files_result = await self.db.execute(
+                select(File.id, File.filename).where(File.id.in_(list(result_file_ids)))
             )
-            file_map = {str(row.id): row.filename for row in files_result.all()}
+            for row in result_files_result.all():
+                file_map[str(row.id)] = row.filename
 
         formatted_results = [
             ResultItem(
