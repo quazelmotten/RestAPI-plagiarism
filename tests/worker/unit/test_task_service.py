@@ -4,7 +4,7 @@ Tests complete plagiarism analysis workflow orchestration.
 """
 
 import logging
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 from worker.services.task_service import TaskService
@@ -47,7 +47,6 @@ class TestTaskService:
         ]
         language = "python"
 
-        # Setup mock returns
         idx_map = {"h1": [{"hash": 1}], "h2": [{"hash": 2}]}
         mock_services["indexing_service"].ensure_files_indexed.return_value = idx_map
         mock_services["repository"].get_all_files.return_value = []
@@ -68,18 +67,17 @@ class TestTaskService:
         # 1. Indexing phase
         assert any(call[1]["status"] == "indexing" for call in repo_update_calls)
         mock_services["indexing_service"].ensure_files_indexed.assert_called_once_with(
-            files=files, language=language, existing_files=[]
+            files=files, language=language, existing_files=[], on_progress=ANY
         )
 
         # 2. Finding pairs phase
-        assert any(call[1]["status"] == "finding_pairs" for call in repo_update_calls)
+        assert any(
+            call[1]["status"] in ("finding_intra_pairs", "finding_cross_pairs")
+            for call in repo_update_calls
+        )
         assert mock_services["candidate_service"].find_candidate_pairs.call_count == 2
 
         # 3. Processing phase (store similarity scores)
-        assert any(
-            call[1]["status"] == "processing" and call[1].get("total_pairs") == 2
-            for call in repo_update_calls
-        )
         mock_services["result_service"].store_similarity_scores.assert_called_once_with(
             task_id, intra_pairs + cross_pairs
         )
@@ -102,7 +100,7 @@ class TestTaskService:
         service.process_task(task_id, files, "python")
 
         mock_services["indexing_service"].ensure_files_indexed.assert_called_once_with(
-            files=files, language="python", existing_files=existing
+            files=files, language="python", existing_files=existing, on_progress=ANY
         )
 
     def test_process_task_zero_pairs_skips_processing(self, service, mock_services, caplog):
@@ -119,7 +117,7 @@ class TestTaskService:
 
         mock_services["result_service"].store_similarity_scores.assert_not_called()
         mock_services["result_service"].finalize_task.assert_called_once_with(task_id, 0, 0)
-        assert "Total candidate pairs: 0" in caplog.text
+        assert "Phase 2a COMPLETE: found 0 intra pairs" in caplog.text
 
     def test_process_task_handles_failure_marks_failed(self, service, mock_services, caplog):
         """Test exception in any phase marks task as failed."""
@@ -166,7 +164,7 @@ class TestTaskService:
 
         # Indexing service gets language
         mock_services["indexing_service"].ensure_files_indexed.assert_called_with(
-            files=files, language="cpp", existing_files=[]
+            files=files, language="cpp", existing_files=[], on_progress=ANY
         )
         # Candidate service gets language in both calls
         cand_calls = mock_services["candidate_service"].find_candidate_pairs.call_args_list

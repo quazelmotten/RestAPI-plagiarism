@@ -21,29 +21,29 @@ pytestmark = pytest.mark.integration
 def mock_core_functions(monkeypatch):
     """Mock core plagiarism functions to provide deterministic data."""
 
-    def dummy_tokenize(file_path, language):
-        return [
+    def dummy_parse_file_once(file_path, language):
+        tree_mock = object()
+        return tree_mock, None
+
+    def dummy_tokenize_and_hash_ast(file_path, language, tree=None):
+        tokens = [
             {"type": "function_definition", "start": (0, 0), "end": (2, 0), "text": "def func():"}
         ]
+        ast_hashes = [123456]
+        return tokens, ast_hashes
 
-    def dummy_compute(tokens):
+    def dummy_compute_and_winnow(tokens):
         return [{"hash": 12345, "start": (0, 0), "end": (2, 0)}]
 
-    def dummy_winnow(raw_fps):
-        return [
-            {"hash": fp["hash"], "start": list(fp["start"]), "end": list(fp["end"])}
-            for fp in raw_fps
-        ]
-
-    def dummy_extract(file_path, language):
-        return [123456]
-
     monkeypatch.setattr(
-        "worker.services.fingerprint_service.tokenize_with_tree_sitter", dummy_tokenize
+        "worker.services.fingerprint_service.parse_file_once", dummy_parse_file_once
     )
-    monkeypatch.setattr("worker.services.fingerprint_service.compute_fingerprints", dummy_compute)
-    monkeypatch.setattr("worker.services.fingerprint_service.winnow_fingerprints", dummy_winnow)
-    monkeypatch.setattr("worker.services.fingerprint_service.extract_ast_hashes", dummy_extract)
+    monkeypatch.setattr(
+        "worker.services.fingerprint_service.tokenize_and_hash_ast", dummy_tokenize_and_hash_ast
+    )
+    monkeypatch.setattr(
+        "worker.services.fingerprint_service.compute_and_winnow", dummy_compute_and_winnow
+    )
 
 
 class TestServiceIntegration:
@@ -170,22 +170,18 @@ class TestServiceIntegration:
 
     def test_task_service_full_workflow(self, redis_test_instance, temp_dir):
         """Test TaskService completes full workflow."""
-        # Use custom repository to avoid DB
         from unittest.mock import MagicMock
 
-        # Create fake repository
         fake_repo = MagicMock()
         fake_repo.get_all_files.return_value = []
         fake_repo.get_max_similarity.return_value = 0.0
 
-        # Need to build task_service with our test Redis services but custom repo
         cache = RedisFingerprintCache(redis_test_instance, ttl=3600)
         index = RedisInvertedIndex(redis_test_instance, min_overlap_threshold=0.15)
         fpsvc = FingerprintService(cache)
         idxsvc = IndexingService(index, cache, fpsvc)
         candsvc = CandidateService(index)
         result_svc = ResultService(fake_repo)
-        # Spy on store_similarity_scores and finalize_task
         result_svc.store_similarity_scores = MagicMock(wraps=result_svc.store_similarity_scores)
         result_svc.finalize_task = MagicMock(wraps=result_svc.finalize_task)
 
@@ -198,7 +194,6 @@ class TestServiceIntegration:
             repository=fake_repo,
         )
 
-        # Create files
         content = "def func():\n    return 42\n"
         files = []
         for i in range(2):
@@ -210,7 +205,6 @@ class TestServiceIntegration:
         task_id = "integration_test"
         task_service.process_task(task_id, files, "python")
 
-        # Verify interactions
         fake_repo.update_task.assert_called()
         result_svc.store_similarity_scores.assert_called_once()
         result_svc.finalize_task.assert_called_once()

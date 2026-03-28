@@ -32,9 +32,7 @@ class FingerprintService:
         self.cache = cache
 
     def ensure_fingerprinted(
-        self,
-        file_info: dict[str, Any],
-        language: str
+        self, file_info: dict[str, Any], language: str
     ) -> list[dict[str, Any]]:
         """
         Ensure file has fingerprints cached. Generate if missing.
@@ -49,8 +47,8 @@ class FingerprintService:
         Raises:
             Exception if fingerprinting fails
         """
-        file_hash = file_info.get('file_hash') or file_info.get('hash')
-        file_path = file_info.get('file_path') or file_info.get('path')
+        file_hash = file_info.get("file_hash") or file_info.get("hash")
+        file_path = file_info.get("file_path") or file_info.get("path")
 
         if not file_hash or not file_path:
             raise ValueError("Invalid file info: missing hash or path")
@@ -58,8 +56,8 @@ class FingerprintService:
         # Check cache first
         cached = self.cache.batch_get([file_hash])
         file_data = cached.get(file_hash, {})
-        fps = file_data.get('fingerprints')
-        ast_hashes = file_data.get('ast_hashes')
+        fps = file_data.get("fingerprints")
+        ast_hashes = file_data.get("ast_hashes")
 
         if fps is not None and ast_hashes is not None:
             logger.debug(f" fingerprints from cache for {file_hash[:16]}...")
@@ -70,28 +68,32 @@ class FingerprintService:
         tokens, ast_hashes = tokenize_and_hash_ast(file_path, language, tree=tree)
         fps = compute_and_winnow(tokens)
 
-        # Convert to expected format
+        # Convert to expected format (preserve kgram_idx for fragment building)
         fps_for_storage = [
-            {'hash': fp['hash'], 'start': tuple(fp['start']), 'end': tuple(fp['end'])}
+            {
+                "hash": fp["hash"],
+                "start": tuple(fp["start"]),
+                "end": tuple(fp["end"]),
+                "kgram_idx": fp.get("kgram_idx", 0),
+            }
             for fp in fps
         ]
 
         # Cache for future use
         self.cache.batch_cache([(file_hash, fps_for_storage, ast_hashes)])
 
-        logger.info(f"Generated and cached {len(fps)} fingerprints + {len(ast_hashes)} AST hashes for {file_hash[:16]}...")
+        logger.info(
+            f"Generated and cached {len(fps)} fingerprints + {len(ast_hashes)} AST hashes for {file_hash[:16]}..."
+        )
 
         return fps_for_storage
 
-    def get_fingerprints(
-        self,
-        file_hash: str
-    ) -> list[dict[str, Any]] | None:
+    def get_fingerprints(self, file_hash: str) -> list[dict[str, Any]] | None:
         """Get fingerprints from cache if available."""
         cached = self.cache.batch_get([file_hash])
-        return cached.get(file_hash, {}).get('fingerprints')
+        return cached.get(file_hash, {}).get("fingerprints")
 
     def get_ast_hashes(self, file_hash: str) -> list[int] | None:
         """Get AST hashes from cache if available."""
         cached = self.cache.batch_get([file_hash])
-        return cached.get(file_hash, {}).get('ast_hashes')
+        return cached.get(file_hash, {}).get("ast_hashes")

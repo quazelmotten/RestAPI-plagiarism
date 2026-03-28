@@ -7,8 +7,8 @@ import contextlib
 from unittest.mock import MagicMock
 
 import pytest
-from worker.infrastructure.postgres_repository import PostgresRepository
 from shared.models import File
+from worker.infrastructure.postgres_repository import PostgresRepository
 
 
 class TestPostgresRepository:

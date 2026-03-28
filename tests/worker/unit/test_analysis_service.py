@@ -85,7 +85,6 @@ class TestAnalysisService:
         """Test analyze_pair_full performs full analysis bypassing cache."""
         with patch("worker.services.analysis_service.CoreAnalyzer") as mock_analyzer:
             analyzer = mock_analyzer.return_value
-            # Simulate full analysis result
             mock_result = MagicMock()
             mock_result.similarity_ratio = 0.9
             mock_result.matches = [
@@ -103,17 +102,17 @@ class TestAnalysisService:
     def test_generate_fingerprints_creates_and_returns_data(self, service_sync):
         """Test generate_fingerprints returns structured fingerprint data."""
         with (
-            patch("plagiarism_core.fingerprints.tokenize_with_tree_sitter") as mock_tokenize,
-            patch("plagiarism_core.fingerprints.compute_fingerprints") as mock_compute,
-            patch("plagiarism_core.fingerprints.winnow_fingerprints") as mock_winnow,
-            patch("plagiarism_core.ast_hash.extract_ast_hashes") as mock_ast,
+            patch("plagiarism_core.fingerprints.parse_file_once") as mock_parse,
+            patch("plagiarism_core.fingerprints.tokenize_and_hash_ast") as mock_tokenize,
+            patch("plagiarism_core.fingerprints.compute_and_winnow") as mock_winnow,
         ):
-            mock_tokenize.return_value = [{"type": "def", "start": (0, 0), "end": (0, 3)}]
-            raw_fps = [{"hash": 1, "start": (0, 0), "end": (1, 0)}]
-            mock_compute.return_value = raw_fps
+            mock_parse.return_value = (object(), None)
+            mock_tokenize.return_value = (
+                [{"type": "def", "start": (0, 0), "end": (0, 3)}],
+                [100, 200],
+            )
             fps = [{"hash": 1, "start": [0, 0], "end": [1, 0]}]
             mock_winnow.return_value = fps
-            mock_ast.return_value = [100, 200]
 
             result = service_sync.generate_fingerprints("/f.py", "python")
 
@@ -126,18 +125,15 @@ class TestAnalysisService:
 
     def test_cache_helpers_get_and_cache(self, service_sync, mock_cache):
         """Test cache helper methods use batch_get/batch_cache."""
-        # Test _get_fingerprints
         mock_cache.batch_get.return_value = {"k1": {"fingerprints": [{"hash": 1}]}}
         fps = service_sync._get_fingerprints("k1")
         assert fps == [{"hash": 1}]
         mock_cache.batch_get.assert_called_with(["k1"])
 
-        # Test _get_ast_hashes
         mock_cache.batch_get.return_value = {"k1": {"ast_hashes": [100]}}
         ast = service_sync._get_ast_hashes("k1")
         assert ast == [100]
 
-        # Test _cache_fingerprints
         service_sync._cache_fingerprints("k1", [{"hash": 1}], [100])
         mock_cache.batch_cache.assert_called_with([("k1", [{"hash": 1}], [100])])
 
