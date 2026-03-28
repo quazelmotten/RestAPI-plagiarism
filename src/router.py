@@ -9,10 +9,7 @@ import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-
-from dependencies import get_ws_connection_manager
-from websocket_manager import ConnectionManager
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -33,7 +30,6 @@ router.include_router(results_router)
 async def websocket_task_progress(
     websocket: WebSocket,
     task_id: str,
-    manager: ConnectionManager = Depends(get_ws_connection_manager),
 ):
     """
     WebSocket endpoint for real-time task progress updates.
@@ -52,6 +48,7 @@ async def websocket_task_progress(
     """
     logger.info("WebSocket connection attempt for task %s", task_id)
 
+    manager = websocket.app.state.ws_manager
     await manager.connect(websocket, task_id)
 
     if websocket.client_state.name != "CONNECTED":

@@ -16,9 +16,9 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# Import settings and database base
+# Import models and database-only config (avoids pulling in full app config with RabbitMQ/Redis deps)
 from shared.models import SharedBase  # noqa: E402
-from src.config import settings  # noqa: E402
+from config import settings  # noqa: E402
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

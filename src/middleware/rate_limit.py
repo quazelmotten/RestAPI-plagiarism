@@ -9,11 +9,12 @@ import time
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger(__name__)
 
 
-class RateLimitMiddleware:
+class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     Rate limiting middleware using Redis sliding window.
 
@@ -21,29 +22,43 @@ class RateLimitMiddleware:
     - rate_limit_requests: Number of requests allowed per window
     - rate_limit_window: Time window in seconds
     - rate_limit_exclude_paths: List of paths to exclude from rate limiting
+
+    The Redis client is obtained lazily from app.state at request time,
+    so this middleware can be added before the app starts.
     """
 
     def __init__(
         self,
         app,
-        redis_client,
+        redis_client=None,
         rate_limit_requests: int = 100,
         rate_limit_window: int = 60,
         exclude_paths: list | None = None,
     ):
-        self.app = app
-        self.redis_client = redis_client
+        super().__init__(app)
+        self._redis_client = redis_client
         self.rate_limit_requests = rate_limit_requests
         self.rate_limit_window = rate_limit_window
         self.exclude_paths = exclude_paths or ["/health", "/docs", "/redoc", "/openapi.json"]
 
-    async def __call__(self, request: Request, call_next):
+    def _get_redis_client(self, request: Request):
+        """Get Redis client, preferring injected one then app.state."""
+        if self._redis_client:
+            return self._redis_client
+        redis = getattr(request.app.state, "redis_client", None)
+        if redis:
+            return redis.get_sync_client()
+        return None
+
+    async def dispatch(self, request: Request, call_next):
         # Skip rate limiting for excluded paths
         if request.url.path in self.exclude_paths:
             return await call_next(request)
 
+        redis_client = self._get_redis_client(request)
+
         # Skip if no Redis or not configured
-        if not self.redis_client or self.rate_limit_requests <= 0:
+        if not redis_client or self.rate_limit_requests <= 0:
             return await call_next(request)
 
         # Get client identifier (IP address)
@@ -81,7 +96,7 @@ class RateLimitMiddleware:
             # Generate unique request ID to avoid collisions
             request_id = f"{now}:{id(request)}"
 
-            allowed = self.redis_client.eval(
+            allowed = redis_client.eval(
                 lua_script,
                 1,
                 key,
@@ -94,7 +109,7 @@ class RateLimitMiddleware:
 
             if not allowed:
                 # Calculate retry-after (time until oldest entry expires)
-                oldest = self.redis_client.zrange(key, 0, 0, withscores=True)
+                oldest = redis_client.zrange(key, 0, 0, withscores=True)
                 if oldest:
                     retry_after = int(oldest[0][1] + self.rate_limit_window - now)
                 else:

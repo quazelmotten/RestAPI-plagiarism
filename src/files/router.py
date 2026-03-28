@@ -132,9 +132,9 @@ async def get_file_similarities(
 async def get_file_content(
     file: FileResponse = Depends(valid_file_id),
     storage=Depends(get_s3_storage),
+    file_service: FileService = Depends(get_file_service),
 ):
     """Get file content by file ID. Uses dependency validation to ensure file exists."""
-    file_service = FileService(None)
     content = await file_service.get_file_content(str(file.id), storage)
     if not content:
         raise NotFoundError("File content not found")

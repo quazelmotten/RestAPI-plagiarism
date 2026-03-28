@@ -120,7 +120,7 @@ class ResultRepository:
             files_result = await self.db.execute(
                 select(File.id, File.filename).where(File.id.in_(list(file_ids)))
             )
-            file_map = {str(f.id): f.filename for f in files_result.scalars().all()}
+            file_map = {str(row.id): row.filename for row in files_result.all()}
 
         formatted_results = [
             ResultItem(

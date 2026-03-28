@@ -10,7 +10,10 @@ RUN apt-get update && apt-get install -y python3.11 python3-pip python3-venv
 RUN pip install -r requirements.txt
 
 COPY database ./
-COPY src/models/models.py ./
+COPY shared /app/shared
+COPY src /app/src
+
+ENV PYTHONPATH=/app
 
 RUN chmod +x start_bd.sh && chmod 777 /database
 

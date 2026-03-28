@@ -20,7 +20,7 @@ class TaskResponse(CustomBaseModel):
     task_id: str
     status: str
     similarity: float | None = None
-    matches: list[dict] | None = None
+    matches: list[dict] | dict | None = None
     error: str | None = None
     created_at: str | None = None
     progress: TaskProgress | None = None
@@ -30,7 +30,7 @@ class TaskListResponse(CustomBaseModel):
     task_id: str
     status: str
     similarity: float | None = None
-    matches: list[dict] | None = None
+    matches: list[dict] | dict | None = None
     error: str | None = None
     created_at: str | None = None
     progress: TaskProgress

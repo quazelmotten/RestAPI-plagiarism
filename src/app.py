@@ -70,9 +70,11 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # Add rate limiting middleware (if enabled)
 if settings.rate_limit_enabled:
-    # We'll add it after we have redis_client initialized in startup
-    # For now, we'll add it later in on_startup
-    pass
+    app.add_middleware(
+        RateLimitMiddleware,
+        rate_limit_requests=settings.rate_limit_requests,
+        rate_limit_window=settings.rate_limit_window,
+    )
 
 
 @app.middleware("http")
@@ -140,18 +142,6 @@ async def on_startup():
     redis_client = RedisClient()
     await redis_client.connect()
     app.state.redis_client = redis_client
-
-    # Add rate limiting middleware after Redis is available
-    if settings.rate_limit_enabled:
-        app.add_middleware(
-            RateLimitMiddleware,
-            redis_client=redis_client.get_sync_client(),  # Use sync client for rate limiter
-            rate_limit_requests=settings.rate_limit_requests,
-            rate_limit_window=settings.rate_limit_window,
-        )
-        logger.info(
-            f"Rate limiting enabled: {settings.rate_limit_requests} requests per {settings.rate_limit_window}s"
-        )
 
     # Initialize RabbitMQ
     rabbitmq = RabbitMQ()

@@ -32,7 +32,7 @@ class SharedBase(DeclarativeBase):
 
 
 class PlagiarismTask(SharedBase):
-    __tablename__ = "plagiarism_task"
+    __tablename__ = "plagiarism_tasks"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
     status: Mapped[str] = mapped_column(String, nullable=False)
@@ -51,11 +51,11 @@ class PlagiarismTask(SharedBase):
 
 
 class File(SharedBase):
-    __tablename__ = "file"
+    __tablename__ = "files"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
     task_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("plagiarism_task.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("plagiarism_tasks.id"), nullable=False
     )
     filename: Mapped[str] = mapped_column(String, nullable=False)
     file_path: Mapped[str] = mapped_column(String, nullable=False)
@@ -81,17 +81,17 @@ class File(SharedBase):
 
 
 class SimilarityResult(SharedBase):
-    __tablename__ = "similarity_result"
+    __tablename__ = "similarity_results"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
     task_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("plagiarism_task.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("plagiarism_tasks.id"), nullable=False
     )
     file_a_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("file.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("files.id"), nullable=False
     )
     file_b_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("file.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("files.id"), nullable=False
     )
     ast_similarity: Mapped[float | None] = mapped_column(Float, nullable=True)
     matches: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
