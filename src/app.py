@@ -40,16 +40,26 @@ class CustomRequest(StarletteRequest):
 subpath = settings.subpath_normalized
 subpath_for_routes = subpath.strip("/") if subpath else ""
 
-# Conditionally hide docs in production
+# Configure FastAPI docs URLs based on subpath
+if subpath_for_routes:
+    docs_url = f"/{subpath_for_routes}/docs"
+    redoc_url = f"/{subpath_for_routes}/redoc"
+    openapi_url = f"/{subpath_for_routes}/openapi.json"
+else:
+    docs_url = "/docs"
+    redoc_url = "/redoc"
+    openapi_url = "/openapi.json"
+
 app_configs = {
     "title": settings.app_name,
     "description": "API for checking code plagiarism across multiple files using AST analysis and fingerprinting.",
     "version": settings.app_version,
     "contact": {"name": "API Support"},
     "request_class": CustomRequest,
+    "docs_url": docs_url,
+    "redoc_url": redoc_url,
+    "openapi_url": openapi_url,
 }
-if settings.environment == "production":
-    app_configs["openapi_url"] = None
 
 app = FastAPI(**app_configs)
 
@@ -247,9 +257,11 @@ if subpath_for_routes:
         if (
             full_path.startswith("api/")
             or full_path.startswith("assets/")
-            or full_path.startswith("docs")
-            or full_path.startswith("openapi")
             or full_path.startswith("plagiarism")
+            or full_path.startswith("docs")
+            or full_path.startswith("redoc")
+            or full_path.startswith("openapi")
+            or full_path.startswith("swagger-ui")
         ):
             return {"detail": "Not Found"}
 
@@ -265,11 +277,12 @@ async def serve_react(full_path: str, request: Request):
     if (
         full_path.startswith("api/")
         or full_path.startswith("assets/")
-        or full_path.startswith("docs")
-        or full_path.startswith("openapi")
         or full_path.startswith("plagiarism")
         or full_path.startswith("health")
         or full_path.startswith("version")
+        or full_path.startswith("docs")
+        or full_path.startswith("redoc")
+        or full_path.startswith("openapi")
     ):
         return {"detail": "Not Found"}
 
