@@ -16,6 +16,10 @@ export const API_ENDPOINTS = {
   FILE_CONTENT: (fileId: string) => `/plagiarism/files/${fileId}/content`,
   FILE_SIMILARITIES: (fileId: string) => `/plagiarism/files/${fileId}/similarities`,
 
+  // Assignments
+  ASSIGNMENTS: '/plagiarism/assignments',
+  ASSIGNMENT_DETAILS: (id: string) => `/plagiarism/assignments/${id}`,
+
   // Health & version
   HEALTH: '/health',
   VERSION: '/version',

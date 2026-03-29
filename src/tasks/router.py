@@ -3,6 +3,7 @@ Tasks domain router - endpoints for task management and plagiarism check submiss
 """
 
 import logging
+import uuid
 
 from fastapi import (
     APIRouter,
@@ -56,6 +57,10 @@ async def check_plagiarism(
     language: str = Form(
         "python", description="Programming language for analysis (python, java, cpp, c, javascript)"
     ),
+    assignment_id: str | None = Form(
+        None,
+        description="Assignment UUID to scope analysis. Omit or set to empty for full DB scan.",
+    ),
     task_service: TaskService = Depends(get_task_service),
     storage=Depends(get_s3_storage),
     publish=Depends(get_publisher),
@@ -67,8 +72,20 @@ async def check_plagiarism(
                 f"File '{upload_file.filename}' exceeds maximum size of {settings.max_file_size} bytes"
             )
 
+    # Validate assignment_id format if provided
+    validated_assignment_id: str | None = None
+    if assignment_id and assignment_id.strip():
+        try:
+            validated_assignment_id = str(uuid.UUID(assignment_id.strip()))
+        except ValueError:
+            raise PlagiarismValidationError(
+                "Invalid assignment_id format. Must be a valid UUID."
+            ) from None
+
     files_data = [(f, language) for f in files]
-    return await task_service.create_task(files_data, storage, publish)
+    return await task_service.create_task(
+        files_data, storage, publish, assignment_id=validated_assignment_id
+    )
 
 
 @router.get(

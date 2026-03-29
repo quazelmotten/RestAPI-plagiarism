@@ -33,7 +33,7 @@ class MessageHandler:
         ch: "BlockingChannel",
         method: "Basic.Deliver",
         properties: "BasicProperties",
-        body: bytes
+        body: bytes,
     ) -> None:
         """
         Handle incoming message.
@@ -57,7 +57,8 @@ class MessageHandler:
                 raise ValueError("Need at least 1 file")
 
             log.info(f"[Task {task_id}] Processing {len(files)} files, language={language}")
-            self.task_service.process_task(task_id, files, language)
+            assignment_id = message.get("assignment_id")
+            self.task_service.process_task(task_id, files, language, assignment_id=assignment_id)
 
         except json.JSONDecodeError as e:
             log.error(f"Invalid JSON in message: {e}")
@@ -65,5 +66,6 @@ class MessageHandler:
         except Exception as e:
             log.error(f"Error processing message: {e}")
             import traceback
+
             log.error(traceback.format_exc())
             raise  # Re-raise to let worker handle nack

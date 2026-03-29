@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -87,6 +88,7 @@ async def client():
         # Create a minimal dummy RabbitMQ with is_connected attribute
         class DummyRabbitMQ:
             is_connected = False
+            publish_message = AsyncMock()
 
         app.state.rabbitmq = DummyRabbitMQ()
     if not hasattr(app.state, "ws_manager"):

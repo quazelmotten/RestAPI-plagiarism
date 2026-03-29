@@ -54,6 +54,7 @@ import {
   SiRust,
 } from 'react-icons/si';
 import { FaJava } from 'react-icons/fa';
+import { useQuery } from '@tanstack/react-query';
 import api, { API_ENDPOINTS } from '../services/api';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
@@ -111,6 +112,7 @@ const Upload: React.FC = () => {
   const navigate = useNavigate();
   const [files, setFiles] = useState<File[]>([]);
   const [language, setLanguage] = useState(getLastLanguage);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,6 +121,14 @@ const Upload: React.FC = () => {
   const toast = useToast();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const { isOpen: isClearOpen, onOpen: onClearOpen, onClose: onClearClose } = useDisclosure();
+
+  const { data: assignmentsData } = useQuery({
+    queryKey: ['assignments'],
+    queryFn: async () => {
+      const res = await api.get(API_ENDPOINTS.ASSIGNMENTS);
+      return res.data as { items: { id: string; name: string }[] };
+    },
+  });
 
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -286,6 +296,9 @@ const Upload: React.FC = () => {
       const formData = new FormData();
       files.forEach((file) => formData.append('files', file));
       formData.append('language', language);
+      if (selectedAssignmentId) {
+        formData.append('assignment_id', selectedAssignmentId);
+      }
 
       await api.post(API_ENDPOINTS.CHECK, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -397,6 +410,24 @@ const Upload: React.FC = () => {
                   <option value="java">Java</option>
                   <option value="go">Go</option>
                   <option value="rust">Rust</option>
+                </Select>
+              </Box>
+              <Box>
+                <Text fontSize="sm" color={mutedColor} mb={1}>
+                  Analysis Scope
+                </Text>
+                <Select
+                  value={selectedAssignmentId}
+                  onChange={(e) => setSelectedAssignmentId(e.target.value)}
+                  maxW="250px"
+                  size="sm"
+                >
+                  <option value="">Full DB Scan</option>
+                  {(assignmentsData?.items || []).map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
                 </Select>
               </Box>
               <Box>

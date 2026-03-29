@@ -30,7 +30,7 @@ class TaskService:
         candidate_service,
         analysis_service,
         result_service,
-        repository
+        repository,
     ):
         """
         Initialize task service with all dependencies.
@@ -54,7 +54,8 @@ class TaskService:
         self,
         task_id: str,
         files: list[dict[str, Any]],
-        language: str
+        language: str,
+        assignment_id: str | None = None,
     ) -> None:
         """
         Process a plagiarism detection task.
@@ -63,31 +64,35 @@ class TaskService:
             task_id: Unique task identifier
             files: List of file info dicts with 'hash'/'file_hash' and 'path'/'file_path'
             language: Programming language (e.g., 'python', 'cpp')
+            assignment_id: Optional assignment UUID to scope analysis
         """
         total_files = len(files)
-        logger.info(f"[Task {task_id}] Starting task with {total_files} files")
+        scope_label = f"assignment={assignment_id}" if assignment_id else "full DB"
+        logger.info(f"[Task {task_id}] Starting task with {total_files} files ({scope_label})")
         task_start = time.perf_counter()
 
         try:
             # Phase 1: Index all files
             phase_start = time.perf_counter()
             self.repository.update_task(
-                task_id=task_id,
-                status="indexing",
-                processed_pairs=0,
-                total_pairs=total_files
+                task_id=task_id, status="indexing", processed_pairs=0, total_pairs=total_files
             )
 
-            existing_files = self.repository.get_all_files(exclude_task_id=task_id)
-            logger.info(f"[Task {task_id}] Phase 1: Indexing {total_files} files "
-                        f"({len(existing_files)} existing files in database)")
+            if assignment_id:
+                existing_files = self.repository.get_files_by_assignment(
+                    assignment_id, exclude_task_id=task_id
+                )
+            else:
+                existing_files = self.repository.get_all_files(exclude_task_id=task_id)
+
+            logger.info(
+                f"[Task {task_id}] Phase 1: Indexing {total_files} files "
+                f"({len(existing_files)} existing files in scope)"
+            )
 
             def on_index_progress(processed: int, total: int) -> None:
                 self.repository.update_task(
-                    task_id=task_id,
-                    status="indexing",
-                    processed_pairs=processed,
-                    total_pairs=total
+                    task_id=task_id, status="indexing", processed_pairs=processed, total_pairs=total
                 )
 
             self.indexing_svc.ensure_files_indexed(
@@ -99,8 +104,10 @@ class TaskService:
 
             phase_elapsed = time.perf_counter() - phase_start
             phase_speed = total_files / phase_elapsed if phase_elapsed > 0 else 0
-            logger.info(f"[Task {task_id}] Phase 1 COMPLETE: indexed {total_files} files "
-                        f"in {phase_elapsed:.2f}s ({phase_speed:.1f} files/sec)")
+            logger.info(
+                f"[Task {task_id}] Phase 1 COMPLETE: indexed {total_files} files "
+                f"in {phase_elapsed:.2f}s ({phase_speed:.1f} files/sec)"
+            )
 
             # Phase 2a: Find intra-task pairs
             phase_start = time.perf_counter()
@@ -108,17 +115,19 @@ class TaskService:
                 task_id=task_id,
                 status="finding_intra_pairs",
                 processed_pairs=0,
-                total_pairs=total_files
+                total_pairs=total_files,
             )
 
-            logger.info(f"[Task {task_id}] Phase 2a: Finding intra-task pairs ({total_files} files)")
+            logger.info(
+                f"[Task {task_id}] Phase 2a: Finding intra-task pairs ({total_files} files)"
+            )
 
             def on_intra_progress(processed: int, total: int) -> None:
                 self.repository.update_task(
                     task_id=task_id,
                     status="finding_intra_pairs",
                     processed_pairs=processed,
-                    total_pairs=total
+                    total_pairs=total,
                 )
 
             intra_pairs = self.candidate_svc.find_candidate_pairs(
@@ -129,26 +138,30 @@ class TaskService:
             )
 
             intra_elapsed = time.perf_counter() - phase_start
-            logger.info(f"[Task {task_id}] Phase 2a COMPLETE: found {len(intra_pairs)} intra pairs "
-                        f"in {intra_elapsed:.2f}s")
+            logger.info(
+                f"[Task {task_id}] Phase 2a COMPLETE: found {len(intra_pairs)} intra pairs "
+                f"in {intra_elapsed:.2f}s"
+            )
 
             # Phase 2b: Find cross-task pairs
             self.repository.update_task(
                 task_id=task_id,
                 status="finding_cross_pairs",
                 processed_pairs=0,
-                total_pairs=total_files
+                total_pairs=total_files,
             )
 
-            logger.info(f"[Task {task_id}] Phase 2b: Finding cross-task pairs "
-                        f"({total_files} new vs {len(existing_files)} existing)")
+            logger.info(
+                f"[Task {task_id}] Phase 2b: Finding cross-task pairs "
+                f"({total_files} new vs {len(existing_files)} existing)"
+            )
 
             def on_cross_progress(processed: int, total: int) -> None:
                 self.repository.update_task(
                     task_id=task_id,
                     status="finding_cross_pairs",
                     processed_pairs=processed,
-                    total_pairs=total
+                    total_pairs=total,
                 )
 
             cross_pairs = self.candidate_svc.find_candidate_pairs(
@@ -164,8 +177,10 @@ class TaskService:
             all_pairs = intra_pairs + cross_pairs
             total_pairs = len(all_pairs)
 
-            logger.info(f"[Task {task_id}] Phase 2b COMPLETE: found {len(cross_pairs)} cross pairs "
-                        f"in {cross_elapsed:.2f}s")
+            logger.info(
+                f"[Task {task_id}] Phase 2b COMPLETE: found {len(cross_pairs)} cross pairs "
+                f"in {cross_elapsed:.2f}s"
+            )
 
             if total_pairs == 0:
                 self.result_svc.finalize_task(task_id, 0, 0)
@@ -177,7 +192,7 @@ class TaskService:
                 task_id=task_id,
                 status="storing_results",
                 total_pairs=total_pairs,
-                processed_pairs=0
+                processed_pairs=0,
             )
 
             logger.info(f"[Task {task_id}] Phase 3: Storing {total_pairs} similarity results")
@@ -186,16 +201,20 @@ class TaskService:
 
             phase_elapsed = time.perf_counter() - phase_start
             phase_speed = total_pairs / phase_elapsed if phase_elapsed > 0 else 0
-            logger.info(f"[Task {task_id}] Phase 3 COMPLETE: stored {total_pairs} results "
-                        f"in {phase_elapsed:.2f}s ({phase_speed:.1f} results/sec)")
+            logger.info(
+                f"[Task {task_id}] Phase 3 COMPLETE: stored {total_pairs} results "
+                f"in {phase_elapsed:.2f}s ({phase_speed:.1f} results/sec)"
+            )
 
             # Phase 4: Complete
             self.result_svc.finalize_task(task_id, total_pairs, total_pairs)
 
             total_elapsed = time.perf_counter() - task_start
             overall_speed = total_pairs / total_elapsed if total_elapsed > 0 else 0
-            logger.info(f"[Task {task_id}] COMPLETED successfully in {total_elapsed:.2f}s "
-                        f"({total_files} files, {total_pairs} pairs, {overall_speed:.1f} pairs/sec overall)")
+            logger.info(
+                f"[Task {task_id}] COMPLETED successfully in {total_elapsed:.2f}s "
+                f"({total_files} files, {total_pairs} pairs, {overall_speed:.1f} pairs/sec overall)"
+            )
 
         except Exception as e:
             logger.exception(f"[Task {task_id}] FAILED")

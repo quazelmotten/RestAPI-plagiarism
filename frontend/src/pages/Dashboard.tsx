@@ -13,6 +13,7 @@ import PlagiarismGraph from './PlagiarismGraph';
 import Upload from './Upload';
 import Results from './Results';
 import PairComparison from './PairComparison';
+import Assignments from './Assignments';
 
 const Dashboard: React.FC = () => {
   return (
@@ -23,6 +24,7 @@ const Dashboard: React.FC = () => {
         <Box as="main" p={8} pt={24} flex="1" overflow="hidden" minH="0" display="flex" flexDirection="column">
           <Routes>
             <Route path="/" element={<Overview />} />
+            <Route path="assignments" element={<Assignments />} />
             <Route path="submissions" element={<Submissions />} />
             <Route path="graph" element={<PlagiarismGraph />} />
             <Route path="upload" element={<Upload />} />

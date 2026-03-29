@@ -25,11 +25,17 @@ class TaskService:
         files_data: list[tuple],
         s3_storage,
         publish_message,
+        assignment_id: str | None = None,
     ) -> TaskCreateResponse:
         task_id_str = str(uuid.uuid4())
 
         task = PlagiarismTask(
-            id=task_id_str, status="queued", similarity=None, matches=None, error=None
+            id=task_id_str,
+            status="queued",
+            similarity=None,
+            matches=None,
+            error=None,
+            assignment_id=assignment_id,
         )
         self.db.add(task)
         await self.db.commit()
@@ -69,13 +75,17 @@ class TaskService:
 
         await self.db.commit()
 
+        message = {
+            "task_id": task_id_str,
+            "files": [fp.model_dump() for fp in file_paths],
+            "language": files_data[0][1] if files_data else "python",
+        }
+        if assignment_id:
+            message["assignment_id"] = assignment_id
+
         await publish_message(
             queue="plagiarism_queue",
-            message={
-                "task_id": task_id_str,
-                "files": [fp.model_dump() for fp in file_paths],
-                "language": files_data[0][1] if files_data else "python",
-            },
+            message=message,
         )
 
         return TaskCreateResponse(task_id=task_id_str, status="queued", files_count=len(file_paths))

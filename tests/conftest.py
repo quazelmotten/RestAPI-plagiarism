@@ -80,6 +80,15 @@ def mock_database():
     )
     mock_task_service.create_task = AsyncMock(return_value=None)
 
+    mock_assignment_service = MagicMock()
+    mock_assignment_service.get_assignment = AsyncMock(return_value=None)
+    mock_assignment_service.get_all_assignments = AsyncMock(
+        return_value=MagicMock(items=[], total=0, limit=50, offset=0)
+    )
+    mock_assignment_service.create_assignment = AsyncMock(return_value=None)
+    mock_assignment_service.update_assignment = AsyncMock(return_value=None)
+    mock_assignment_service.delete_assignment = AsyncMock(return_value=True)
+
     mock_file_service = MagicMock()
     mock_file_service.get_files = AsyncMock(
         return_value=MagicMock(items=[], total=0, limit=50, offset=0)
@@ -107,6 +116,9 @@ def mock_database():
     mock_task_repo = MagicMock()
     mock_task_repo.get_task = AsyncMock(return_value=None)
 
+    mock_assignment_repo = MagicMock()
+    mock_assignment_repo.get_assignment = AsyncMock(return_value=None)
+
     mock_file_repo = MagicMock()
     mock_file_repo.get_file = AsyncMock(return_value=None)
 
@@ -114,6 +126,9 @@ def mock_database():
 
     async def mock_get_task_service():
         return mock_task_service
+
+    async def mock_get_assignment_service():
+        return mock_assignment_service
 
     async def mock_get_file_service():
         return mock_file_service
@@ -124,6 +139,9 @@ def mock_database():
     async def mock_get_task_repo():
         return mock_task_repo
 
+    async def mock_get_assignment_repo():
+        return mock_assignment_repo
+
     async def mock_get_file_repo():
         return mock_file_repo
 
@@ -132,6 +150,7 @@ def mock_database():
 
     # Use FastAPI's dependency_overrides
     from app import app
+    from assignments.dependencies import get_assignment_repository, get_assignment_service
     from database import get_async_session
     from dependencies import get_s3_storage
     from files.dependencies import get_file_repository, get_file_service
@@ -143,9 +162,11 @@ def mock_database():
     app.dependency_overrides[get_async_session] = mock_get_async_session
     app.dependency_overrides[get_s3_storage] = lambda: mock_storage
     app.dependency_overrides[get_task_repository] = mock_get_task_repo
+    app.dependency_overrides[get_assignment_repository] = mock_get_assignment_repo
     app.dependency_overrides[get_file_repository] = mock_get_file_repo
     app.dependency_overrides[get_result_repository] = mock_get_result_repo
     app.dependency_overrides[get_task_service] = mock_get_task_service
+    app.dependency_overrides[get_assignment_service] = mock_get_assignment_service
     app.dependency_overrides[get_file_service] = mock_get_file_service
     app.dependency_overrides[get_result_service] = mock_get_result_service
 

@@ -47,7 +47,34 @@ class PostgresRepository(TaskRepository):
                     "filename": f.filename,
                     "file_path": f.file_path,
                     "file_hash": f.file_hash,
-                    "language": f.language
+                    "language": f.language,
+                }
+                for f in files
+            ]
+
+    def get_files_by_assignment(
+        self, assignment_id: str, exclude_task_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Get files that belong to tasks within a specific assignment."""
+        with get_session() as session:
+            stmt = (
+                select(File)
+                .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
+                .where(PlagiarismTask.assignment_id == assignment_id)
+            )
+            if exclude_task_id:
+                stmt = stmt.where(File.task_id != exclude_task_id)
+            result = session.execute(stmt)
+            files = result.scalars().all()
+
+            return [
+                {
+                    "id": str(f.id),
+                    "task_id": str(f.task_id),
+                    "filename": f.filename,
+                    "file_path": f.file_path,
+                    "file_hash": f.file_hash,
+                    "language": f.language,
                 }
                 for f in files
             ]
@@ -60,7 +87,7 @@ class PostgresRepository(TaskRepository):
         matches: dict[str, Any] | None = None,
         error: str | None = None,
         total_pairs: int | None = None,
-        processed_pairs: int | None = None
+        processed_pairs: int | None = None,
     ) -> None:
         """Update a plagiarism task."""
         with get_session() as session:
@@ -79,11 +106,7 @@ class PostgresRepository(TaskRepository):
                 if total_pairs is not None and total_pairs > 0:
                     values["progress"] = processed_pairs / total_pairs
 
-            stmt = (
-                update(PlagiarismTask)
-                .where(PlagiarismTask.id == task_id)
-                .values(**values)
-            )
+            stmt = update(PlagiarismTask).where(PlagiarismTask.id == task_id).values(**values)
             session.execute(stmt)
             session.commit()
 
@@ -117,41 +140,48 @@ class PostgresRepository(TaskRepository):
                     SimilarityResult,
                     [
                         {
-                            'id': str(uuid4()),
-                            'task_id': r['task_id'],
-                            'file_a_id': r['file_a_id'],
-                            'file_b_id': r['file_b_id'],
-                            'ast_similarity': r.get('ast_similarity'),
-                            'matches': r.get('matches', {}),
+                            "id": str(uuid4()),
+                            "task_id": r["task_id"],
+                            "file_a_id": r["file_a_id"],
+                            "file_b_id": r["file_b_id"],
+                            "ast_similarity": r.get("ast_similarity"),
+                            "matches": r.get("matches", {}),
                         }
                         for r in results
-                    ]
+                    ],
                 )
                 session.commit()
             except IntegrityError:
                 session.rollback()
-                logger.debug("Bulk insert of %d results failed, falling back to per-row insert", len(results))
+                logger.debug(
+                    "Bulk insert of %d results failed, falling back to per-row insert", len(results)
+                )
                 for r in results:
                     try:
                         result = SimilarityResult(
                             id=str(uuid4()),
-                            task_id=r['task_id'],
-                            file_a_id=r['file_a_id'],
-                            file_b_id=r['file_b_id'],
-                            ast_similarity=r.get('ast_similarity'),
-                            matches=r.get('matches', {}),
+                            task_id=r["task_id"],
+                            file_a_id=r["file_a_id"],
+                            file_b_id=r["file_b_id"],
+                            ast_similarity=r.get("ast_similarity"),
+                            matches=r.get("matches", {}),
                         )
                         session.add(result)
                         session.commit()
                     except IntegrityError:
                         session.rollback()
-                        logger.debug("Skipping duplicate result for files %s <-> %s", r['file_a_id'], r['file_b_id'])
+                        logger.debug(
+                            "Skipping duplicate result for files %s <-> %s",
+                            r["file_a_id"],
+                            r["file_b_id"],
+                        )
 
     def get_max_similarity(self, task_id: str) -> float:
         """Get maximum similarity score for a task."""
         with get_session() as session:
             result = session.execute(
-                select(func.max(SimilarityResult.ast_similarity))
-                .where(SimilarityResult.task_id == task_id)
+                select(func.max(SimilarityResult.ast_similarity)).where(
+                    SimilarityResult.task_id == task_id
+                )
             ).scalar()
             return result if result is not None else 0.0

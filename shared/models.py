@@ -31,6 +31,20 @@ class SharedBase(DeclarativeBase):
     metadata = metadata
 
 
+class Assignment(SharedBase):
+    __tablename__ = "assignments"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationship to tasks
+    tasks: Mapped[list["PlagiarismTask"]] = relationship(
+        "PlagiarismTask", back_populates="assignment"
+    )
+
+
 class PlagiarismTask(SharedBase):
     __tablename__ = "plagiarism_tasks"
 
@@ -42,12 +56,17 @@ class PlagiarismTask(SharedBase):
     total_pairs: Mapped[int | None] = mapped_column(Integer, nullable=True)
     processed_pairs: Mapped[int | None] = mapped_column(Integer, nullable=True)
     progress: Mapped[float | None] = mapped_column(Float, nullable=True)
+    assignment_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("assignments.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationship to files
     files: Mapped[list["File"]] = relationship(
         "File", back_populates="task", cascade="all, delete-orphan"
     )
+    # Relationship to assignment
+    assignment: Mapped["Assignment | None"] = relationship("Assignment", back_populates="tasks")
 
 
 class File(SharedBase):
