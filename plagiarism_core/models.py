@@ -9,11 +9,12 @@ from typing import Any
 
 class PlagiarismType(IntEnum):
     """Classification of detected plagiarism."""
-    NONE = 0       # No match
-    EXACT = 1      # Exact copy (whitespace/comments may differ)
-    RENAMED = 2    # Same code structure, different identifiers
+
+    NONE = 0  # No match
+    EXACT = 1  # Exact copy (whitespace/comments may differ)
+    RENAMED = 2  # Same code structure, different identifiers
     REORDERED = 3  # Same code units in different order
-    SEMANTIC = 4   # Semantically equivalent (for↔while, etc.)
+    SEMANTIC = 4  # Semantically equivalent (for↔while, etc.)
 
 
 PLAGIARISM_TYPE_LABELS = {
@@ -28,6 +29,7 @@ PLAGIARISM_TYPE_LABELS = {
 @dataclass
 class Match:
     """A matching region between two files."""
+
     file1: dict[str, Any]  # {'start_line', 'start_col', 'end_line', 'end_col'}
     file2: dict[str, Any]
     kgram_count: int
@@ -40,6 +42,7 @@ class Match:
 @dataclass
 class SimilarityMetrics:
     """Detailed similarity metrics."""
+
     left_covered: int
     right_covered: int
     left_total: int
@@ -51,6 +54,7 @@ class SimilarityMetrics:
 @dataclass
 class AnalysisResult:
     """Complete analysis result."""
+
     similarity_ratio: float
     matches: list[Match]
     metrics: SimilarityMetrics

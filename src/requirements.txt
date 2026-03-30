@@ -121,5 +121,11 @@ py-spy==0.3.14
 tree-sitter
 tree-sitter-python
 tree-sitter-cpp
+tree-sitter-c
+tree-sitter-java
+tree-sitter-javascript
+tree-sitter-typescript
+tree-sitter-go
+tree-sitter-rust
 redis==5.0.1
 xxhash

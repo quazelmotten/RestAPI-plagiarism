@@ -7,10 +7,10 @@ from .result_service import ResultService
 from .task_service import TaskService
 
 __all__ = [
-    'AnalysisService',
-    'CandidateService',
-    'FingerprintService',
-    'IndexingService',
-    'ResultService',
-    'TaskService'
+    "AnalysisService",
+    "CandidateService",
+    "FingerprintService",
+    "IndexingService",
+    "ResultService",
+    "TaskService",
 ]

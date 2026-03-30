@@ -21,6 +21,10 @@ class MatchDetail(CustomBaseModel):
     file1: MatchLocation
     file2: MatchLocation
     kgram_count: int
+    plagiarism_type: int | None = 1
+    similarity: float | None = 1.0
+    details: dict | None = None
+    description: str | None = None
 
 
 class FileInfo(CustomBaseModel):

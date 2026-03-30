@@ -21,7 +21,7 @@ def hash_ast_subtrees(root, min_depth: int = 3) -> list[int]:
     hashes = []
 
     def visit(node):
-        if node.type == 'comment':
+        if node.type == "comment":
             return 0, ""
 
         if not node.children:
@@ -47,12 +47,7 @@ def hash_ast_subtrees(root, min_depth: int = 3) -> list[int]:
     return hashes
 
 
-def extract_ast_hashes(
-    file_path: str,
-    lang_code: str,
-    min_depth: int = 3,
-    tree = None
-) -> list[int]:
+def extract_ast_hashes(file_path: str, lang_code: str, min_depth: int = 3, tree=None) -> list[int]:
     """
     Extract AST subtree hashes from a file.
     """
@@ -60,10 +55,10 @@ def extract_ast_hashes(
         language = get_language(lang_code)
         parser = Parser(language)
 
-        with open(file_path, encoding='utf-8', errors='ignore') as f:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
             code = f.read()
 
-        tree = parser.parse(code.encode('utf-8'))
+        tree = parser.parse(code.encode("utf-8"))
 
     return hash_ast_subtrees(tree.root_node, min_depth)
 
@@ -83,7 +78,9 @@ def ast_similarity(hashes_a: list[int], hashes_b: list[int]) -> float:
     return intersection / union if union else 0.0
 
 
-def hash_ast_subtrees_with_positions(root, min_depth: int = 3) -> list[tuple[int, tuple[int, int], tuple[int, int]]]:
+def hash_ast_subtrees_with_positions(
+    root, min_depth: int = 3
+) -> list[tuple[int, tuple[int, int], tuple[int, int]]]:
     """
     Hash AST subtrees with their source positions.
 
@@ -93,7 +90,7 @@ def hash_ast_subtrees_with_positions(root, min_depth: int = 3) -> list[tuple[int
     results = []
 
     def visit(node):
-        if node.type == 'comment':
+        if node.type == "comment":
             return 0, ""
 
         if not node.children:
@@ -137,13 +134,13 @@ def find_ast_matches(
     language = get_language(lang_code)
     parser = Parser(language)
 
-    with open(file1_path, encoding='utf-8', errors='ignore') as f:
+    with open(file1_path, encoding="utf-8", errors="ignore") as f:
         code1 = f.read()
-    with open(file2_path, encoding='utf-8', errors='ignore') as f:
+    with open(file2_path, encoding="utf-8", errors="ignore") as f:
         code2 = f.read()
 
-    tree1 = parser.parse(code1.encode('utf-8'))
-    tree2 = parser.parse(code2.encode('utf-8'))
+    tree1 = parser.parse(code1.encode("utf-8"))
+    tree2 = parser.parse(code2.encode("utf-8"))
 
     subtrees1 = hash_ast_subtrees_with_positions(tree1.root_node, min_depth)
     subtrees2 = hash_ast_subtrees_with_positions(tree2.root_node, min_depth)
@@ -163,17 +160,23 @@ def find_ast_matches(
                 key = (h, i)
                 if key not in used2:
                     used2.add(key)
-                    matches.append(Match(
-                        file1={
-                            'start_line': start1[0], 'start_col': start1[1],
-                            'end_line': end1[0], 'end_col': end1[1],
-                        },
-                        file2={
-                            'start_line': start2[0], 'start_col': start2[1],
-                            'end_line': end2[0], 'end_col': end2[1],
-                        },
-                        kgram_count=1
-                    ))
+                    matches.append(
+                        Match(
+                            file1={
+                                "start_line": start1[0],
+                                "start_col": start1[1],
+                                "end_line": end1[0],
+                                "end_col": end1[1],
+                            },
+                            file2={
+                                "start_line": start2[0],
+                                "start_col": start2[1],
+                                "end_line": end2[0],
+                                "end_col": end2[1],
+                            },
+                            kgram_count=1,
+                        )
+                    )
                     break
 
     # Merge adjacent/overlapping AST matches
@@ -181,9 +184,9 @@ def find_ast_matches(
 
     return [
         {
-            'file1': m.file1,
-            'file2': m.file2,
-            'kgram_count': m.kgram_count,
+            "file1": m.file1,
+            "file2": m.file2,
+            "kgram_count": m.kgram_count,
         }
         for m in merged
     ]

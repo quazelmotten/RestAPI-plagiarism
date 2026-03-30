@@ -51,9 +51,14 @@ y = x + 2
     def test_replaces_all_identifiers(self):
         source = "print(len([1, 2, 3]))"
         normalized = normalize_identifiers(source, "python")
-        # Canonicalizer replaces all non-dunder identifiers, including builtins
-        assert "VAR_0" in normalized
-        assert "VAR_1" in normalized
+        # Builtins (print, len) are preserved; no non-builtin identifiers here
+        assert "print" in normalized
+        assert "len" in normalized
+        # With user-defined identifiers:
+        source2 = "foo(bar([1, 2, 3]))"
+        normalized2 = normalize_identifiers(source2, "python")
+        assert "VAR_0" in normalized2
+        assert "VAR_1" in normalized2
 
     def test_skips_dunder_names(self):
         source = """
@@ -62,10 +67,11 @@ class Foo:
         self.x = 1
 """
         normalized = normalize_identifiers(source, "python")
-        # Only dunder names (__init__) are preserved; 'self' and 'Foo' get replaced
+        # Only dunder names (__init__) are preserved
+        # Builtins (self, class, def) are also preserved
         assert "__init__" in normalized
         assert "VAR_0" in normalized  # Foo
-        assert "VAR_1" in normalized  # self
+        assert "self" in normalized  # self is preserved as builtin
 
     def test_returns_original_on_parse_failure(self):
         # Empty string returns empty (parse succeeds but no identifiers)

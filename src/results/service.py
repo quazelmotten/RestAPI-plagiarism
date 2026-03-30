@@ -83,6 +83,7 @@ class ResultService:
 
         if sr:
             sr.matches = legacy_matches
+            sr.ast_similarity = result["similarity_ratio"]
         else:
             sr = SimilarityResult(
                 id=uuid4(),

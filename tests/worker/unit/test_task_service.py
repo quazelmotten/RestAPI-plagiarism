@@ -56,6 +56,10 @@ class TestTaskService:
             intra_pairs,
             cross_pairs,
         ]
+        # compute_ast_similarities returns the pairs unchanged (mock passthrough)
+        mock_services["indexing_service"].compute_ast_similarities.return_value = (
+            intra_pairs + cross_pairs
+        )
         mock_services["result_service"].finalize_task.return_value = None
         mock_services["repository"].get_max_similarity.return_value = 0.5
 
@@ -143,6 +147,7 @@ class TestTaskService:
         mock_services["indexing_service"].ensure_files_indexed.return_value = {}
         pairs = [({}, {}, 0.5)] * 42
         mock_services["candidate_service"].find_candidate_pairs.return_value = pairs
+        mock_services["indexing_service"].compute_ast_similarities.return_value = pairs * 2
         mock_services["result_service"].store_similarity_scores.return_value = None
         mock_services["result_service"].finalize_task.return_value = None
         mock_services["repository"].get_max_similarity.return_value = 0.42

@@ -2,7 +2,6 @@
 Similarity metrics computation.
 """
 
-
 from .models import SimilarityMetrics
 
 
@@ -16,7 +15,6 @@ def longest_common_subsequence(occurrences: list[tuple[int, int]]) -> int:
     sorted_occ = sorted(occurrences, key=lambda x: (x[0], x[1]))
 
     left_indices = [occ[0] for occ in sorted_occ]
-    [occ[1] for occ in sorted_occ]
 
     left_to_right: dict[int, list[int]] = {}
     for occ in sorted_occ:
@@ -38,9 +36,7 @@ def longest_common_subsequence(occurrences: list[tuple[int, int]]) -> int:
 
 
 def compute_similarity_metrics(
-    occurrences: list[tuple],
-    total_left: int,
-    total_right: int
+    occurrences: list[tuple], total_left: int, total_right: int
 ) -> SimilarityMetrics:
     """
     Compute similarity metrics based on k-gram coverage.
@@ -60,7 +56,7 @@ def compute_similarity_metrics(
             left_total=total_left,
             right_total=total_right,
             similarity=0.0,
-            longest_fragment=0
+            longest_fragment=0,
         )
 
     left_covered = len({occ[0] for occ in occurrences})
@@ -80,5 +76,5 @@ def compute_similarity_metrics(
         left_total=total_left,
         right_total=total_right,
         similarity=similarity,
-        longest_fragment=longest
+        longest_fragment=longest,
     )

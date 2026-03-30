@@ -186,6 +186,19 @@ class TaskService:
                 self.result_svc.finalize_task(task_id, 0, 0)
                 return
 
+            # Phase 2.5: Compute AST Jaccard similarity using cached hashes
+            # (replaces the fingerprint Jaccard from the inverted index)
+            phase_start = time.perf_counter()
+            logger.info(
+                f"[Task {task_id}] Phase 2.5: Computing AST similarities for {total_pairs} pairs"
+            )
+            all_pairs = self.indexing_svc.compute_ast_similarities(all_pairs)
+            ast_elapsed = time.perf_counter() - phase_start
+            logger.info(
+                f"[Task {task_id}] Phase 2.5 COMPLETE: computed AST similarities "
+                f"in {ast_elapsed:.2f}s"
+            )
+
             # Phase 3: Store similarity percentages
             phase_start = time.perf_counter()
             self.repository.update_task(

@@ -7,30 +7,43 @@ import {
   Flex,
   IconButton,
   HStack,
+  VStack,
   Tooltip,
+  Badge,
+  Collapse,
+  Button,
 } from '@chakra-ui/react';
-import { FiEye, FiEyeOff, FiChevronUp, FiChevronDown } from 'react-icons/fi';
+import { FiEye, FiEyeOff, FiChevronUp, FiChevronDown, FiLink, FiLink2, FiBarChart2 } from 'react-icons/fi';
 import api, { API_ENDPOINTS } from '../services/api';
 import FilePickerModal from '../components/FilePickerModal';
 import { useSearchParams } from 'react-router';
 import type { FileInfo, FileContent, PlagiarismResult as ApiPlagiarismResult, PlagiarismMatch as ApiPlagiarismMatch, ApiError } from '../types';
+import { PLAGIARISM_TYPE_LABELS, PLAGIARISM_TYPE_COLORS } from '../types';
 import ErrorBoundary from '../components/ErrorBoundary';
-
-// FilePickerFile is now FileInfo from types
-type FilePickerFile = FileInfo;
 
 type PlagiarismMatch = ApiPlagiarismMatch;
 
-// Backend returns { file1: {start_line, end_line, ...}, file2: {start_line, end_line, ...}, kgram_count, plagiarism_type, ... }
-// Frontend expects { file_a_start_line, file_a_end_line, file_b_start_line, file_b_end_line, ... }
-const transformMatches = (matches: any[]): PlagiarismMatch[] => {
+interface BackendMatch {
+  file1?: { start_line: number; end_line: number };
+  file2?: { start_line: number; end_line: number };
+  file_a_start_line?: number;
+  file_a_end_line?: number;
+  file_b_start_line?: number;
+  file_b_end_line?: number;
+  plagiarism_type?: number;
+  similarity?: number;
+  details?: Record<string, unknown> | null;
+  description?: string | null;
+}
+
+const transformMatches = (matches: BackendMatch[]): PlagiarismMatch[] => {
   if (!Array.isArray(matches)) return [];
   return matches.map(m => ({
-    file_a_start_line: m.file1?.start_line ?? m.file_a_start_line,
-    file_a_end_line: m.file1?.end_line ?? m.file_a_end_line,
-    file_b_start_line: m.file2?.start_line ?? m.file_b_start_line,
-    file_b_end_line: m.file2?.end_line ?? m.file_b_end_line,
-    plagiarism_type: m.plagiarism_type ?? m.plagiarism_type ?? 1,
+    file_a_start_line: m.file1?.start_line ?? m.file_a_start_line ?? 0,
+    file_a_end_line: m.file1?.end_line ?? m.file_a_end_line ?? 0,
+    file_b_start_line: m.file2?.start_line ?? m.file_b_start_line ?? 0,
+    file_b_end_line: m.file2?.end_line ?? m.file_b_end_line ?? 0,
+    plagiarism_type: m.plagiarism_type ?? 1,
     similarity: m.similarity ?? 1.0,
     details: m.details ?? null,
     description: m.description ?? null,
@@ -53,8 +66,8 @@ const getSimilarityGradient = (similarity: number): string => {
 
 const PairComparison: React.FC = () => {
   const [currentPair, setCurrentPair] = useState<PairResult | null>(null);
-  const [selectedFileA, setSelectedFileA] = useState<FilePickerFile | null>(null);
-  const [selectedFileB, setSelectedFileB] = useState<FilePickerFile | null>(null);
+  const [selectedFileA, setSelectedFileA] = useState<FileInfo | null>(null);
+  const [selectedFileB, setSelectedFileB] = useState<FileInfo | null>(null);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [fileAContent, setFileAContent] = useState<FileContent | null>(null);
   const [fileBContent, setFileBContent] = useState<FileContent | null>(null);
@@ -64,8 +77,10 @@ const PairComparison: React.FC = () => {
   const [analyzingMatches, setAnalyzingMatches] = useState(false);
   const [filterComments, setFilterComments] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
+  const [syncScroll, setSyncScroll] = useState(true);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const scrollSyncing = useRef(false);
 
-  // Read URL query params for initial file selection
   const [searchParams] = useSearchParams();
 
   const fileAContainerRef = useRef<HTMLDivElement>(null);
@@ -74,6 +89,7 @@ const PairComparison: React.FC = () => {
   const fileBLineRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const bgColor = useColorModeValue('white', 'gray.800');
+  const minimapBg = useColorModeValue('gray.100', 'gray.700');
 
   const currentPairMemo = useMemo(() => currentPair, [currentPair]);
 
@@ -82,61 +98,190 @@ const PairComparison: React.FC = () => {
     return currentPairMemo.file_a.id === (selectedFileA ? selectedFileA.id : undefined);
   }, [currentPairMemo, selectedFileA]);
 
-   // Load file IDs from URL query params on mount
-   useEffect(() => {
-     const fileAId = searchParams.get('file_a');
-     const fileBId = searchParams.get('file_b');
-     if (fileAId && fileBId && !selectedFileA && !selectedFileB) {
-       // Fetch files list to get full file objects
-        api.get<{ items: FileInfo[] }>(API_ENDPOINTS.FILES_LIST)
-          .then(res => {
-            const fileA = res.data.items.find((f) => f.id === fileAId);
-            const fileB = res.data.items.find((f) => f.id === fileBId);
-           if (fileA && fileB) {
-             setSelectedFileA(fileA);
-             setSelectedFileB(fileB);
-           }
-         })
-         .catch(err => {
-           console.error('Failed to load files from URL params', err);
-         });
-     }
-   }, [searchParams, selectedFileA, selectedFileB]);
+  // Match statistics
+  const matchStats = useMemo(() => {
+    const matches = currentPairMemo?.matches || [];
+    const stats: Record<number, { count: number; linesA: number; linesB: number }> = {};
+    let totalLinesA = 0;
+    let totalLinesB = 0;
 
-    const fetchFilePair = useCallback(async () => {
-      if (!selectedFileA || !selectedFileB) return;
+    for (const m of matches) {
+      const type = m.plagiarism_type ?? 1;
+      if (!stats[type]) stats[type] = { count: 0, linesA: 0, linesB: 0 };
+      stats[type].count++;
+      const la = m.file_a_end_line - m.file_a_start_line + 1;
+      const lb = m.file_b_end_line - m.file_b_start_line + 1;
+      stats[type].linesA += la;
+      stats[type].linesB += lb;
+      totalLinesA += la;
+      totalLinesB += lb;
+    }
+
+    const fileALines = (fileAContent?.content || '').split('\n').length;
+    const fileBLines = (fileBContent?.content || '').split('\n').length;
+
+    return {
+      byType: stats,
+      totalMatches: matches.length,
+      totalLinesA,
+      totalLinesB,
+      coverageA: fileALines > 0 ? (totalLinesA / fileALines) * 100 : 0,
+      coverageB: fileBLines > 0 ? (totalLinesB / fileBLines) * 100 : 0,
+    };
+  }, [currentPairMemo, fileAContent, fileBContent]);
+
+  // Minimap data
+  const minimapData = useMemo(() => {
+    const matches = currentPairMemo?.matches || [];
+    const fileALines = (fileAContent?.content || '').split('\n').length;
+    const fileBLines = (fileBContent?.content || '').split('\n').length;
+    if (fileALines === 0 || fileBLines === 0) return { a: [], b: [] };
+
+    const buildBlocks = (totalLines: number, isFileA: boolean) =>
+      matches.map((m, idx) => {
+        const start = isFileA ? m.file_a_start_line : m.file_b_start_line;
+        const end = isFileA ? m.file_a_end_line : m.file_b_end_line;
+        const top = ((start - 1) / totalLines) * 100;
+        const height = Math.max(((end - start + 1) / totalLines) * 100, 0.5);
+        const color = PLAGIARISM_TYPE_COLORS[m.plagiarism_type ?? 1] || 'rgba(255,235,59,0.4)';
+        return { top, height, color, idx };
+      });
+
+    return {
+      a: buildBlocks(fileALines, true),
+      b: buildBlocks(fileBLines, false),
+    };
+  }, [currentPairMemo, fileAContent, fileBContent]);
+
+  // Synchronized scrolling
+  const handleScrollA = useCallback(() => {
+    if (!syncScroll || scrollSyncing.current) return;
+    const src = fileAContainerRef.current;
+    const dst = fileBContainerRef.current;
+    if (!src || !dst) return;
+    const ratio = src.scrollHeight > src.clientHeight
+      ? src.scrollTop / (src.scrollHeight - src.clientHeight) : 0;
+    scrollSyncing.current = true;
+    dst.scrollTop = ratio * (dst.scrollHeight - dst.clientHeight);
+    requestAnimationFrame(() => { scrollSyncing.current = false; });
+  }, [syncScroll]);
+
+  const handleScrollB = useCallback(() => {
+    if (!syncScroll || scrollSyncing.current) return;
+    const src = fileBContainerRef.current;
+    const dst = fileAContainerRef.current;
+    if (!src || !dst) return;
+    const ratio = src.scrollHeight > src.clientHeight
+      ? src.scrollTop / (src.scrollHeight - src.clientHeight) : 0;
+    scrollSyncing.current = true;
+    dst.scrollTop = ratio * (dst.scrollHeight - dst.clientHeight);
+    requestAnimationFrame(() => { scrollSyncing.current = false; });
+  }, [syncScroll]);
+
+  useEffect(() => {
+    const elA = fileAContainerRef.current;
+    const elB = fileBContainerRef.current;
+    elA?.addEventListener('scroll', handleScrollA, { passive: true });
+    elB?.addEventListener('scroll', handleScrollB, { passive: true });
+    return () => {
+      elA?.removeEventListener('scroll', handleScrollA);
+      elB?.removeEventListener('scroll', handleScrollB);
+    };
+  }, [handleScrollA, handleScrollB]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      switch (e.key) {
+        case 'n': {
+          e.preventDefault();
+          const matches = currentPairMemo?.matches || [];
+          if (matches.length === 0) break;
+          const next = hoveredMatchIndex === null ? 0 : (hoveredMatchIndex + 1) % matches.length;
+          setHoveredMatchIndex(next);
+          const m = matches[next];
+          const el = fileALineRefs.current.get(m.file_a_start_line - 1);
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          break;
+        }
+        case 'p': {
+          e.preventDefault();
+          const matches2 = currentPairMemo?.matches || [];
+          if (matches2.length === 0) break;
+          const prev = hoveredMatchIndex === null ? matches2.length - 1 : (hoveredMatchIndex - 1 + matches2.length) % matches2.length;
+          setHoveredMatchIndex(prev);
+          const m2 = matches2[prev];
+          const el2 = fileALineRefs.current.get(m2.file_a_start_line - 1);
+          el2?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          break;
+        }
+        case 'c':
+          e.preventDefault();
+          setFilterComments(f => !f);
+          break;
+        case 's':
+          e.preventDefault();
+          setSyncScroll(f => !f);
+          break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [currentPairMemo, hoveredMatchIndex]);
+
+  // Load file IDs from URL query params on mount
+  useEffect(() => {
+    const fileAId = searchParams.get('file_a');
+    const fileBId = searchParams.get('file_b');
+    if (fileAId && fileBId && !selectedFileA && !selectedFileB) {
+      api.get<{ items: FileInfo[] }>(API_ENDPOINTS.FILES_LIST)
+        .then(res => {
+          const fileA = res.data.items.find((f) => f.id === fileAId);
+          const fileB = res.data.items.find((f) => f.id === fileBId);
+          if (fileA && fileB) {
+            setSelectedFileA(fileA);
+            setSelectedFileB(fileB);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load files from URL params', err);
+        });
+    }
+  }, [searchParams, selectedFileA, selectedFileB]);
+
+  const fetchFilePair = useCallback(async () => {
+    if (!selectedFileA || !selectedFileB) return;
+    try {
+      const response = await api.get<ApiPlagiarismResult>(API_ENDPOINTS.FILE_PAIR, {
+        params: { file_a: selectedFileA.id, file_b: selectedFileB.id }
+      });
+      const pairData = response.data;
+
+      setAnalyzingMatches(true);
       try {
-        const response = await api.get<ApiPlagiarismResult>(API_ENDPOINTS.FILE_PAIR, {
+        const analyzeResponse = await api.post<{ matches: ApiPlagiarismMatch[]; ast_similarity: number }>(API_ENDPOINTS.FILE_PAIR_ANALYZE, null, {
           params: { file_a: selectedFileA.id, file_b: selectedFileB.id }
         });
-        const pairData = response.data;
-
-        // Always run on-demand analysis for fresh, correctly-merged matches.
-        // DB stores only similarity scores (worker doesn't compute match details).
-        setAnalyzingMatches(true);
-        try {
-          const analyzeResponse = await api.post<{ matches: ApiPlagiarismMatch[]; ast_similarity: number }>(API_ENDPOINTS.FILE_PAIR_ANALYZE, null, {
-            params: { file_a: selectedFileA.id, file_b: selectedFileB.id }
-          });
-          pairData.matches = transformMatches(analyzeResponse.data.matches);
-          pairData.ast_similarity = analyzeResponse.data.ast_similarity;
-        } catch (analyzeErr: unknown) {
-          console.error('On-demand analysis failed:', analyzeErr);
-          // Fall back to whatever the DB had
-          pairData.matches = transformMatches(pairData.matches);
-        } finally {
-          setAnalyzingMatches(false);
-        }
-
-        setCurrentPair(pairData);
-      } catch (err: unknown) {
-        const error = err as ApiError;
-        if (error.response?.status !== 404) {
-          console.error('Error fetching file pair:', err);
-        }
-        setCurrentPair(null);
+        pairData.matches = transformMatches(analyzeResponse.data.matches as unknown as BackendMatch[]);
+        pairData.ast_similarity = analyzeResponse.data.ast_similarity;
+      } catch (analyzeErr: unknown) {
+        console.error('On-demand analysis failed:', analyzeErr);
+        pairData.matches = transformMatches(pairData.matches as unknown as BackendMatch[]);
+      } finally {
+        setAnalyzingMatches(false);
       }
-      }, [selectedFileA, selectedFileB]);
+
+      setCurrentPair(pairData);
+    } catch (err: unknown) {
+      const error = err as ApiError;
+      if (error.response?.status !== 404) {
+        console.error('Error fetching file pair:', err);
+      }
+      setCurrentPair(null);
+    }
+  }, [selectedFileA, selectedFileB]);
 
   useEffect(() => {
     if (selectedFileA && selectedFileB) {
@@ -214,7 +359,6 @@ const PairComparison: React.FC = () => {
     const targetEl = targetRefs.current.get(targetLine - 1);
     if (!targetEl) return;
 
-    // Use getBoundingClientRect for reliable positioning regardless of CSS intermediaries
     const targetRect = targetEl.getBoundingClientRect();
     const containerRect = targetContainer.getBoundingClientRect();
     const containerBorderTop = parseFloat(getComputedStyle(targetContainer).borderTopWidth) || 0;
@@ -258,7 +402,7 @@ const PairComparison: React.FC = () => {
       )}
 
       <HStack px={2} py={1} flexShrink={0} spacing={1}>
-        <Tooltip label={filterComments ? 'Show comments' : 'Hide comments'} placement="bottom">
+        <Tooltip label={filterComments ? 'Show comments (c)' : 'Hide comments (c)'} placement="bottom">
           <IconButton
             aria-label={filterComments ? 'Show comments' : 'Hide comments'}
             icon={filterComments ? <FiEye /> : <FiEyeOff />}
@@ -266,6 +410,26 @@ const PairComparison: React.FC = () => {
             variant={filterComments ? 'solid' : 'ghost'}
             colorScheme={filterComments ? 'orange' : 'gray'}
             onClick={() => setFilterComments(!filterComments)}
+          />
+        </Tooltip>
+        <Tooltip label={syncScroll ? 'Unlock scroll sync (s)' : 'Lock scroll sync (s)'} placement="bottom">
+          <IconButton
+            aria-label={syncScroll ? 'Unlock scroll sync' : 'Lock scroll sync'}
+            icon={syncScroll ? <FiLink /> : <FiLink2 />}
+            size="sm"
+            variant={syncScroll ? 'solid' : 'ghost'}
+            colorScheme={syncScroll ? 'blue' : 'gray'}
+            onClick={() => setSyncScroll(!syncScroll)}
+          />
+        </Tooltip>
+        <Tooltip label="Match statistics" placement="bottom">
+          <IconButton
+            aria-label="Match statistics"
+            icon={<FiBarChart2 />}
+            size="sm"
+            variant={statsOpen ? 'solid' : 'ghost'}
+            colorScheme={statsOpen ? 'purple' : 'gray'}
+            onClick={() => setStatsOpen(!statsOpen)}
           />
         </Tooltip>
         {headerVisible && (
@@ -281,6 +445,37 @@ const PairComparison: React.FC = () => {
         )}
       </HStack>
 
+      <Collapse in={statsOpen} animateOpacity>
+        <Box px={4} py={2} borderBottomWidth={1} borderColor={useColorModeValue('gray.200', 'gray.600')}>
+          <HStack spacing={6} wrap="wrap">
+            <VStack spacing={0} align="start">
+              <Text fontSize="xs" color="gray.500">Total matches</Text>
+              <Text fontWeight="bold">{matchStats.totalMatches}</Text>
+            </VStack>
+            <VStack spacing={0} align="start">
+              <Text fontSize="xs" color="gray.500">Coverage A</Text>
+              <Text fontWeight="bold">{matchStats.coverageA.toFixed(1)}%</Text>
+            </VStack>
+            <VStack spacing={0} align="start">
+              <Text fontSize="xs" color="gray.500">Coverage B</Text>
+              <Text fontWeight="bold">{matchStats.coverageB.toFixed(1)}%</Text>
+            </VStack>
+            {Object.entries(matchStats.byType).map(([type, s]) => (
+              <HStack key={type} spacing={1}>
+                <Badge colorScheme={
+                  Number(type) === 1 ? 'green' :
+                  Number(type) === 2 ? 'yellow' :
+                  Number(type) === 3 ? 'blue' : 'red'
+                }>
+                  T{type}
+                </Badge>
+                <Text fontSize="sm">{s.count} ({s.linesA}+{s.linesB} lines)</Text>
+              </HStack>
+            ))}
+          </HStack>
+        </Box>
+      </Collapse>
+
       {loadingContent ? (
         <Box flex={1} display="flex" alignItems="center" justifyContent="center" py={8} minH={0}>
           <Spinner size="lg" />
@@ -288,34 +483,70 @@ const PairComparison: React.FC = () => {
         </Box>
        ) : (
          <ErrorBoundary>
-           <Flex flex={1} gap={4} align="stretch" py={4} px={2} minH={0} overflow="hidden">
-              <FileViewer
-                content={fileAContent?.content || ''}
-                fileName={fileAContent?.filename || 'File A'}
-                language={fileAContent?.language || 'unknown'}
-                matches={currentPair?.matches || []}
-                isFileA={isFileAInPair}
-                filterComments={filterComments}
-                hoveredMatchIndex={hoveredMatchIndex}
-                onHoverMatch={setHoveredMatchIndex}
-                onJumpToMatch={handleJumpToMatch}
-                scrollContainerRef={fileAContainerRef}
-                getLineRef={getLineRef(true)}
-              />
+           <Flex flex={1} gap={0} align="stretch" minH={0} overflow="hidden">
+             {/* Left minimap */}
+             <Box w="16px" bg={minimapBg} position="relative" flexShrink={0}>
+               {minimapData.a.map(block => (
+                 <Box
+                   key={block.idx}
+                   position="absolute"
+                   left="2px"
+                   right="2px"
+                   top={`${block.top}%`}
+                   h={`${block.height}%`}
+                   bg={block.color}
+                   borderRadius="1px"
+                   minH="2px"
+                 />
+               ))}
+             </Box>
 
-              <FileViewer
-                content={fileBContent?.content || ''}
-                fileName={fileBContent?.filename || 'File B'}
-                language={fileBContent?.language || 'unknown'}
-                matches={currentPair?.matches || []}
-                isFileA={!isFileAInPair}
-                filterComments={filterComments}
-                hoveredMatchIndex={hoveredMatchIndex}
-                onHoverMatch={setHoveredMatchIndex}
-                onJumpToMatch={handleJumpToMatch}
-                scrollContainerRef={fileBContainerRef}
-                getLineRef={getLineRef(false)}
-              />
+             <Flex flex={1} gap={4} align="stretch" py={4} px={2} minH={0} overflow="hidden">
+               <FileViewer
+                 content={fileAContent?.content || ''}
+                 fileName={fileAContent?.filename || 'File A'}
+                 language={fileAContent?.language || 'unknown'}
+                 matches={currentPair?.matches || []}
+                 isFileA={isFileAInPair}
+                 filterComments={filterComments}
+                 hoveredMatchIndex={hoveredMatchIndex}
+                 onHoverMatch={setHoveredMatchIndex}
+                 onJumpToMatch={handleJumpToMatch}
+                 scrollContainerRef={fileAContainerRef}
+                 getLineRef={getLineRef(true)}
+               />
+
+               <FileViewer
+                 content={fileBContent?.content || ''}
+                 fileName={fileBContent?.filename || 'File B'}
+                 language={fileBContent?.language || 'unknown'}
+                 matches={currentPair?.matches || []}
+                 isFileA={!isFileAInPair}
+                 filterComments={filterComments}
+                 hoveredMatchIndex={hoveredMatchIndex}
+                 onHoverMatch={setHoveredMatchIndex}
+                 onJumpToMatch={handleJumpToMatch}
+                 scrollContainerRef={fileBContainerRef}
+                 getLineRef={getLineRef(false)}
+               />
+             </Flex>
+
+             {/* Right minimap */}
+             <Box w="16px" bg={minimapBg} position="relative" flexShrink={0}>
+               {minimapData.b.map(block => (
+                 <Box
+                   key={block.idx}
+                   position="absolute"
+                   left="2px"
+                   right="2px"
+                   top={`${block.top}%`}
+                   h={`${block.height}%`}
+                   bg={block.color}
+                   borderRadius="1px"
+                   minH="2px"
+                 />
+               ))}
+             </Box>
            </Flex>
          </ErrorBoundary>
         )}
@@ -335,6 +566,6 @@ const PairComparison: React.FC = () => {
         />
       </Box>
     );
-  }
+  };
 
 export default PairComparison;

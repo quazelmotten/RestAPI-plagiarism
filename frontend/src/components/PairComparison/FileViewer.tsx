@@ -31,27 +31,32 @@ const FALLBACK_BORDERS = ['#FBC02D', '#388E3C', '#1976D2', '#7B1FA2'];
 const isCommentLine = (line: string, language: string): boolean => {
   const trimmed = line.trim();
   if (!trimmed) return false;
-  if (language === 'python') {
+
+  // Python / Ruby / Bash — line comments only
+  if (['python', 'ruby', 'perl', 'bash', 'shell'].includes(language)) {
     return trimmed.startsWith('#');
   }
-  if (['javascript', 'typescript', 'c', 'cpp', 'java', 'go', 'rust', 'kotlin', 'swift', 'csharp'].includes(language)) {
-    return trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/');
+
+  // C-style languages — line comments and block comment delimiters
+  if (['javascript', 'typescript', 'tsx', 'c', 'cpp', 'java', 'go', 'rust', 'kotlin', 'swift', 'csharp'].includes(language)) {
+    return trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed === '*' || trimmed.startsWith('*/');
   }
+
+  // SQL / Lua
+  if (['sql', 'lua'].includes(language)) {
+    return trimmed.startsWith('--');
+  }
+
+  // HTML / XML
   if (language === 'html' || language === 'xml') {
-    return trimmed.startsWith('<!--');
+    return trimmed.startsWith('<!--') || trimmed.endsWith('-->');
   }
-  if (language === 'css' || language === 'scss' || language === 'less') {
-    return trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/');
+
+  // CSS / SCSS
+  if (['css', 'scss', 'less'].includes(language)) {
+    return trimmed.startsWith('/*') || trimmed === '*' || trimmed.startsWith('*/');
   }
-  if (language === 'ruby' || language === 'perl' || language === 'bash' || language === 'shell') {
-    return trimmed.startsWith('#');
-  }
-  if (language === 'lua') {
-    return trimmed.startsWith('--');
-  }
-  if (language === 'sql') {
-    return trimmed.startsWith('--');
-  }
+
   return false;
 };
 
@@ -84,7 +89,8 @@ const getMatchTooltip = (match: PlagiarismMatch | null): string => {
     return `${label}: ${match.description}`;
   }
   if (match.details?.renames && match.details.renames.length > 0) {
-    const renames = match.details.renames.map((r: any) => `${r.original} → ${r.renamed}`).join(', ');
+    const renames = (match.details.renames as Array<{ original: string; renamed: string }>)
+      .map((r) => `${r.original} → ${r.renamed}`).join(', ');
     return `${label}: ${renames}`;
   }
   return label;

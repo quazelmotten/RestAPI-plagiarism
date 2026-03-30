@@ -27,10 +27,7 @@ class ResultService:
         self.repository = repository
 
     def store_similarity_scores(
-        self,
-        task_id: str,
-        pairs: list[tuple],
-        batch_size: int = 5000
+        self, task_id: str, pairs: list[tuple], batch_size: int = 5000
     ) -> None:
         """
         Store similarity scores for candidate pairs.
@@ -46,18 +43,20 @@ class ResultService:
 
         results = []
         for file_a, file_b, similarity in pairs:
-            file_a_id = file_a.get('id')
-            file_b_id = file_b.get('id')
+            file_a_id = file_a.get("id")
+            file_b_id = file_b.get("id")
             if not file_a_id or not file_b_id:
                 continue
 
-            results.append({
-                'task_id': task_id,
-                'file_a_id': file_a_id,
-                'file_b_id': file_b_id,
-                'ast_similarity': round(similarity, 6),
-                'matches': [],
-            })
+            results.append(
+                {
+                    "task_id": task_id,
+                    "file_a_id": file_a_id,
+                    "file_b_id": file_b_id,
+                    "ast_similarity": round(similarity, 6),
+                    "matches": [],
+                }
+            )
 
         if not results:
             logger.info(f"[Task {task_id}] No valid pairs to store")
@@ -69,7 +68,7 @@ class ResultService:
         last_progress_sent = 0  # Track last processed count we reported
 
         for i in range(0, total, batch_size):
-            batch = results[i:i+batch_size]
+            batch = results[i : i + batch_size]
             self.repository.bulk_insert_results(batch)
             processed = min(i + batch_size, total)
 
@@ -80,7 +79,7 @@ class ResultService:
                     task_id=task_id,
                     status="storing_results",
                     processed_pairs=processed,
-                    total_pairs=total
+                    total_pairs=total,
                 )
 
             if processed % log_interval < batch_size or processed == total:
@@ -89,30 +88,17 @@ class ResultService:
 
         logger.info(f"[Task {task_id}] Stored all {total} similarity results")
 
-    def update_progress(
-        self,
-        task_id: str,
-        processed: int,
-        total: int
-    ) -> None:
+    def update_progress(self, task_id: str, processed: int, total: int) -> None:
         """Update task processing progress."""
         self.repository.update_task(
-            task_id=task_id,
-            status="storing_results",
-            processed_pairs=processed,
-            total_pairs=total
+            task_id=task_id, status="storing_results", processed_pairs=processed, total_pairs=total
         )
 
         if processed % 1000 == 0 or (total > 0 and processed % max(1, total // 10) == 0):
             percent = (processed / total * 100) if total > 0 else 0
             logger.info(f"[Task {task_id}] Progress: {processed}/{total} ({percent:.1f}%)")
 
-    def finalize_task(
-        self,
-        task_id: str,
-        total_pairs: int,
-        processed_count: int
-    ) -> None:
+    def finalize_task(self, task_id: str, total_pairs: int, processed_count: int) -> None:
         """
         Mark task as completed.
 
@@ -127,12 +113,9 @@ class ResultService:
             task_id=task_id,
             status="completed",
             similarity=max_sim,
-            matches={
-                "total_pairs": total_pairs,
-                "processed_pairs": processed_count
-            },
+            matches={"total_pairs": total_pairs, "processed_pairs": processed_count},
             total_pairs=total_pairs,
-            processed_pairs=processed_count
+            processed_pairs=processed_count,
         )
 
         logger.info(
@@ -145,6 +128,6 @@ class ResultService:
         self.repository.update_task(
             task_id=task_id,
             status="failed",
-            error=error[:1000]  # Truncate long errors
+            error=error[:1000],  # Truncate long errors
         )
         logger.error(f"[Task {task_id}] FAILED: {error}")
