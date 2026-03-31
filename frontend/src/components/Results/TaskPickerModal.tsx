@@ -22,6 +22,7 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import { FiSearch, FiCheck, FiAlertCircle, FiActivity, FiLayers, FiClock, FiCheckCircle } from 'react-icons/fi';
+import { useTranslation } from 'react-i18next';
 import type { TaskListItem } from '../../types';
 
 interface TaskPickerModalProps {
@@ -56,6 +57,7 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
   selectedTaskId,
   loading,
 }) => {
+  const { t } = useTranslation(['results', 'common', 'status']);
   const [searchQuery, setSearchQuery] = useState('');
   const cardBg = useColorModeValue('white', 'gray.700');
   const selectedBg = useColorModeValue('blue.50', 'blue.900');
@@ -130,7 +132,7 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
     <Modal isOpen={isOpen} onClose={onClose} size="lg" scrollBehavior="inside">
       <ModalOverlay />
       <ModalContent maxH="80vh" display="flex" flexDir="column">
-        <ModalHeader>Select Task</ModalHeader>
+        <ModalHeader>{t('taskPicker.title')}</ModalHeader>
         <ModalCloseButton />
 
          <ModalBody flex={1} overflowY="auto" px={6} py={4}>
@@ -139,12 +141,12 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
                <InputLeftElement pointerEvents="none">
                  <FiSearch color="gray.400" />
                </InputLeftElement>
-               <Input
-                 placeholder="Search by task ID..."
-                 value={searchQuery}
-                 onChange={(e) => setSearchQuery(e.target.value)}
-                 autoFocus
-               />
+                <Input
+                   placeholder={t('taskPicker.search')}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  autoFocus
+                />
              </InputGroup>
 
              {loading && tasks.length === 0 ? (
@@ -154,7 +156,7 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
              ) : isEmpty ? (
               <Box textAlign="center" py={8}>
                 <Text color="gray.500">
-                  {searchQuery ? 'No tasks match your search' : 'No tasks available'}
+                   {searchQuery ? t('taskPicker.noMatches') : t('taskPicker.noTasks')}
                 </Text>
               </Box>
             ) : (
@@ -164,7 +166,7 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
                   return (
                     <Tooltip
                       key={task.task_id}
-                      label={`Task ${task.task_id} - Created: ${formatDate(task.created_at)}`}
+                      label={t('taskPicker.tooltip', { id: task.task_id, date: formatDate(task.created_at) })}
                       placement="left"
                       hasArrow
                     >
@@ -192,7 +194,7 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
                               </Text>
                               <HStack mt={1} spacing={2}>
                                 <Badge size="sm" colorScheme={getStatusColorScheme(task.status)}>
-                                  {task.status}
+                                  {t(`status:${task.status}`)}
                                 </Badge>
                                 <HStack spacing={1}>
                                   <FiClock />
@@ -206,14 +208,14 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
 
                           <HStack spacing={3} justify="flex-end" wrap="wrap">
                             <Badge size="sm" colorScheme="gray" variant="subtle">
-                              📁 {task.files_count || 0} files
+                              📁 {t('taskPicker.fileCount', { count: task.files_count || 0 })}
                             </Badge>
                             <Badge size="sm" colorScheme="blue" variant="subtle">
-                              {task.total_pairs} pairs
+                              {t('taskPicker.pairCount', { count: task.total_pairs })}
                             </Badge>
                             {(task.high_similarity_count || 0) > 0 && (
                               <Badge size="sm" colorScheme="red" variant="subtle">
-                                ⚠️ {task.high_similarity_count} high
+                                ⚠️ {t('taskPicker.highWarning', { count: task.high_similarity_count })}
                               </Badge>
                             )}
                             {['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(task.status) && task.progress && (
@@ -238,7 +240,7 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
         <ModalFooter pt={4} borderTopWidth="1px">
           <HStack justify="flex-end" w="100%">
             <Button variant="ghost" onClick={onClose}>
-              Cancel
+              {t('common:cancel')}
             </Button>
           </HStack>
         </ModalFooter>

@@ -49,6 +49,7 @@ import {
   FiFolder,
 } from 'react-icons/fi';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../services/api';
 
 interface Assignment {
@@ -70,6 +71,7 @@ interface AssignmentsResponse {
 const Assignments: React.FC = () => {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { t } = useTranslation(['assignments', 'common']);
 
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -99,17 +101,17 @@ const Assignments: React.FC = () => {
       const res = await api.post(API_ENDPOINTS.ASSIGNMENTS, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      toast({ title: 'Assignment created', status: 'success', duration: 3000 });
-      closeModal();
-    },
-    onError: (err: unknown) => {
-      const msg = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : 'Failed to create assignment';
-      toast({ title: 'Error', description: msg, status: 'error', duration: 5000 });
-    },
+     onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: ['assignments'] });
+       toast({ title: t('toasts.created'), status: 'success', duration: 3000 });
+       closeModal();
+     },
+     onError: (err: unknown) => {
+       const msg = err && typeof err === 'object' && 'response' in err
+         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+         : t('common:error');
+       toast({ title: t('common:error'), description: msg, status: 'error', duration: 5000 });
+     },
   });
 
   const updateMutation = useMutation({
@@ -117,29 +119,29 @@ const Assignments: React.FC = () => {
       const res = await api.patch(`${API_ENDPOINTS.ASSIGNMENTS}/${id}`, payload);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      toast({ title: 'Assignment updated', status: 'success', duration: 3000 });
-      closeModal();
-    },
-    onError: () => {
-      toast({ title: 'Error', description: 'Failed to update assignment', status: 'error', duration: 5000 });
-    },
+     onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: ['assignments'] });
+       toast({ title: t('toasts.updated'), status: 'success', duration: 3000 });
+       closeModal();
+     },
+     onError: () => {
+       toast({ title: t('common:error'), description: t('toasts.updateFailed'), status: 'error', duration: 5000 });
+     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       await api.delete(`${API_ENDPOINTS.ASSIGNMENTS}/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      toast({ title: 'Assignment deleted', status: 'success', duration: 3000 });
-      setDeletingAssignment(null);
-      onDeleteClose();
-    },
-    onError: () => {
-      toast({ title: 'Error', description: 'Failed to delete assignment', status: 'error', duration: 5000 });
-    },
+     onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: ['assignments'] });
+       toast({ title: t('toasts.deleted'), status: 'success', duration: 3000 });
+       setDeletingAssignment(null);
+       onDeleteClose();
+     },
+     onError: () => {
+       toast({ title: t('common:error'), description: t('toasts.deleteFailed'), status: 'error', duration: 5000 });
+     },
   });
 
   const openCreate = () => {
@@ -165,7 +167,7 @@ const Assignments: React.FC = () => {
 
   const handleSave = useCallback(() => {
     if (!newName.trim()) {
-      toast({ title: 'Name is required', status: 'warning', duration: 3000 });
+      toast({ title: t('validation.nameRequired'), status: 'warning', duration: 3000 });
       return;
     }
     const payload = {
@@ -194,10 +196,10 @@ const Assignments: React.FC = () => {
       {/* Header */}
       <Flex justify="space-between" align="center" mb={4} flexShrink={0}>
         <Text fontSize="2xl" fontWeight="bold">
-          Assignments
+          {t('title')}
         </Text>
         <Button leftIcon={<FiPlus />} colorScheme="brand" size="sm" onClick={openCreate}>
-          New Assignment
+          {t('newAssignment')}
         </Button>
       </Flex>
 
@@ -208,7 +210,7 @@ const Assignments: React.FC = () => {
             <Icon as={FiSearch} color={mutedColor} />
           </InputLeftElement>
           <Input
-            placeholder="Search assignments..."
+            placeholder={t('search')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -238,23 +240,23 @@ const Assignments: React.FC = () => {
             p={8}
             color={mutedColor}
           >
-            <Icon as={FiFolder} boxSize={10} mb={3} />
-            <Text fontWeight="medium">No assignments yet</Text>
-            <Text fontSize="sm">Create an assignment to scope your plagiarism checks</Text>
+             <Icon as={FiFolder} boxSize={10} mb={3} />
+             <Text fontWeight="medium">{t('noAssignments')}</Text>
+             <Text fontSize="sm">{t('createAssignmentPrompt')}</Text>
           </Flex>
         ) : (
           <TableContainer>
             <Table variant="simple" size="sm">
-              <Thead>
-                <Tr>
-                  <Th>Name</Th>
-                  <Th>Description</Th>
-                  <Th isNumeric>Tasks</Th>
-                  <Th isNumeric>Files</Th>
-                  <Th>Created</Th>
-                  <Th>Actions</Th>
-                </Tr>
-              </Thead>
+               <Thead>
+                 <Tr>
+                   <Th>{t('table.name')}</Th>
+                   <Th>{t('table.description')}</Th>
+                   <Th isNumeric>{t('table.tasks')}</Th>
+                   <Th isNumeric>{t('table.files')}</Th>
+                   <Th>{t('table.created')}</Th>
+                   <Th>{t('table.actions')}</Th>
+                 </Tr>
+               </Thead>
               <Tbody>
                 {filteredAssignments.map((a) => (
                   <Tr key={a.id} _hover={{ bg: hoverBg }}>
@@ -272,14 +274,14 @@ const Assignments: React.FC = () => {
                     <Td>
                       <HStack spacing={1}>
                         <IconButton
-                          aria-label="Edit assignment"
+                          aria-label={`${t('common:edit')} assignment`}
                           icon={<FiEdit2 />}
                           size="xs"
                           variant="ghost"
                           onClick={() => openEdit(a)}
                         />
                         <IconButton
-                          aria-label="Delete assignment"
+                          aria-label={`${t('common:delete')} assignment`}
                           icon={<FiTrash2 />}
                           size="xs"
                           variant="ghost"
@@ -303,40 +305,40 @@ const Assignments: React.FC = () => {
       <Modal isOpen={isModalOpen} onClose={closeModal} isCentered>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>{editingAssignment ? 'Edit Assignment' : 'New Assignment'}</ModalHeader>
+          <ModalHeader>{editingAssignment ? t('modal.edit') : t('modal.new')}</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <VStack spacing={4}>
-              <FormControl isRequired>
-                <FormLabel>Name</FormLabel>
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g., CS101 Homework 3"
-                  autoFocus
-                />
-              </FormControl>
-              <FormControl>
-                <FormLabel>Description</FormLabel>
-                <Textarea
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  placeholder="Optional description"
-                  rows={3}
-                />
-              </FormControl>
+               <FormControl isRequired>
+                 <FormLabel>{t('form.name')}</FormLabel>
+                 <Input
+                   value={newName}
+                   onChange={(e) => setNewName(e.target.value)}
+                   placeholder={t('form.namePlaceholder')}
+                   autoFocus
+                 />
+               </FormControl>
+               <FormControl>
+                 <FormLabel>{t('form.description')}</FormLabel>
+                 <Textarea
+                   value={newDescription}
+                   onChange={(e) => setNewDescription(e.target.value)}
+                   placeholder={t('form.descriptionPlaceholder')}
+                   rows={3}
+                 />
+               </FormControl>
             </VStack>
           </ModalBody>
           <ModalFooter>
             <Button variant="ghost" mr={3} onClick={closeModal}>
-              Cancel
+              {t('common:cancel')}
             </Button>
             <Button
               colorScheme="brand"
               onClick={handleSave}
               isLoading={createMutation.isPending || updateMutation.isPending}
             >
-              {editingAssignment ? 'Save' : 'Create'}
+              {editingAssignment ? t('common:save') : t('common:create')}
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -353,26 +355,25 @@ const Assignments: React.FC = () => {
       >
         <AlertDialogOverlay>
           <AlertDialogContent>
-            <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Delete Assignment
-            </AlertDialogHeader>
-            <AlertDialogBody>
-              Are you sure you want to delete &quot;{deletingAssignment?.name}&quot;? Tasks associated
-              with this assignment will not be deleted.
-            </AlertDialogBody>
-            <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onDeleteClose}>
-                Cancel
-              </Button>
-              <Button
-                colorScheme="red"
-                onClick={handleDelete}
-                ml={3}
-                isLoading={deleteMutation.isPending}
-              >
-                Delete
-              </Button>
-            </AlertDialogFooter>
+             <AlertDialogHeader fontSize="lg" fontWeight="bold">
+               {t('deleteConfirm.title')}
+             </AlertDialogHeader>
+             <AlertDialogBody>
+               {t('deleteConfirm.message', { name: deletingAssignment?.name })}
+             </AlertDialogBody>
+             <AlertDialogFooter>
+               <Button ref={cancelRef} onClick={onDeleteClose}>
+                 {t('common:cancel')}
+               </Button>
+               <Button
+                 colorScheme="red"
+                 onClick={handleDelete}
+                 ml={3}
+                 isLoading={deleteMutation.isPending}
+               >
+                 {t('common:delete')}
+               </Button>
+             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>
       </AlertDialog>

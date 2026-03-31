@@ -17,6 +17,7 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import { FiBarChart2 } from 'react-icons/fi';
+import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../../services/api';
 import type { PlagiarismResult } from '../../types';
 
@@ -48,6 +49,7 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
   taskId,
   stats,
 }) => {
+  const { t } = useTranslation(['results']);
   const [binCount, setBinCount] = useState(25);
   const [isLogScale, setIsLogScale] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -176,7 +178,7 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
       <CardBody>
         <VStack spacing={4} align="stretch">
           <HStack justify="space-between" align="center">
-            <Heading size="sm">Similarity Distribution</Heading>
+            <Heading size="sm">{t('distribution.title')}</Heading>
             <HStack spacing={3} align="center">
               <Button
                 size="sm"
@@ -184,12 +186,12 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
                 colorScheme="blue"
                 leftIcon={<FiBarChart2 />}
                 onClick={toggleLogScale}
-                title={isLogScale ? 'Switch to linear scale' : 'Switch to log scale'}
+                title={isLogScale ? t('distribution.switchToLinear') : t('distribution.switchToLog')}
               >
-                {isLogScale ? 'Log Scale' : 'Log Scale'}
+                {t('distribution.logScale')}
               </Button>
               <Text fontSize="xs" color="gray.500" minW="80px">
-                Bins: {binCount}
+                {t('distribution.bins', { count: binCount })}
               </Text>
               <Slider
                 value={binCount}
@@ -210,7 +212,7 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
           {showIncompleteWarning && (
             <Box p={3} bg="yellow.50" borderRadius="md" borderWidth="1px" borderColor="yellow.200">
               <Text fontSize="sm" color="yellow.800">
-                Showing distribution for loaded results only. Full histogram requires task selection.
+                {t('distribution.partialData')}
               </Text>
             </Box>
           )}
@@ -218,7 +220,7 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
           {error && (
             <Box p={3} bg="red.50" borderRadius="md" borderWidth="1px" borderColor="red.200">
               <Text fontSize="sm" color="red.800">
-                Failed to load histogram: {error}
+                {t('distribution.failedToLoad', { error })}
               </Text>
             </Box>
           )}
@@ -270,11 +272,16 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
                    const showLabel = index % labelStep === 0;
 
                    return (
-                     <Tooltip
-                       key={index}
-                       label={`${bin.range}: ${rawCount.toLocaleString()} pairs (${percentage}%)${isLogScale ? ' [log]' : ''}`}
-                       placement="top"
-                     >
+                      <Tooltip
+                        key={index}
+                        label={t('distribution.binTooltip', { 
+                          range: bin.range, 
+                          count: rawCount.toLocaleString(), 
+                          percentage, 
+                          logSuffix: isLogScale ? ' [log]' : '' 
+                        })}
+                        placement="top"
+                      >
                        <VStack
                          spacing={1}
                          align="center"
@@ -314,25 +321,25 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
               <Text fontSize="sm" fontWeight="bold" color="green.500">
                 {stats?.low?.toLocaleString() ?? '0'}
               </Text>
-              <Text fontSize="xs" color={rangeColor}>Low (&lt;25%)</Text>
+               <Text fontSize="xs" color={rangeColor}>{t('distribution.lowLabel')}</Text>
             </VStack>
             <VStack align="center" spacing={1}>
               <Text fontSize="sm" fontWeight="bold" color="orange.500">
                 {stats?.medium?.toLocaleString() ?? '0'}
               </Text>
-              <Text fontSize="xs" color={rangeColor}>Medium (25-49%)</Text>
+               <Text fontSize="xs" color={rangeColor}>{t('distribution.mediumLabel')}</Text>
             </VStack>
             <VStack align="center" spacing={1}>
               <Text fontSize="sm" fontWeight="bold" color="red.500">
                 {stats?.high?.toLocaleString() ?? '0'}
               </Text>
-              <Text fontSize="xs" color={rangeColor}>High (≥50%)</Text>
+               <Text fontSize="xs" color={rangeColor}>{t('distribution.highLabel')}</Text>
             </VStack>
             <VStack align="center" spacing={1}>
               <Text fontSize="sm" fontWeight="bold" color="blue.500">
                 {totalPairs.toLocaleString()}
               </Text>
-              <Text fontSize="xs" color={rangeColor}>Total</Text>
+               <Text fontSize="xs" color={rangeColor}>{t('distribution.totalLabel')}</Text>
             </VStack>
           </HStack>
         </VStack>

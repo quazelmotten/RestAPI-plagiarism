@@ -1,0 +1,11 @@
+{
+  "python": "Python",
+  "javascript": "JavaScript",
+  "typescript": "TypeScript",
+  "cpp": "C++",
+  "c": "C",
+  "java": "Java",
+  "go": "Go",
+  "rust": "Rust",
+  "text": "Text"
+}

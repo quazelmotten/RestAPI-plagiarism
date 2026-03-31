@@ -1,0 +1,27 @@
+{
+  "selectTask": "Select Task:",
+  "similarityThreshold": "Similarity Threshold",
+  "thresholdDescription": "Only show connections with similarity score above the threshold",
+  "showing": "Showing {{count}} of {{total}} connections",
+  "loading": "Loading results...",
+  "empty": {
+    "noChecks": "No plagiarism checks found. Upload files to get started!"
+  },
+  "taskOption": "{{id}}... ({{status}}) - {{count}} pairs",
+  "legend": {
+    "high": "High (≥80%)",
+    "medium": "Medium (60-79%)",
+    "low": "Low (<60%)"
+  },
+  "errors": {
+    "fetchFailed": "Failed to fetch plagiarism data",
+    "invalidDataFormat": "Invalid data format received from server"
+  },
+  "noTaskSelected": "No task selected",
+  "noData": "No data to display",
+  "zoomIn": "Zoom in",
+  "zoomOut": "Zoom out",
+  "resetView": "Reset view",
+  "nodeTooltip": "{{filename}} ({{count}} connections)",
+  "edgeTooltip": "{{fileA}} ↔ {{fileB}}: {{similarity}}% similarity"
+}

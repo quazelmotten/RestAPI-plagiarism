@@ -1,0 +1,32 @@
+{
+  "filters": {
+    "fileName": "File Name",
+    "search": "Search...",
+    "language": "Language",
+    "all": "All",
+    "status": "Status",
+    "similarity": "Similarity (e.g. >50% or 0.5)",
+    "similarityPlaceholder": ">50%, <0.3, etc.",
+    "submittedDate": "Submitted Date",
+    "taskId": "Task ID"
+  },
+  "table": {
+    "fileName": "File Name",
+    "language": "Language",
+    "status": "Status",
+    "similarity": "Similarity",
+    "submittedAt": "Submitted At",
+    "taskId": "Task ID",
+    "actions": "Actions",
+    "goToTask": "Go to Task"
+  },
+  "noMatches": "No submissions match the current filters",
+  "loading": "Loading...",
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "pageSize": "Page size:",
+    "showing": "Showing {{start}}-{{end}} of {{total}}",
+    "goToPage": "Go to page:"
+  }
+}

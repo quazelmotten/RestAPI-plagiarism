@@ -9,6 +9,7 @@ import {
   Flex,
   useColorModeValue,
 } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import { FiHome, FiFileText, FiShare2, FiUpload, FiBarChart2, FiColumns, FiBookOpen } from 'react-icons/fi';
 
 const blink = keyframes`
@@ -16,17 +17,8 @@ const blink = keyframes`
   51%, 100% { opacity: 0; }
 `;
 
-const menuItems = [
-  { path: '/dashboard', label: 'Overview', icon: FiHome },
-  { path: '/dashboard/assignments', label: 'Assignments', icon: FiBookOpen },
-  { path: '/dashboard/submissions', label: 'Submissions', icon: FiFileText },
-  { path: '/dashboard/graph', label: 'Plagiarism Graph', icon: FiShare2 },
-  { path: '/dashboard/upload', label: 'Upload Files', icon: FiUpload },
-  { path: '/dashboard/results', label: 'Results', icon: FiBarChart2 },
-  { path: '/dashboard/pair-comparison', label: 'Pair Comparison', icon: FiColumns },
-];
-
 const Sidebar: React.FC = () => {
+  const { t } = useTranslation('navigation');
   const location = useLocation();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -34,6 +26,16 @@ const Sidebar: React.FC = () => {
   const [isBlinking, setIsBlinking] = useState(false);
 
   const logoColor = useColorModeValue('black', 'white');
+
+  const menuItems = [
+    { path: '/dashboard', label: t('overview'), icon: FiHome },
+    { path: '/dashboard/assignments', label: t('assignments'), icon: FiBookOpen },
+    { path: '/dashboard/submissions', label: t('submissions'), icon: FiFileText },
+    { path: '/dashboard/graph', label: t('plagiarismGraph'), icon: FiShare2 },
+    { path: '/dashboard/upload', label: t('uploadFiles'), icon: FiUpload },
+    { path: '/dashboard/results', label: t('results'), icon: FiBarChart2 },
+    { path: '/dashboard/pair-comparison', label: t('pairComparison'), icon: FiColumns },
+  ];
 
   return (
     <Box
@@ -62,7 +64,7 @@ const Sidebar: React.FC = () => {
           <Box as="span" sx={isBlinking ? { animation: `${blink} 1s infinite` } : undefined}>_</Box>
         </Text>
       </Box>
-      
+
       <VStack spacing={2} align="stretch">
         {menuItems.map((item) => (
           <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none' }}>
@@ -74,8 +76,8 @@ const Sidebar: React.FC = () => {
               bg={location.pathname === item.path ? 'brand.500' : 'transparent'}
               color={location.pathname === item.path ? 'white' : 'inherit'}
                _hover={{
-                 bg: location.pathname === item.path ? 'brand.600' : hoverBg,
-               }}
+                bg: location.pathname === item.path ? 'brand.600' : hoverBg,
+              }}
               transition="all 0.2s"
             >
               <Icon as={item.icon} boxSize={5} mr={3} />

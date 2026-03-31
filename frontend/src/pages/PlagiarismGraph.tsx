@@ -19,6 +19,7 @@ import {
   Alert,
   AlertIcon,
 } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../services/api';
 import type { TaskListItem, TaskDetails } from '../types';
 type Task = TaskDetails;
@@ -26,6 +27,7 @@ type Task = TaskDetails;
 cytoscape.use(coseBilkent);
 
 const PlagiarismGraph: React.FC = () => {
+  const { t } = useTranslation(['graph', 'common', 'status', 'results']);
   const containerRef = useRef<HTMLDivElement>(null);
   const [similarityThreshold, setSimilarityThreshold] = useState(0.75);
   const [, setCy] = useState<cytoscape.Core | null>(null);
@@ -44,7 +46,7 @@ const PlagiarismGraph: React.FC = () => {
       const response = await api.get<{ items: TaskListItem[] }>(API_ENDPOINTS.TASKS);
       if (!Array.isArray(response.data.items)) {
         console.error('Expected array from /plagiarism/tasks, got:', typeof response.data.items, response.data);
-        setError('Invalid data format received from server');
+        setError(t('errors.invalidDataFormat'));
         setTasks([]);
         return;
       }
@@ -60,10 +62,10 @@ const PlagiarismGraph: React.FC = () => {
         }
         setHasSetInitialTask(true);
       }
-    } catch (err) {
-      setError('Failed to fetch plagiarism data');
-      console.error(err);
-    } finally {
+      } catch (err) {
+        setError(t('errors.fetchFailed'));
+        console.error(err);
+      } finally {
       setLoading(false);
     }
   }, [hasSetInitialTask]);
@@ -245,7 +247,7 @@ const PlagiarismGraph: React.FC = () => {
         <Card>
           <CardBody>
             <Text textAlign="center" color="gray.500" py={8}>
-              No plagiarism checks found. Upload files to get started!
+              {t('empty.noChecks')}
             </Text>
           </CardBody>
         </Card>
@@ -256,22 +258,29 @@ const PlagiarismGraph: React.FC = () => {
               <VStack spacing={4} align="stretch">
                 <HStack justify="space-between" wrap="wrap" spacing={4}>
                   <HStack>
-                    <Text fontWeight="semibold">Select Task:</Text>
+                    <Text fontWeight="semibold">{t('selectTask')}</Text>
                     <Select
                       value={selectedTaskId}
                       onChange={(e) => setSelectedTaskId(e.target.value)}
                       w="300px"
                     >
-                      {tasks.map((task) => (
-                        <option key={task.task_id} value={task.task_id}>
-                          {task.task_id.substring(0, 8)}... ({task.status}) - {task.total_pairs} pairs
-                        </option>
-                      ))}
+                      {tasks.map((task) => {
+                        const shortId = task.task_id.substring(0, 8);
+                        return (
+                          <option key={task.task_id} value={task.task_id}>
+                            {t('taskOption', { 
+                              id: shortId, 
+                              status: t(`status:${task.status}`), 
+                              count: task.total_pairs 
+                            })}
+                          </option>
+                        );
+                      })}
                     </Select>
                   </HStack>
                   {selectedTask && (
                     <Badge colorScheme={selectedTask.status === 'completed' ? 'green' : 'yellow'}>
-                      {selectedTask.status}
+                      {t(`status:${selectedTask.status}`)}
                     </Badge>
                   )}
                 </HStack>
@@ -279,14 +288,14 @@ const PlagiarismGraph: React.FC = () => {
                 {loadingDetails && (
                   <Box textAlign="center" py={2}>
                     <Spinner size="sm" />
-                    <Text fontSize="sm" ml={2}>Loading results...</Text>
+                     <Text fontSize="sm" ml={2}>{t('loading')}</Text>
                   </Box>
                 )}
 
                 {!loadingDetails && selectedTaskDetails && (
                   <Box borderTop="1px" borderColor="gray.200" pt={4}>
                     <HStack justify="space-between" mb={2}>
-                      <Text fontWeight="semibold">Similarity Threshold</Text>
+                       <Text fontWeight="semibold">{t('similarityThreshold')}</Text>
                       <Badge colorScheme="blue">{(similarityThreshold * 100).toFixed(0)}%</Badge>
                     </HStack>
                     <Slider
@@ -302,30 +311,30 @@ const PlagiarismGraph: React.FC = () => {
                       <SliderThumb />
                     </Slider>
                     <HStack justify="space-between" mt={2}>
-                      <Text fontSize="sm" color="gray.500">
-                        Only show connections with similarity score above the threshold
-                      </Text>
-                      <Text fontSize="sm" color="gray.500">
-                        Showing {filteredEdgesCount} of {selectedTask?.total_pairs ?? 0} connections
-                      </Text>
+                       <Text fontSize="sm" color="gray.500">
+                         {t('thresholdDescription')}
+                       </Text>
+                       <Text fontSize="sm" color="gray.500">
+                         {t('showing', { count: filteredEdgesCount, total: selectedTask?.total_pairs ?? 0 })}
+                       </Text>
                     </HStack>
                   </Box>
                 )}
 
-                <HStack spacing={4} fontSize="sm">
-                  <HStack>
-                    <Box w="3" h="3" bg="red.500" borderRadius="full" />
-                    <Text>High (≥80%)</Text>
-                  </HStack>
-                  <HStack>
-                    <Box w="3" h="3" bg="yellow.400" borderRadius="full" />
-                    <Text>Medium (60-79%)</Text>
-                  </HStack>
-                  <HStack>
-                    <Box w="3" h="3" bg="green.400" borderRadius="full" />
-                    <Text>Low (&lt;60%)</Text>
-                  </HStack>
-                </HStack>
+                 <HStack spacing={4} fontSize="sm">
+                   <HStack>
+                     <Box w="3" h="3" bg="red.500" borderRadius="full" />
+                      <Text>{t('results:heatmap.legend.high')}</Text>
+                   </HStack>
+                   <HStack>
+                     <Box w="3" h="3" bg="yellow.400" borderRadius="full" />
+                      <Text>{t('results:heatmap.legend.medium')}</Text>
+                   </HStack>
+                   <HStack>
+                     <Box w="3" h="3" bg="green.400" borderRadius="full" />
+                      <Text>{t('results:heatmap.legend.low')}</Text>
+                   </HStack>
+                 </HStack>
               </VStack>
             </CardBody>
           </Card>

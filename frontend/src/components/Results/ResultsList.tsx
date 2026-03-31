@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Card, CardBody, HStack, Text, Badge, VStack, Box, useColorModeValue } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import type { PlagiarismResult } from '../../types';
 
 interface ResultsListProps {
@@ -23,6 +24,7 @@ const ResultsList: React.FC<ResultsListProps> = ({
   handleCompare,
   cardBg,
 }) => {
+  const { t } = useTranslation(['results', 'common']);
   const listNoticeBg = useColorModeValue('gray.50', 'gray.700');
   const listNoticeColor = useColorModeValue('gray.600', 'gray.400');
   // Cap at 50 results for Top Similarities view
@@ -33,10 +35,10 @@ const ResultsList: React.FC<ResultsListProps> = ({
     <Card bg={cardBg}>
       <CardBody>
         <HStack justify="space-between" align="center" mb={4}>
-          <Text fontSize="md" fontWeight="bold">Top Similarities</Text>
+          <Text fontSize="md" fontWeight="bold">{t('resultsList.topSimilarities')}</Text>
           <HStack>
             <Text color="gray.500" fontSize="sm">
-              Showing {showingCount} of {totalPairs} pairs
+              {t('resultsList.showing', { count: showingCount, total: totalPairs })}
             </Text>
           </HStack>
         </HStack>
@@ -66,7 +68,7 @@ const ResultsList: React.FC<ResultsListProps> = ({
                       </Text>
                     )}
                   </VStack>
-                  <Text fontSize="sm" color="gray.500" fontWeight="medium">vs</Text>
+                  <Text fontSize="sm" color="gray.500" fontWeight="medium">{t('common:vs')}</Text>
                   <VStack align="start" spacing={0}>
                     <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="200px">
                       {result.file_b.filename}
@@ -94,7 +96,7 @@ const ResultsList: React.FC<ResultsListProps> = ({
         {totalPairs > 50 && (
           <Box textAlign="center" mt={4} py={2} px={4} bg={listNoticeBg} borderRadius="md">
             <Text fontSize="sm" color={listNoticeColor}>
-              Full list contains {totalPairs} pairs. Explore histogram for distribution analysis.
+              {t('resultsList.fullListNote', { total: totalPairs })}
             </Text>
           </Box>
         )}

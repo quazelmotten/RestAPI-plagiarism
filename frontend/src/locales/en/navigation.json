@@ -1,0 +1,11 @@
+{
+  "dashboard": "Teacher Dashboard",
+  "overview": "Overview",
+  "assignments": "Assignments",
+  "submissions": "Submissions",
+  "plagiarismGraph": "Plagiarism Graph",
+  "uploadFiles": "Upload Files",
+  "results": "Results",
+  "pairComparison": "Pair Comparison",
+  "logo": "plagitype"
+}

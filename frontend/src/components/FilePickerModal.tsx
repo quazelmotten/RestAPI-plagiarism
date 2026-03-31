@@ -23,6 +23,7 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import { FiSearch, FiRefreshCw } from 'react-icons/fi';
+import { useTranslation } from 'react-i18next';
 // Using simple scrollable list; results limited to 100
 import api, { API_ENDPOINTS } from '../services/api';
 import type { FileInfo, ApiError } from '../types';
@@ -124,6 +125,7 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
   initialFileAId,
   initialFileBId,
 }) => {
+  const { t } = useTranslation(['pairComparison', 'common']);
   const [fileASearch, setFileASearch] = useState('');
   const [fileBSearch, setFileBSearch] = useState('');
   const [fileAResults, setFileAResults] = useState<FileResponse[]>([]);
@@ -253,7 +255,7 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
   const listBorderColor = useColorModeValue('gray.200', 'gray.600');
 
   const columnA = useMemo<ColumnConfig>(() => ({
-    title: 'File A',
+    title: t('filePicker.fileA'),
     colorScheme: 'blue',
     search: fileASearch,
     onSearchChange: setFileASearch,
@@ -289,7 +291,7 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
     }
 
     return {
-      title: 'File B',
+      title: t('filePicker.fileB'),
       colorScheme: 'green',
       search: fileBSearch,
       onSearchChange: setFileBSearch,
@@ -325,11 +327,11 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
           <InputLeftElement pointerEvents="none">
             <FiSearch color="gray.400" />
           </InputLeftElement>
-          <Input
-            placeholder="Search filename..."
-            value={col.search}
-            onChange={(e) => col.onSearchChange(e.target.value)}
-          />
+           <Input
+             placeholder={t('filePicker.search')}
+             value={col.search}
+             onChange={(e) => col.onSearchChange(e.target.value)}
+           />
         </InputGroup>
       </Box>
 
@@ -346,9 +348,9 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
         </Box>
       ) : col.results.length === 0 ? (
         <Box h={LIST_HEIGHT} display="flex" alignItems="center" justifyContent="center">
-          <Text color="gray.500" fontSize="sm">
-            {col.search ? 'No files found' : 'Type to search files'}
-          </Text>
+           <Text color="gray.500" fontSize="sm">
+             {col.search ? t('filePicker.noFiles') : t('filePicker.typeToSearch')}
+           </Text>
         </Box>
        ) : (
          <VStack
@@ -378,7 +380,7 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
       {col.selected && (
         <Box p={2} bg={columnBg} borderRadius="md" borderWidth="1px" borderColor={listBorderColor}>
           <Text fontSize="xs" fontWeight="semibold" color={useColorModeValue('gray.600', 'gray.400')}>
-            Selected:
+            {t('filePicker.selected')}
           </Text>
           <Text fontSize="sm" isTruncated>
             {col.selected.filename}
@@ -392,16 +394,16 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
     <Modal isOpen={isOpen} onClose={onClose} size="6xl" scrollBehavior="inside">
       <ModalOverlay />
       <ModalContent maxH="90vh" display="flex" flexDir="column">
-        <ModalHeader>Select Files to Compare</ModalHeader>
+        <ModalHeader>{t('filePicker.title')}</ModalHeader>
         <ModalCloseButton />
 
         <ModalBody flex={1} overflowY="auto" px={6} py={4}>
           <HStack spacing={4} align="stretch">
             {renderColumn(columnA)}
             <Box w={8} display="flex" alignItems="center" justifyContent="center">
-              <Text fontSize="2xl" fontWeight="bold" color="gray.400" whiteSpace="nowrap">
-                VS
-              </Text>
+               <Text fontSize="2xl" fontWeight="bold" color="gray.400" whiteSpace="nowrap">
+                 {t('filePicker.vs')}
+               </Text>
             </Box>
             {renderColumn(columnB)}
           </HStack>
@@ -410,14 +412,14 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
         <ModalFooter pt={4} borderTopWidth="1px">
           <VStack spacing={2} align="stretch" w="100%">
             {isCompareDisabled && selectedFileA && selectedFileB && selectedFileA.id === selectedFileB.id && (
-              <Alert status="warning" size="sm">
-                <AlertIcon />
-                Cannot compare a file with itself. Select a different file.
-              </Alert>
+               <Alert status="warning" size="sm">
+                 <AlertIcon />
+                 {t('filePicker.selfComparison')}
+               </Alert>
             )}
             <HStack justify="flex-end">
               <Button variant="ghost" onClick={onClose}>
-                Cancel
+                {t('common:cancel')}
               </Button>
               <Button
                 colorScheme="blue"
@@ -425,7 +427,7 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
                 isDisabled={isCompareDisabled}
                 onClick={handleCompare}
               >
-                Compare Files
+                {t('filePicker.compare')}
               </Button>
             </HStack>
           </VStack>

@@ -1,0 +1,29 @@
+{
+  "language": "Язык",
+  "analysisScope": "Область анализа",
+  "fullDbScan": "Полное сканирование БД",
+  "maxFileSize": "Макс. размер файла",
+  "dragAndDrop": "Перетащите файлы сюда",
+  "orClickToSelect": "или нажмите для выбора файлов",
+  "selectedFiles": "Выбранные файлы",
+  "totalSize": "Общий размер",
+  "filterFiles": "Фильтровать файлы...",
+  "noFilesSelected": "Файлы не выбраны",
+  "dropFilesToStart": "Перетащите файлы в область для начала",
+  "upload": "Загрузить {{count}} файл(ов) ({{size}})",
+  "uploadSuccess": "{{count}} файл(ов) отправлено на анализ",
+  "uploading": "Загрузка...",
+  "maxPerFile": "Макс. {{size}} на файл",
+  "maxFiles": "До {{max}} файлов",
+  "fileLimitReached": "Достигнут лимит файлов",
+  "duplicateSkipped": "дубликат(ов) пропущено",
+  "rejected": "файл(ов) отклонено",
+  "filesCount": "{{count}} файлов",
+  "toasts": {
+    "noFilesSelected": "Файлы не выбраны",
+    "success": "Загрузка успешна",
+    "failed": "Загрузка не удалась"
+  },
+  "fileLimitDescription": "Макс. {{max}} файлов",
+  "filtered": "отфильтровано"
+}

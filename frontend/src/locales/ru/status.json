@@ -1,0 +1,12 @@
+{
+  "queued": "В очереди",
+  "indexing": "Индексация",
+  "finding_pairs": "Поиск пар",
+  "processing": "Обработка",
+  "completed": "Завершено",
+  "failed": "Не удалось",
+  "pending": "Ожидание",
+  "finding_intra_pairs": "Поиск пар в задаче",
+  "finding_cross_pairs": "Поиск межзадачных пар",
+  "storing_results": "Сохранение результатов"
+}

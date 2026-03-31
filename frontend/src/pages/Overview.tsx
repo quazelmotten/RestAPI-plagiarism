@@ -16,6 +16,7 @@ import {
   Divider,
   useColorModeValue,
 } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import { FiFileText, FiClock, FiAlertCircle, FiActivity, FiLayers } from 'react-icons/fi';
 import api, { API_ENDPOINTS } from '../services/api';
 
@@ -72,63 +73,62 @@ const getStatusIcon = (status: string) => {
   }
 };
 
-const formatTimeAgo = (date: Date): string => {
+const formatTimeAgo = (date: Date, t: (key: string, options?: { count: number }) => string): string => {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
-  
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins} min ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+
+  if (diffMins < 1) return t('justNow');
+  if (diffMins < 60) return t('minAgo', { count: diffMins });
+  if (diffHours < 24) return t('hourAgo', { count: diffHours });
+  if (diffDays < 7) return t('dayAgo', { count: diffDays });
   return date.toLocaleDateString();
 };
 
 const Overview: React.FC = () => {
+  const { t } = useTranslation(['overview', 'common']);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
-  
+
   useEffect(() => {
     fetchTasks();
   }, []);
-  
-   const fetchTasks = async () => {
-     try {
-       setLoading(true);
-       const response = await api.get(API_ENDPOINTS.TASKS);
-        
-        if (!Array.isArray(response.data.items)) {
-          console.error('Expected array from /plagiarism/tasks, got:', typeof response.data.items);
-          setTasks([]);
-          return;
-        }
-        
-        setTasks(response.data.items);
-     } catch (err) {
-       console.error('Failed to fetch tasks:', err);
-     } finally {
-       setLoading(false);
-     }
-   };
-  
-  // Calculate statistics using aggregated counts from backend
+
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get(API_ENDPOINTS.TASKS);
+
+      if (!Array.isArray(response.data.items)) {
+        console.error('Expected array from /plagiarism/tasks, got:', typeof response.data.items);
+        setTasks([]);
+        return;
+      }
+
+      setTasks(response.data.items);
+    } catch (err) {
+      console.error('Failed to fetch tasks:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const totalSubmissions = tasks.length;
   const activeStatuses = ['pending', 'indexing', 'finding_pairs', 'processing'];
   const pendingChecks = tasks.filter(t => activeStatuses.includes(t.status)).length;
   const highSimilarity = tasks.reduce((sum, task) => sum + (task.high_similarity_count || 0), 0);
   const totalFiles = tasks.reduce((sum, task) => sum + (task.files_count || 0), 0);
-  
-  // Get recent activity (last 7 days or max 25 entries)
+
   const getRecentActivity = (): ActivityItem[] => {
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    
+
     const activity = tasks
       .filter(task => task.created_at)
       .map(task => ({
@@ -141,12 +141,12 @@ const Overview: React.FC = () => {
       .filter(item => item.timestamp >= oneWeekAgo)
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, 25);
-    
+
     return activity;
   };
-  
+
   const recentActivity = getRecentActivity();
-  
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" h="400px">
@@ -154,68 +154,68 @@ const Overview: React.FC = () => {
       </Box>
     );
   }
-  
+
   return (
     <Box display="flex" flexDirection="column" flex={1} minH={0} overflow="hidden">
-      
+
       <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8} flexShrink={0}>
         <Card bg={cardBg}>
           <CardBody>
             <Stat>
               <HStack mb={2}>
                 <FiFileText color="var(--chakra-colors-blue-500)" />
-                <StatLabel>Total Tasks</StatLabel>
+                <StatLabel>{t('totalTasks')}</StatLabel>
               </HStack>
               <StatNumber color="blue.500">{totalSubmissions}</StatNumber>
               <Text fontSize="sm" color="gray.500">
-                {totalFiles} files analyzed
+                {t('filesAnalyzed', { count: totalFiles })}
               </Text>
             </Stat>
           </CardBody>
         </Card>
-        
+
         <Card bg={cardBg}>
           <CardBody>
             <Stat>
               <HStack mb={2}>
                 <FiClock color="var(--chakra-colors-orange-500)" />
-                <StatLabel>Pending Checks</StatLabel>
+                <StatLabel>{t('pendingChecks')}</StatLabel>
               </HStack>
               <StatNumber color="orange.500">{pendingChecks}</StatNumber>
               <Text fontSize="sm" color="gray.500">
-                {tasks.filter(t => t.status === 'processing').length} processing
+                {tasks.filter(t => t.status === 'processing').length} {t('processing')}
               </Text>
             </Stat>
           </CardBody>
         </Card>
-        
+
         <Card bg={cardBg}>
           <CardBody>
             <Stat>
               <HStack mb={2}>
                 <FiAlertCircle color="var(--chakra-colors-red-500)" />
-                <StatLabel>High Similarity</StatLabel>
+                <StatLabel>{t('highSimilarity')}</StatLabel>
               </HStack>
               <StatNumber color="red.500">{highSimilarity}</StatNumber>
               <Text fontSize="sm" color="gray.500">
-                ≥80% similarity detected
+                ≥80% {t('similarityDetected')}
               </Text>
             </Stat>
           </CardBody>
         </Card>
-        
+
         <Card bg={cardBg}>
           <CardBody>
             <Stat>
               <HStack mb={2}>
                 <FiLayers color="var(--chakra-colors-green-500)" />
-                <StatLabel>Completed Tasks</StatLabel>
+                <StatLabel>{t('completedTasks')}</StatLabel>
               </HStack>
               <StatNumber color="green.500">
                 {tasks.filter(t => t.status === 'completed').length}
               </StatNumber>
               <Text fontSize="sm" color="gray.500">
-                Ready for review
+                {t('readyForReview')}
               </Text>
             </Stat>
           </CardBody>
@@ -224,14 +224,14 @@ const Overview: React.FC = () => {
 
       <Card bg={cardBg} borderColor={borderColor} flex={1} minH={0} display="flex" flexDirection="column" overflow="hidden">
         <CardBody display="flex" flexDirection="column" minH={0} overflow="hidden">
-          <Heading size="md" mb={4} flexShrink={0}>Recent Activity</Heading>
+          <Heading size="md" mb={4} flexShrink={0}>{t('recentActivity')}</Heading>
           <Text fontSize="sm" color="gray.500" mb={4} flexShrink={0}>
-            Showing activity from the last 7 days (max 25 entries)
+            {t('activityNote')}
           </Text>
-          
+
           {recentActivity.length === 0 ? (
             <Text color="gray.500" textAlign="center" py={8}>
-              No recent activity. Upload files to get started!
+              {t('noActivity')}
             </Text>
           ) : (
             <Box flex={1} minH={0} overflowY="auto">
@@ -249,7 +249,7 @@ const Overview: React.FC = () => {
                         <HStack spacing={2}>
                           {getStatusIcon(item.status)}
                           <Text fontWeight="medium" fontSize="sm">
-                            Task {item.id.substring(0, 8)}...
+                            {t('taskId', { id: item.id.substring(0, 8) })}...
                           </Text>
                           <Badge
                             size="sm"
@@ -259,11 +259,11 @@ const Overview: React.FC = () => {
                           </Badge>
                         </HStack>
                         <Text fontSize="xs" color="gray.500">
-                          {item.filesCount} files • {item.pairsCount} pairs
+                          {item.filesCount} {t('files')} • {item.pairsCount} {t('pairs')}
                         </Text>
                       </VStack>
                       <Text fontSize="xs" color="gray.400">
-                        {formatTimeAgo(item.timestamp)}
+                        {formatTimeAgo(item.timestamp, t)}
                       </Text>
                     </HStack>
                   </Box>

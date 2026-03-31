@@ -9,6 +9,7 @@ import {
   InputRightElement,
 } from '@chakra-ui/react';
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { useTranslation } from 'react-i18next';
 import type { PaginationInfo } from '../types';
 
 interface PaginationControlsProps {
@@ -22,6 +23,7 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
   onPageChange,
   onPageSizeChange,
 }) => {
+  const { t } = useTranslation(['submissions', 'common']);
   const { offset, limit, total, totalPages, showingStart, showingEnd } = pagination;
 
   const currentPage = totalPages > 0 ? Math.floor(offset / limit) + 1 : 0;
@@ -59,7 +61,7 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
           isDisabled={offset === 0}
           leftIcon={<FiChevronLeft />}
         >
-          Previous
+          {t('pagination.previous')}
         </Button>
         <Button
           size="sm"
@@ -67,13 +69,13 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
           isDisabled={offset + limit >= total}
           rightIcon={<FiChevronRight />}
         >
-          Next
+          {t('pagination.next')}
         </Button>
       </HStack>
 
       <HStack spacing={2}>
         <Text fontSize="sm" color="gray.600" _dark={{ color: 'gray.400' }}>
-          Page Size:
+          {t('pagination.pageSize')}
         </Text>
         <Select
           value={limit.toString()}
@@ -88,12 +90,12 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
       </HStack>
 
       <Text fontSize="sm" color="gray.500" _dark={{ color: 'gray.400' }}>
-        Showing {showingStart} - {showingEnd} of {total} files
+        {t('pagination.showing', { start: showingStart, end: showingEnd, total })}
       </Text>
 
       <HStack spacing={2}>
         <Text fontSize="sm" color="gray.600" _dark={{ color: 'gray.400' }}>
-          Go to page:
+          {t('pagination.goToPage')}
         </Text>
         <InputGroup size="sm" w="80px">
           <Input
@@ -111,7 +113,7 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
               onClick={handleGoToPage}
               isDisabled={totalPages <= 1 || currentPage === 0}
             >
-              Go
+              {t('common:go')}
             </Button>
           </InputRightElement>
         </InputGroup>

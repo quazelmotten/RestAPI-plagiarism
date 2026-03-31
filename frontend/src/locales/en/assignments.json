@@ -1,0 +1,39 @@
+{
+  "title": "Assignments",
+  "newAssignment": "New Assignment",
+  "search": "Search assignments...",
+  "noAssignments": "No assignments yet",
+  "createAssignmentPrompt": "Create an assignment to scope your plagiarism checks",
+  "modal": {
+    "edit": "Edit Assignment",
+    "new": "New Assignment"
+  },
+  "form": {
+    "name": "Name",
+    "description": "Description",
+    "namePlaceholder": "e.g., CS101 Homework 3",
+    "descriptionPlaceholder": "Optional description"
+  },
+  "table": {
+    "name": "Name",
+    "description": "Description",
+    "tasks": "Tasks",
+    "files": "Files",
+    "created": "Created",
+    "actions": "Actions"
+  },
+  "toasts": {
+    "created": "Assignment created",
+    "updated": "Assignment updated",
+    "deleted": "Assignment deleted",
+    "updateFailed": "Failed to update assignment",
+    "deleteFailed": "Failed to delete assignment"
+  },
+  "deleteConfirm": {
+    "title": "Delete Assignment",
+    "message": "Are you sure you want to delete \"{{name}}\"? Tasks associated with this assignment will not be deleted."
+  },
+  "validation": {
+    "nameRequired": "Name is required"
+  }
+}

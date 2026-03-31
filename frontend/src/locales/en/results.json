@@ -1,0 +1,88 @@
+{
+  "selectTask": "Select Task:",
+  "refresh": "Refresh",
+  "view": "View:",
+  "cards": "Cards",
+  "heatmap": "Heatmap",
+  "noChecks": "No plagiarism checks found. Upload files to get started!",
+  "selectTaskPrompt": "Select a task",
+  "failedToFetchTasks": "Failed to fetch plagiarism tasks",
+  "failedToFetchDetails": "Failed to fetch task details",
+  "invalidDataFormat": "Invalid data format received from server",
+  "allTasks": "All tasks",
+  "taskPicker": {
+    "title": "Select Task",
+    "search": "Search tasks...",
+    "noMatches": "No tasks match your search",
+    "noTasks": "No tasks available",
+    "tooltip": "Task {{id}} - Created {{date}}",
+    "fileCount": "{{count}} files",
+    "pairCount": "{{count}} pairs",
+    "highWarning": "{{count}} high similarity"
+  },
+  "taskStats": {
+    "files": "Files",
+    "comparisons": "Comparisons",
+    "status": "Status",
+    "avgSimilarity": "Avg Similarity"
+  },
+  "resultsList": {
+    "topSimilarities": "Top Similar Pairs",
+    "showing": "Showing {{count}} of {{total}}",
+    "fullListNote": "Showing top 50 of {{total}} total pairs. Use heatmap view for complete results."
+  },
+  "distribution": {
+    "title": "Similarity Distribution",
+    "switchToLinear": "Switch to linear scale",
+    "switchToLog": "Switch to log scale",
+    "logScale": "Log Scale",
+    "bins": "{{count}} bins",
+    "partialData": "Note: This distribution is based on a sample of results. For complete data, wait for processing to finish.",
+    "failedToLoad": "Failed to load histogram: {{error}}",
+    "binTooltip": "Range: {{range}}, Count: {{count}} ({{percentage}}%){{logSuffix}}",
+    "lowLabel": "Low (<25%)",
+    "mediumLabel": "Medium (25-50%)",
+    "highLabel": "High (>50%)",
+    "totalLabel": "Total Pairs"
+  },
+  "heatmap": {
+    "title": "Similarity Heatmap",
+    "tooltip": "{{fileA}} vs {{fileB}}: {{percentage}}% similarity",
+    "legend": {
+      "high": "High (≥80%)",
+      "medium": "Medium (60-79%)",
+      "low": "Low (<60%)"
+    }
+  },
+  "taskProgress": {
+    "stageBadge": "Stage {{current}}/{{total}}",
+    "percentComplete": "{{percent}}% complete",
+    "remaining": "{{count}} remaining",
+    "stages": {
+      "indexing": {
+        "label": "Indexing Files",
+        "description": "Tokenizing source files and building the fingerprint index",
+        "unit": "file",
+        "unitPlural": "files"
+      },
+      "finding_intra_pairs": {
+        "label": "Finding Intra-Task Pairs",
+        "description": "Comparing files within this batch for similarities",
+        "unit": "file checked",
+        "unitPlural": "files checked"
+      },
+      "finding_cross_pairs": {
+        "label": "Finding Cross-Task Pairs",
+        "description": "Comparing new files against previously submitted files",
+        "unit": "file checked",
+        "unitPlural": "files checked"
+      },
+      "storing_results": {
+        "label": "Storing Results",
+        "description": "Persisting similarity scores to the database",
+        "unit": "pair",
+        "unitPlural": "pairs"
+      }
+    }
+  }
+}

@@ -10,12 +10,12 @@ import {
   Box,
   Tooltip,
 } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import type { PlagiarismMatch } from '../../types';
 import {
   PLAGIARISM_TYPE_COLORS,
   PLAGIARISM_TYPE_COLORS_HOVER,
   PLAGIARISM_TYPE_BORDERS,
-  PLAGIARISM_TYPE_LABELS,
 } from '../../types';
 
 // Fallback colors for matches without type info (backward compat)
@@ -81,10 +81,10 @@ const getMatchBorder = (match: PlagiarismMatch | null): string => {
   return FALLBACK_BORDERS[0];
 };
 
-const getMatchTooltip = (match: PlagiarismMatch | null): string => {
+const getMatchTooltip = (match: PlagiarismMatch | null, t: (key: string, opts?: any) => string): string => {
   if (!match) return '';
   const ptype = match.plagiarism_type;
-  const label = ptype ? (PLAGIARISM_TYPE_LABELS[ptype] || `Type ${ptype}`) : 'Match';
+  const label = ptype ? t(`page.matchTypes.${ptype}`, `Type ${ptype}`) : t('page.match');
   if (match.description) {
     return `${label}: ${match.description}`;
   }
@@ -123,6 +123,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
   scrollContainerRef,
   getLineRef,
 }) => {
+  const { t } = useTranslation(['pairComparison', 'common']);
   const lineNumberBg = useColorModeValue('gray.100', 'gray.700');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const textColor = useColorModeValue('gray.800', 'gray.100');
@@ -170,7 +171,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
         <Flex direction="column" h="100%" minH={0}>
           <HStack p={3} borderBottomWidth={1} borderColor={borderColor} justify="space-between">
             <Text fontWeight="bold">{fileName}</Text>
-            <Badge colorScheme={isFileA ? 'blue' : 'green'}>{language || 'unknown'}</Badge>
+             <Badge colorScheme={isFileA ? 'blue' : 'green'}>{language || t('common:unknown')}</Badge>
           </HStack>
           <Box
             ref={scrollContainerRef}
@@ -184,7 +185,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
             {displayedLines.map(({ originalIdx, originalLineNumber, line }, displayIdx) => {
               const matchInfo = lineMatchMap[originalIdx];
               const isHovered = matchInfo !== null && matchInfo.matchIndex === hoveredMatchIndex;
-              const tooltip = getMatchTooltip(matchInfo?.match ?? null);
+               const tooltip = getMatchTooltip(matchInfo?.match ?? null, t);
               const bg = getMatchBg(matchInfo?.match ?? null, isHovered);
               const border = getMatchBorder(matchInfo?.match ?? null);
 
@@ -237,7 +238,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
                     {line || ' '}
                   </Box>
                   {matchInfo?.match?.plagiarism_type && matchInfo.match.plagiarism_type >= 2 && (
-                    <Tooltip label={PLAGIARISM_TYPE_LABELS[matchInfo.match.plagiarism_type] || `Type ${matchInfo.match.plagiarism_type}`} placement="top">
+                      <Tooltip label={t(`page.matchTypes.${matchInfo.match.plagiarism_type}`, `Type ${matchInfo.match.plagiarism_type}`)} placement="top">
                       <Badge
                         size="sm"
                         colorScheme={

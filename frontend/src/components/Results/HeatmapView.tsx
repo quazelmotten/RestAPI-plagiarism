@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Grid, GridItem, Text, Tooltip, Card, CardBody, Heading } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import type { TaskDetails, PlagiarismResult } from '../../types';
 
 interface HeatmapViewProps {
@@ -10,6 +11,7 @@ interface HeatmapViewProps {
 }
 
 const HeatmapView: React.FC<HeatmapViewProps> = ({ selectedTask, getSimilarityGradient, handleCompare, cardBg }) => {
+  const { t } = useTranslation(['results']);
   if (!selectedTask || selectedTask.files.length < 2) return null;
 
   const files = selectedTask.files;
@@ -34,7 +36,7 @@ const HeatmapView: React.FC<HeatmapViewProps> = ({ selectedTask, getSimilarityGr
   return (
     <Card bg={cardBg}>
       <CardBody>
-        <Heading size="sm" mb={4}>Similarity Heatmap</Heading>
+        <Heading size="sm" mb={4}>{t('heatmap:title')}</Heading>
         <Box overflowX="auto">
           <Grid
             templateColumns={`repeat(${files.length + 1}, minmax(80px, 1fr))`}
@@ -71,10 +73,14 @@ const HeatmapView: React.FC<HeatmapViewProps> = ({ selectedTask, getSimilarityGr
                 </GridItem>
                 {files.map((fileB: { id: string; filename: string }, j: number) => (
                   <GridItem key={j}>
-                    <Tooltip
-                      label={i === j ? fileA.filename : `${fileA.filename} vs ${fileB.filename}: ${(matrix[i][j] * 100).toFixed(1)}%`}
-                      placement="top"
-                    >
+                     <Tooltip
+                       label={i === j ? fileA.filename : t('heatmap:tooltip', { 
+                         fileA: fileA.filename, 
+                         fileB: fileB.filename, 
+                         percentage: (matrix[i][j] * 100).toFixed(1) 
+                       })}
+                       placement="top"
+                     >
                       <Box
                         w="100%"
                         h="100%"

@@ -1,0 +1,11 @@
+{
+  "dashboard": "Панель преподавателя",
+  "overview": "Главная страница",
+  "assignments": "Задания студентам",
+  "submissions": "Таблица файлов",
+  "plagiarismGraph": "Визуализация графа",
+  "uploadFiles": "Загрузка файлов",
+  "results": "Результаты проверок",
+  "pairComparison": "Попарное сравнение",
+  "logo": "plagitype"
+}

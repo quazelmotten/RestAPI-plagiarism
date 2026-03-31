@@ -8,6 +8,7 @@ import {
   AlertIcon,
   Button,
 } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import { useSubmissions } from './hooks/useSubmissions';
 import { useSubmissionsMetadata } from './hooks/useSubmissionsMetadata';
 import { PaginationControls } from './PaginationControls';
@@ -17,6 +18,7 @@ import type { Filters, PaginationInfo } from './types';
 import { ALL_STATUSES } from './utils/formatters';
 
 const SubmissionsContent: React.FC = () => {
+  const { t } = useTranslation(['submissions', 'common']);
   const [filters, setFilters] = useState<Filters>({
     filename: '',
     language: '',
@@ -79,9 +81,9 @@ const SubmissionsContent: React.FC = () => {
     return (
       <Alert status="error">
         <AlertIcon />
-        {error instanceof Error ? error.message : 'Failed to fetch submissions'}
+        {error instanceof Error ? error.message : t('common:error')}
         <Button ml={4} onClick={() => refetch()}>
-          Retry
+          {t('common:retry')}
         </Button>
       </Alert>
     );

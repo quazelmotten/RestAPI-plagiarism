@@ -1,0 +1,29 @@
+{
+  "language": "Language",
+  "analysisScope": "Analysis Scope",
+  "fullDbScan": "Full DB Scan",
+  "maxFileSize": "Max file size",
+  "dragAndDrop": "Drag & drop files here",
+  "orClickToSelect": "or click to select files",
+  "selectedFiles": "Selected Files",
+  "totalSize": "Total Size",
+  "filterFiles": "Filter files...",
+  "noFilesSelected": "No files selected",
+  "dropFilesToStart": "Drop files on the upload area to get started",
+  "upload": "Upload {{count}} file(s) ({{size}})",
+  "uploadSuccess": "{{count}} file(s) submitted for analysis",
+  "uploading": "Uploading...",
+  "maxPerFile": "Max {{size}} per file",
+  "maxFiles": "Up to {{max}} files",
+  "fileLimitReached": "File limit reached",
+  "duplicateSkipped": "duplicate file(s) skipped",
+  "rejected": "file(s) rejected",
+  "filesCount": "{{count}} files",
+  "toasts": {
+    "noFilesSelected": "No files selected",
+    "success": "Upload successful",
+    "failed": "Upload failed"
+  },
+  "fileLimitDescription": "Max {{max}} files",
+  "filtered": "filtered"
+}

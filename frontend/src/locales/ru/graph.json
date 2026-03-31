@@ -1,0 +1,27 @@
+{
+  "selectTask": "Выберите задачу:",
+  "similarityThreshold": "Порог сходства",
+  "thresholdDescription": "Показывать только связи с оценкой сходства выше порога",
+  "showing": "Показано {{count}} из {{total}} связей",
+  "loading": "Загрузка результатов...",
+  "empty": {
+    "noChecks": "Проверок на плагиат не найдено. Загрузите файлы, чтобы начать!"
+  },
+  "taskOption": "{{id}}... ({{status}}) - {{count}} пар",
+  "legend": {
+    "high": "Высокое (≥80%)",
+    "medium": "Среднее (60-79%)",
+    "low": "Низкое (<60%)"
+  },
+  "errors": {
+    "fetchFailed": "Не удалось загрузить данные о плагиате",
+    "invalidDataFormat": "Получен неверный формат данных с сервера"
+  },
+  "noTaskSelected": "Задача не выбрана",
+  "noData": "Нет данных для отображения",
+  "zoomIn": "Увеличить",
+  "zoomOut": "Уменьшить",
+  "resetView": "Сбросить вид",
+  "nodeTooltip": "{{filename}} ({{count}} связей)",
+  "edgeTooltip": "{{fileA}} ↔ {{fileB}}: {{similarity}}% сходства"
+}

@@ -14,6 +14,7 @@ import {
   Button,
 } from '@chakra-ui/react';
 import { FiEye, FiEyeOff, FiChevronUp, FiChevronDown, FiLink, FiLink2, FiBarChart2 } from 'react-icons/fi';
+import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../services/api';
 import FilePickerModal from '../components/FilePickerModal';
 import { useSearchParams } from 'react-router';
@@ -65,6 +66,7 @@ const getSimilarityGradient = (similarity: number): string => {
 };
 
 const PairComparison: React.FC = () => {
+  const { t } = useTranslation(['pairComparison', 'common']);
   const [currentPair, setCurrentPair] = useState<PairResult | null>(null);
   const [selectedFileA, setSelectedFileA] = useState<FileInfo | null>(null);
   const [selectedFileB, setSelectedFileB] = useState<FileInfo | null>(null);
@@ -384,9 +386,9 @@ const PairComparison: React.FC = () => {
         />
       ) : (
         <HStack px={2} py={1} flexShrink={0}>
-          <Tooltip label="Show header" placement="bottom">
+          <Tooltip label={t('page.showHeader')} placement="bottom">
             <IconButton
-              aria-label="Show header"
+              aria-label={t('page.showHeader')}
               icon={<FiChevronDown />}
               size="sm"
               variant="ghost"
@@ -395,16 +397,16 @@ const PairComparison: React.FC = () => {
           </Tooltip>
           {currentPair && (
             <Text fontSize="sm" fontWeight="bold" ml={2}>
-              {((currentPair.ast_similarity || 0) * 100).toFixed(1)}% similarity
+              {t('page.similarity', { percent: ((currentPair.ast_similarity || 0) * 100).toFixed(1) })}
             </Text>
           )}
         </HStack>
       )}
 
       <HStack px={2} py={1} flexShrink={0} spacing={1}>
-        <Tooltip label={filterComments ? 'Show comments (c)' : 'Hide comments (c)'} placement="bottom">
+        <Tooltip label={filterComments ? t('page.tooltip.showComments') : t('page.tooltip.hideComments')} placement="bottom">
           <IconButton
-            aria-label={filterComments ? 'Show comments' : 'Hide comments'}
+            aria-label={filterComments ? t('page.aria.showComments') : t('page.aria.hideComments')}
             icon={filterComments ? <FiEye /> : <FiEyeOff />}
             size="sm"
             variant={filterComments ? 'solid' : 'ghost'}
@@ -412,30 +414,30 @@ const PairComparison: React.FC = () => {
             onClick={() => setFilterComments(!filterComments)}
           />
         </Tooltip>
-        <Tooltip label={syncScroll ? 'Unlock scroll sync (s)' : 'Lock scroll sync (s)'} placement="bottom">
-          <IconButton
-            aria-label={syncScroll ? 'Unlock scroll sync' : 'Lock scroll sync'}
-            icon={syncScroll ? <FiLink /> : <FiLink2 />}
-            size="sm"
-            variant={syncScroll ? 'solid' : 'ghost'}
-            colorScheme={syncScroll ? 'blue' : 'gray'}
-            onClick={() => setSyncScroll(!syncScroll)}
-          />
-        </Tooltip>
-        <Tooltip label="Match statistics" placement="bottom">
-          <IconButton
-            aria-label="Match statistics"
-            icon={<FiBarChart2 />}
-            size="sm"
-            variant={statsOpen ? 'solid' : 'ghost'}
-            colorScheme={statsOpen ? 'purple' : 'gray'}
-            onClick={() => setStatsOpen(!statsOpen)}
-          />
-        </Tooltip>
+         <Tooltip label={syncScroll ? t('page.tooltip.unlockScrollSync') : t('page.tooltip.lockScrollSync')} placement="bottom">
+           <IconButton
+             aria-label={syncScroll ? t('page.aria.unlockScrollSync') : t('page.aria.lockScrollSync')}
+             icon={syncScroll ? <FiLink /> : <FiLink2 />}
+             size="sm"
+             variant={syncScroll ? 'solid' : 'ghost'}
+             colorScheme={syncScroll ? 'blue' : 'gray'}
+             onClick={() => setSyncScroll(!syncScroll)}
+           />
+         </Tooltip>
+         <Tooltip label={t('page.tooltip.matchStatistics')} placement="bottom">
+           <IconButton
+             aria-label={t('page.aria.matchStatistics')}
+             icon={<FiBarChart2 />}
+             size="sm"
+             variant={statsOpen ? 'solid' : 'ghost'}
+             colorScheme={statsOpen ? 'purple' : 'gray'}
+             onClick={() => setStatsOpen(!statsOpen)}
+           />
+         </Tooltip>
         {headerVisible && (
-          <Tooltip label="Hide header" placement="bottom">
+          <Tooltip label={t('page.hideHeader')} placement="bottom">
             <IconButton
-              aria-label="Hide header"
+              aria-label={t('page.hideHeader')}
               icon={<FiChevronUp />}
               size="sm"
               variant="ghost"
@@ -447,41 +449,41 @@ const PairComparison: React.FC = () => {
 
       <Collapse in={statsOpen} animateOpacity>
         <Box px={4} py={2} borderBottomWidth={1} borderColor={useColorModeValue('gray.200', 'gray.600')}>
-          <HStack spacing={6} wrap="wrap">
-            <VStack spacing={0} align="start">
-              <Text fontSize="xs" color="gray.500">Total matches</Text>
-              <Text fontWeight="bold">{matchStats.totalMatches}</Text>
-            </VStack>
-            <VStack spacing={0} align="start">
-              <Text fontSize="xs" color="gray.500">Coverage A</Text>
-              <Text fontWeight="bold">{matchStats.coverageA.toFixed(1)}%</Text>
-            </VStack>
-            <VStack spacing={0} align="start">
-              <Text fontSize="xs" color="gray.500">Coverage B</Text>
-              <Text fontWeight="bold">{matchStats.coverageB.toFixed(1)}%</Text>
-            </VStack>
-            {Object.entries(matchStats.byType).map(([type, s]) => (
-              <HStack key={type} spacing={1}>
-                <Badge colorScheme={
-                  Number(type) === 1 ? 'green' :
-                  Number(type) === 2 ? 'yellow' :
-                  Number(type) === 3 ? 'blue' : 'red'
-                }>
-                  T{type}
-                </Badge>
-                <Text fontSize="sm">{s.count} ({s.linesA}+{s.linesB} lines)</Text>
-              </HStack>
-            ))}
+           <HStack spacing={6} wrap="wrap">
+             <VStack spacing={0} align="start">
+               <Text fontSize="xs" color="gray.500">{t('page.stats.totalMatches')}</Text>
+               <Text fontWeight="bold">{matchStats.totalMatches}</Text>
+             </VStack>
+             <VStack spacing={0} align="start">
+               <Text fontSize="xs" color="gray.500">{t('page.stats.coverageA')}</Text>
+               <Text fontWeight="bold">{matchStats.coverageA.toFixed(1)}%</Text>
+             </VStack>
+             <VStack spacing={0} align="start">
+               <Text fontSize="xs" color="gray.500">{t('page.stats.coverageB')}</Text>
+               <Text fontWeight="bold">{matchStats.coverageB.toFixed(1)}%</Text>
+             </VStack>
+             {Object.entries(matchStats.byType).map(([type, s]) => (
+               <HStack key={type} spacing={1}>
+                 <Badge colorScheme={
+                   Number(type) === 1 ? 'green' :
+                   Number(type) === 2 ? 'yellow' :
+                   Number(type) === 3 ? 'blue' : 'red'
+                 }>
+                   T{type}
+                 </Badge>
+                 <Text fontSize="sm">{t('page.stats.matchLineInfo', { count: s.count, linesA: s.linesA, linesB: s.linesB })}</Text>
+               </HStack>
+             ))}
           </HStack>
         </Box>
       </Collapse>
 
-      {loadingContent ? (
-        <Box flex={1} display="flex" alignItems="center" justifyContent="center" py={8} minH={0}>
-          <Spinner size="lg" />
-          <Text mt={2}>Loading file contents...</Text>
-        </Box>
-       ) : (
+       {loadingContent ? (
+         <Box flex={1} display="flex" alignItems="center" justifyContent="center" py={8} minH={0}>
+           <Spinner size="lg" />
+           <Text mt={2}>{t('page.loading')}</Text>
+         </Box>
+        ) : (
          <ErrorBoundary>
            <Flex flex={1} gap={0} align="stretch" minH={0} overflow="hidden">
              {/* Left minimap */}
@@ -502,33 +504,33 @@ const PairComparison: React.FC = () => {
              </Box>
 
              <Flex flex={1} gap={4} align="stretch" py={4} px={2} minH={0} overflow="hidden">
-               <FileViewer
-                 content={fileAContent?.content || ''}
-                 fileName={fileAContent?.filename || 'File A'}
-                 language={fileAContent?.language || 'unknown'}
-                 matches={currentPair?.matches || []}
-                 isFileA={isFileAInPair}
-                 filterComments={filterComments}
-                 hoveredMatchIndex={hoveredMatchIndex}
-                 onHoverMatch={setHoveredMatchIndex}
-                 onJumpToMatch={handleJumpToMatch}
-                 scrollContainerRef={fileAContainerRef}
-                 getLineRef={getLineRef(true)}
-               />
+                <FileViewer
+                  content={fileAContent?.content || ''}
+                  fileName={fileAContent?.filename || t('filePicker.fileA')}
+                  language={fileAContent?.language || 'unknown'}
+                  matches={currentPair?.matches || []}
+                  isFileA={isFileAInPair}
+                  filterComments={filterComments}
+                  hoveredMatchIndex={hoveredMatchIndex}
+                  onHoverMatch={setHoveredMatchIndex}
+                  onJumpToMatch={handleJumpToMatch}
+                  scrollContainerRef={fileAContainerRef}
+                  getLineRef={getLineRef(true)}
+                />
 
-               <FileViewer
-                 content={fileBContent?.content || ''}
-                 fileName={fileBContent?.filename || 'File B'}
-                 language={fileBContent?.language || 'unknown'}
-                 matches={currentPair?.matches || []}
-                 isFileA={!isFileAInPair}
-                 filterComments={filterComments}
-                 hoveredMatchIndex={hoveredMatchIndex}
-                 onHoverMatch={setHoveredMatchIndex}
-                 onJumpToMatch={handleJumpToMatch}
-                 scrollContainerRef={fileBContainerRef}
-                 getLineRef={getLineRef(false)}
-               />
+                <FileViewer
+                  content={fileBContent?.content || ''}
+                  fileName={fileBContent?.filename || t('filePicker.fileB')}
+                  language={fileBContent?.language || 'unknown'}
+                  matches={currentPair?.matches || []}
+                  isFileA={!isFileAInPair}
+                  filterComments={filterComments}
+                  hoveredMatchIndex={hoveredMatchIndex}
+                  onHoverMatch={setHoveredMatchIndex}
+                  onJumpToMatch={handleJumpToMatch}
+                  scrollContainerRef={fileBContainerRef}
+                  getLineRef={getLineRef(false)}
+                />
              </Flex>
 
              {/* Right minimap */}

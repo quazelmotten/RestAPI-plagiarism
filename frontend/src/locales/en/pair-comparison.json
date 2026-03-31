@@ -1,0 +1,54 @@
+{
+  "header": {
+    "title": "Select Files to Compare",
+    "noSelection": "Select Files to Compare",
+    "instruction": "Click any highlighted region to jump to the matching region in the other file",
+    "computing": "Computing match details..."
+  },
+  "filePicker": {
+    "title": "Select Files to Compare",
+    "fileA": "File A",
+    "fileB": "File B",
+    "search": "Search filename...",
+    "typeToSearch": "Type to search files",
+    "noFiles": "No files found",
+    "selected": "Selected:",
+    "vs": "VS",
+    "cancel": "Cancel",
+    "compare": "Compare Files",
+    "selfComparison": "Cannot compare a file with itself. Select a different file."
+  },
+  "page": {
+    "similarity": "{{percent}}% similarity",
+    "showHeader": "Show header",
+    "hideHeader": "Hide header",
+    "tooltip": {
+      "showComments": "Show comments (c)",
+      "hideComments": "Hide comments (c)",
+      "unlockScrollSync": "Unlock scroll sync (s)",
+      "lockScrollSync": "Lock scroll sync (s)",
+      "matchStatistics": "Match statistics"
+    },
+    "aria": {
+      "showComments": "Show comments",
+      "hideComments": "Hide comments",
+      "unlockScrollSync": "Unlock scroll sync",
+      "lockScrollSync": "Lock scroll sync",
+      "matchStatistics": "Match statistics"
+    },
+    "stats": {
+      "totalMatches": "Total matches",
+      "coverageA": "Coverage A",
+      "coverageB": "Coverage B",
+      "matchLineInfo": "{{count}} ({{linesA}}+{{linesB}} lines)"
+    },
+    "loading": "Loading file contents...",
+    "matchTypes": {
+      "1": "Exact copy",
+      "2": "Renamed identifiers",
+      "3": "Reordered code",
+      "4": "Semantic equivalent"
+    },
+    "match": "Match"
+  }
+}

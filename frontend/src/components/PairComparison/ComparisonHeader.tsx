@@ -13,6 +13,7 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import { FiFolder } from 'react-icons/fi';
+import { useTranslation } from 'react-i18next';
 import type { FileInfo, PlagiarismResult } from '../../types';
 
 interface ComparisonHeaderProps {
@@ -36,6 +37,7 @@ const ComparisonHeader: React.FC<ComparisonHeaderProps> = ({
   contentError,
   bgColor,
 }) => {
+  const { t } = useTranslation(['pairComparison', 'common']);
   const instructionColor = useColorModeValue('gray.600', 'gray.400');
 
   return (
@@ -49,11 +51,11 @@ const ComparisonHeader: React.FC<ComparisonHeaderProps> = ({
               variant="outline"
               flex={1}
               onClick={onOpenPicker}
-              title="Select files to compare"
+              title={t('header.title')}
             >
               {selectedFileA && selectedFileB
-                ? `${selectedFileA.filename} vs ${selectedFileB.filename}`
-                : 'Select Files to Compare'}
+                ? `${selectedFileA.filename} ${t('common.vs')} ${selectedFileB.filename}`
+                : t('header.noSelection')}
             </Button>
             {currentPair && (
               <Box
@@ -73,13 +75,13 @@ const ComparisonHeader: React.FC<ComparisonHeaderProps> = ({
           </HStack>
 
           <Text fontSize="sm" color={instructionColor} textAlign="center">
-            Click any highlighted region to jump to the matching region in the other file
+            {t('header.instruction')}
           </Text>
 
           {analyzingMatches && (
             <HStack justify="center">
               <Spinner size="sm" />
-              <Text fontSize="sm" color="blue.500">Computing match details...</Text>
+              <Text fontSize="sm" color="blue.500">{t('header.computing')}</Text>
             </HStack>
           )}
 

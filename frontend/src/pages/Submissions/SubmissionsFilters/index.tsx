@@ -6,6 +6,7 @@ import {
   VStack,
   SimpleGrid,
 } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import type { Filters } from '../types';
 
 interface SubmissionsFiltersProps {
@@ -23,99 +24,101 @@ export const SubmissionsFilters: React.FC<SubmissionsFiltersProps> = ({
   uniqueTaskIds,
   allStatuses,
 }) => {
+  const { t } = useTranslation(['submissions', 'common', 'status']);
+
   return (
     <VStack spacing={4} align="stretch" p={4}>
-      <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
-        <div>
-          <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
-            File Name
-          </Text>
-          <Input
-            name="filename"
-            size="sm"
-            value={filters.filename}
-            onChange={onFilterChange}
-            placeholder="Search..."
-          />
-        </div>
+       <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
+         <div>
+           <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
+             {t('filters.fileName')}
+           </Text>
+           <Input
+             name="filename"
+             size="sm"
+             value={filters.filename}
+             onChange={onFilterChange}
+             placeholder={t('common:search')}
+           />
+         </div>
 
-        <div>
-          <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
-            Language
-          </Text>
-          <Select
-            name="language"
-            size="sm"
-            value={filters.language}
-            onChange={onFilterChange}
-          >
-            <option value="">All</option>
-            {uniqueLanguages.map(lang => (
-              <option key={lang} value={lang}>{lang}</option>
-            ))}
-          </Select>
-        </div>
+         <div>
+           <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
+             {t('filters.language')}
+           </Text>
+           <Select
+             name="language"
+             size="sm"
+             value={filters.language}
+             onChange={onFilterChange}
+           >
+             <option value="">{t('common:all')}</option>
+             {uniqueLanguages.map(lang => (
+               <option key={lang} value={lang}>{lang}</option>
+             ))}
+           </Select>
+         </div>
 
-        <div>
-          <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
-            Status
-          </Text>
-          <Select
-            name="status"
-            size="sm"
-            value={filters.status}
-            onChange={onFilterChange}
-          >
-            <option value="">All</option>
-            {allStatuses.map(status => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </Select>
-        </div>
+         <div>
+           <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
+             {t('filters.status')}
+           </Text>
+           <Select
+             name="status"
+             size="sm"
+             value={filters.status}
+             onChange={onFilterChange}
+           >
+             <option value="">{t('common:all')}</option>
+             {allStatuses.map(status => (
+               <option key={status} value={status}>{t(`status:${status}`)}</option>
+             ))}
+           </Select>
+         </div>
 
-        <div>
-          <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
-            Similarity (e.g. &gt;50% or 0.5)
-          </Text>
-          <Input
-            name="similarity"
-            size="sm"
-            value={filters.similarity}
-            onChange={onFilterChange}
-            placeholder=">50%, <0.3, etc."
-          />
-        </div>
+         <div>
+           <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
+             {t('filters.similarity')}
+           </Text>
+           <Input
+             name="similarity"
+             size="sm"
+             value={filters.similarity}
+             onChange={onFilterChange}
+             placeholder={t('filters.similarityPlaceholder')}
+           />
+         </div>
 
-        <div>
-          <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
-            Submitted Date
-          </Text>
-          <Input
-            name="submittedAt"
-            type="date"
-            size="sm"
-            value={filters.submittedAt}
-            onChange={onFilterChange}
-          />
-        </div>
+         <div>
+           <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
+             {t('filters.submittedDate')}
+           </Text>
+           <Input
+             name="submittedAt"
+             type="date"
+             size="sm"
+             value={filters.submittedAt}
+             onChange={onFilterChange}
+           />
+         </div>
 
-        <div>
-          <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
-            Task ID
-          </Text>
-          <Select
-            name="task_id"
-            size="sm"
-            value={filters.task_id}
-            onChange={onFilterChange}
-          >
-            <option value="">All</option>
-            {uniqueTaskIds.map(id => (
-              <option key={id} value={id}>{id}</option>
-            ))}
-          </Select>
-        </div>
-      </SimpleGrid>
+         <div>
+           <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
+             {t('filters.taskId')}
+           </Text>
+           <Select
+             name="task_id"
+             size="sm"
+             value={filters.task_id}
+             onChange={onFilterChange}
+           >
+             <option value="">{t('common:all')}</option>
+             {uniqueTaskIds.map(id => (
+               <option key={id} value={id}>{id}</option>
+             ))}
+           </Select>
+         </div>
+       </SimpleGrid>
     </VStack>
   );
 };

@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardBody, VStack, HStack, Heading, Text, Progress, Badge } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../../services/api';
+
+const STAGE_META: Record<string, { phase: number; totalPhases: number }> = {
+  indexing: { phase: 1, totalPhases: 4 },
+  finding_intra_pairs: { phase: 2, totalPhases: 4 },
+  finding_cross_pairs: { phase: 3, totalPhases: 4 },
+  storing_results: { phase: 4, totalPhases: 4 },
+};
 
 interface TaskProgressProps {
   taskId: string;
@@ -86,6 +94,7 @@ interface WSMessage {
 const SMOOTHING_ALPHA = 0.12;
 
 const TaskProgress: React.FC<TaskProgressProps> = ({ taskId, status: initialStatus, cardBg, onCompleted }) => {
+  const { t } = useTranslation('results');
   const [progress, setProgress] = useState<ProgressState>({
     completed: 0, total: 0, percentage: 0, status: initialStatus,
   });
@@ -309,8 +318,13 @@ const TaskProgress: React.FC<TaskProgressProps> = ({ taskId, status: initialStat
   const stage = stageConfig[progress.status];
   if (!stage) return null;
 
+  const label = t(`results:taskProgress:stages:${progress.status}:label`);
+  const description = t(`results:taskProgress:stages:${progress.status}:description`);
+  const unit = progress.completed === 1
+    ? t(`results:taskProgress:stages:${progress.status}:unit`)
+    : t(`results:taskProgress:stages:${progress.status}:unitPlural`);
+
   const hasProgress = progress.total > 0;
-  const unit = progress.completed === 1 ? stage.unit : stage.unitPlural;
 
   return (
     <Card bg={cardBg} borderColor={`${stage.color}.300`} borderWidth={2}>
@@ -318,12 +332,12 @@ const TaskProgress: React.FC<TaskProgressProps> = ({ taskId, status: initialStat
         <VStack align="stretch" spacing={3}>
           <HStack justify="space-between">
             <HStack>
-              <Badge colorScheme={stage.color} fontSize="sm" px={2} py={0.5}>
-                Stage {stage.phase}/{stage.totalPhases}
-              </Badge>
-              <Heading size="sm" color={`${stage.color}.600`}>
-                {stage.label}
-              </Heading>
+                <Badge colorScheme={stage.color} fontSize="sm" px={2} py={0.5}>
+                  {t('taskProgress:stageBadge', { current: stage.phase, total: stage.totalPhases })}
+                </Badge>
+                <Heading size="sm" color={`${stage.color}.600`}>
+                  {label}
+                </Heading>
             </HStack>
             {hasProgress && (
               <Text fontWeight="bold" color={`${stage.color}.600`}>
@@ -343,10 +357,10 @@ const TaskProgress: React.FC<TaskProgressProps> = ({ taskId, status: initialStat
                 hasStripe
                 isAnimated
               />
-              <HStack justify="space-between" fontSize="sm" color="gray.600">
-                <Text>{progress.percentage.toFixed(1)}% complete</Text>
-                <Text>{progress.total - progress.completed} remaining</Text>
-              </HStack>
+               <HStack justify="space-between" fontSize="sm" color="gray.600">
+                 <Text>{t('taskProgress:percentComplete', { percent: progress.percentage.toFixed(1) })}</Text>
+                 <Text>{t('taskProgress:remaining', { count: progress.total - progress.completed })}</Text>
+               </HStack>
             </>
           ) : (
             <Progress
@@ -358,7 +372,7 @@ const TaskProgress: React.FC<TaskProgressProps> = ({ taskId, status: initialStat
           )}
 
           <Text fontSize="xs" color="gray.500" textAlign="center">
-            {stage.description}
+            {description}
           </Text>
         </VStack>
       </CardBody>

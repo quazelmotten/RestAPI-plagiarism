@@ -1,0 +1,88 @@
+{
+  "selectTask": "Выбрать задачу:",
+  "refresh": "Обновить",
+  "view": "Вид:",
+  "cards": "Карточки",
+  "heatmap": "Тепловая карта",
+  "noChecks": "Проверки на плагиат не найдены. Загрузите файлы чтобы начать!",
+  "selectTaskPrompt": "Выберите задачу",
+  "failedToFetchTasks": "Не удалось загрузить задачи",
+  "failedToFetchDetails": "Не удалось загрузить детали задачи",
+  "invalidDataFormat": "Получен неверный формат данных с сервера",
+  "allTasks": "Все задачи",
+  "taskPicker": {
+    "title": "Выбрать задачу",
+    "search": "Поиск задач...",
+    "noMatches": "Нет задач по вашему запросу",
+    "noTasks": "Нет доступных задач",
+    "tooltip": "Задача {{id}} - Создана {{date}}",
+    "fileCount": "{{count}} файлов",
+    "pairCount": "{{count}} пар",
+    "highWarning": "{{count}} высокое сходство"
+  },
+  "taskStats": {
+    "files": "Файлы",
+    "comparisons": "Сравнения",
+    "status": "Статус",
+    "avgSimilarity": "Среднее сходство"
+  },
+  "resultsList": {
+    "topSimilarities": "Топ похожих пар",
+    "showing": "Показано {{count}} из {{total}}",
+    "fullListNote": "Показаны топ 50 из {{total}} пар."
+  },
+  "distribution": {
+    "title": "Распределение сходства",
+    "switchToLinear": "Переключить на линейное масштабирование",
+    "switchToLog": "Переключить на логарифмическое масштабирование",
+    "logScale": "Лог. масштабирование",
+    "bins": "{{count}} колонок",
+    "partialData": "Примечание: это распределение основано на выборке результатов. Для полных данных дождитесь завершения обработки.",
+    "failedToLoad": "Не удалось загрузить гистограмму: {{error}}",
+    "binTooltip": "Диапазон: {{range}}, Количество: {{count}} ({{percentage}}%){{logSuffix}}",
+    "lowLabel": "Низкое (<25%)",
+    "mediumLabel": "Среднее (25-50%)",
+    "highLabel": "Высокое (>50%)",
+    "totalLabel": "Всего пар"
+  },
+  "heatmap": {
+    "title": "Тепловая карта сходства",
+    "tooltip": "{{fileA}} vs {{fileB}}: {{percentage}}% сходства",
+    "legend": {
+      "high": "Высокое (≥80%)",
+      "medium": "Среднее (60-79%)",
+      "low": "Низкое (<60%)"
+    }
+  },
+  "taskProgress": {
+    "stageBadge": "Этап {{current}}/{{total}}",
+    "percentComplete": "{{percent}}% завершено",
+    "remaining": "{{count}} осталось",
+    "stages": {
+      "indexing": {
+        "label": "Индексация файлов",
+        "description": "Токенизация исходных файлов и построение индекса отпечатков",
+        "unit": "файл",
+        "unitPlural": "файлов"
+      },
+      "finding_intra_pairs": {
+        "label": "Поиск пар в задаче",
+        "description": "Сравнение файлов внутри этой группы на сходство",
+        "unit": "файл проверен",
+        "unitPlural": "файлов проверено"
+      },
+      "finding_cross_pairs": {
+        "label": "Поиск межзадачных пар",
+        "description": "Сравнение новых файлов с ранее отправленными файлами",
+        "unit": "файл проверен",
+        "unitPlural": "файлов проверено"
+      },
+      "storing_results": {
+        "label": "Сохранение результатов",
+        "description": "Сохранение оценок сходства в базу данных",
+        "unit": "пара",
+        "unitPlural": "пар"
+      }
+    }
+  }
+}

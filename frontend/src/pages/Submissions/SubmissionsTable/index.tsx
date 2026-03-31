@@ -23,6 +23,7 @@ import type { ColumnDef, ColumnSort, SortingState } from '@tanstack/react-table'
 import type { FileSubmission } from '../types';
 import { formatDate, formatSimilarity, getStatusColor } from '../utils/formatters';
 import { useNavigate } from 'react-router';
+import { useTranslation } from 'react-i18next';
 
 interface SubmissionsTableProps {
   data: FileSubmission[];
@@ -34,18 +35,19 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
   isLoading = false,
 }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation(['submissions', 'status', 'common']);
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const columns = useMemo<ColumnDef<FileSubmission>[]>(
     () => [
       {
         accessorKey: 'filename',
-        header: 'File Name',
+        header: t('table.fileName'),
         size: 250,
       },
       {
         accessorKey: 'language',
-        header: 'Language',
+        header: t('table.language'),
         size: 120,
         cell: (info) => (
           <Badge colorScheme="blue" variant="outline">
@@ -55,20 +57,20 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
       },
       {
         accessorKey: 'status',
-        header: 'Status',
+        header: t('table.status'),
         size: 120,
         cell: (info) => {
           const status = info.getValue<string>();
           return (
             <Badge colorScheme={getStatusColor(status)}>
-              {status}
+              {t(`status:${status}`)}
             </Badge>
           );
         },
       },
       {
         accessorKey: 'similarity',
-        header: 'Similarity',
+        header: t('table.similarity'),
         size: 100,
         cell: (info) => {
           const similarity = info.getValue<number | null>();
@@ -77,7 +79,7 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
       },
       {
         accessorKey: 'created_at',
-        header: 'Submitted At',
+        header: t('table.submittedAt'),
         size: 150,
         cell: (info) => {
           const date = info.getValue<string>();
@@ -86,12 +88,12 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
       },
       {
         accessorKey: 'task_id',
-        header: 'Task ID',
+        header: t('table.taskId'),
         size: 150,
       },
       {
         id: 'actions',
-        header: 'Actions',
+        header: t('table.actions'),
         size: 100,
         cell: (info) => {
           const row = info.row.original;
@@ -102,14 +104,14 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
               variant="ghost"
               onClick={() => navigate(`/dashboard/results?filter=${row.id}`)}
             >
-              Go to Task
+              {t('table.goToTask')}
             </Button>
           );
         },
         enableSorting: false,
       },
     ],
-    [navigate]
+    [navigate, t]
   );
 
   const table = useReactTable<FileSubmission>({
@@ -149,7 +151,7 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
   if (isLoading) {
     return (
       <Box textAlign="center" py={8}>
-        <Text>Loading...</Text>
+        <Text>{t('loading')}</Text>
       </Box>
     );
   }
@@ -157,7 +159,7 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
   if (data.length === 0) {
     return (
       <Box textAlign="center" py={8}>
-        <Text color="gray.500">No submissions match the current filters</Text>
+        <Text color="gray.500">{t('noMatches')}</Text>
       </Box>
     );
   }

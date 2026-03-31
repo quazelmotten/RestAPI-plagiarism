@@ -1,0 +1,32 @@
+{
+  "filters": {
+    "fileName": "Имя файла",
+    "search": "Поиск...",
+    "language": "Язык",
+    "all": "Все",
+    "status": "Статус",
+    "similarity": "Сходство (напр. >50% или 0.5)",
+    "similarityPlaceholder": ">50%, <0.3, и т.д.",
+    "submittedDate": "Дата отправки",
+    "taskId": "ID задачи"
+  },
+  "table": {
+    "fileName": "Имя файла",
+    "language": "Язык",
+    "status": "Статус",
+    "similarity": "Сходство",
+    "submittedAt": "Отправлено",
+    "taskId": "ID задачи",
+    "actions": "Действия",
+    "goToTask": "Перейти к задаче"
+  },
+  "noMatches": "Нет посылок соответствующих текущим фильтрам",
+  "loading": "Загрузка...",
+  "pagination": {
+    "previous": "Назад",
+    "next": "Вперёд",
+    "pageSize": "Размер страницы:",
+    "showing": "Показано {{start}}-{{end}} из {{total}}",
+    "goToPage": "Перейти на страницу:"
+  }
+}

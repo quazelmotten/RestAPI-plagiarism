@@ -1,0 +1,20 @@
+{
+  "totalTasks": "Total Tasks",
+  "pendingChecks": "Pending Checks",
+  "highSimilarity": "High Similarity",
+  "completedTasks": "Completed Tasks",
+  "recentActivity": "Recent Activity",
+  "activityNote": "Showing activity from the last 7 days (max 25 entries)",
+  "noActivity": "No recent activity. Upload files to get started!",
+  "justNow": "just now",
+  "minAgo": "{{count}} min ago",
+  "hourAgo": "{{count}} hour ago",
+  "dayAgo": "{{count}} day ago",
+  "filesAnalyzed": "{{count}} files analyzed",
+  "processing": "processing",
+  "similarityDetected": "similarity detected",
+  "readyForReview": "Ready for review",
+  "taskId": "Task",
+  "files": "files",
+  "pairs": "pairs"
+}

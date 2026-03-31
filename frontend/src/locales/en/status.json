@@ -1,0 +1,12 @@
+{
+  "queued": "Queued",
+  "indexing": "Indexing",
+  "finding_pairs": "Finding Pairs",
+  "processing": "Processing",
+  "completed": "Completed",
+  "failed": "Failed",
+  "pending": "Pending",
+  "finding_intra_pairs": "Finding Intra-Task Pairs",
+  "finding_cross_pairs": "Finding Cross-Task Pairs",
+  "storing_results": "Storing Results"
+}

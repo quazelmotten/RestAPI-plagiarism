@@ -1,0 +1,20 @@
+{
+  "totalTasks": "Всего задач",
+  "pendingChecks": "Ожидающие проверки",
+  "highSimilarity": "Высокое сходство",
+  "completedTasks": "Завершённые задачи",
+  "recentActivity": "Недавняя активность",
+  "activityNote": "Показана активность за последние 7 дней (макс. 25 записей)",
+  "noActivity": "Нет недавней активности. Загрузите файлы чтобы начать!",
+  "justNow": "только что",
+  "minAgo": "{{count}} мин. назад",
+  "hourAgo": "{{count}} час. назад",
+  "dayAgo": "{{count}} дн. назад",
+  "filesAnalyzed": "{{count}} файлов обработано",
+  "processing": "обрабатывается",
+  "similarityDetected": "сходство обнаружено",
+  "readyForReview": "Готово к проверке",
+  "taskId": "Задача",
+  "files": "файлов",
+  "pairs": "пар"
+}

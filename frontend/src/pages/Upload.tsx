@@ -7,7 +7,6 @@ import {
   Button,
   VStack,
   HStack,
-
   Select,
   Progress,
   Icon,
@@ -32,6 +31,7 @@ import {
   useDisclosure,
   Spinner,
 } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import {
   FiUploadCloud,
   FiFile,
@@ -108,7 +108,19 @@ const getLastLanguage = (): string => {
   }
 };
 
+const languageOptions = [
+  { value: 'python', key: 'python' },
+  { value: 'javascript', key: 'javascript' },
+  { value: 'typescript', key: 'typescript' },
+  { value: 'cpp', key: 'cpp' },
+  { value: 'c', key: 'c' },
+  { value: 'java', key: 'java' },
+  { value: 'go', key: 'go' },
+  { value: 'rust', key: 'rust' },
+];
+
 const Upload: React.FC = () => {
+  const { t } = useTranslation(['upload', 'common', 'languages']);
   const navigate = useNavigate();
   const [files, setFiles] = useState<File[]>([]);
   const [language, setLanguage] = useState(getLastLanguage);
@@ -152,8 +164,8 @@ const Upload: React.FC = () => {
     (acceptedFiles: File[], rejected: { file: File }[]) => {
       if (rejected.length > 0) {
         toast({
-          title: `${rejected.length} file(s) rejected`,
-          description: `Files must be under ${formatFileSize(MAX_FILE_SIZE)} and have a supported extension.`,
+          title: `${rejected.length} ${t('rejected')}`,
+          description: `${t('toasts.failed')}: ${formatFileSize(MAX_FILE_SIZE)}`,
           status: 'warning',
           duration: 4000,
         });
@@ -181,15 +193,15 @@ const Upload: React.FC = () => {
 
         if (duplicateCount > 0) {
           toast({
-            title: `${duplicateCount} duplicate file(s) skipped`,
+            title: `${duplicateCount} ${t('duplicateSkipped')}`,
             status: 'info',
             duration: 3000,
           });
         }
         if (overLimit) {
           toast({
-            title: `File limit reached (${MAX_FILES} max)`,
-            description: 'Some files were not added.',
+            title: t('fileLimitReached'),
+            description: `Max ${MAX_FILES} max`,
             status: 'warning',
             duration: 4000,
           });
@@ -203,7 +215,7 @@ const Upload: React.FC = () => {
         return [...prev, ...newFiles];
       });
     },
-    [toast]
+    [toast, t]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -222,7 +234,7 @@ const Upload: React.FC = () => {
 
       if (file) {
         toast({
-          title: `Removed ${file.name}`,
+          title: t('common:clearAllFiles'),
           status: 'info',
           duration: 3000,
           render: ({ onClose }) => (
@@ -236,7 +248,7 @@ const Upload: React.FC = () => {
               alignItems="center"
               gap={3}
             >
-              <Text fontSize="sm">Removed {file.name}</Text>
+              <Text fontSize="sm">{t('common:clearAllFiles')}: {file.name}</Text>
               <Button
                 size="xs"
                 colorScheme="blue"
@@ -285,7 +297,7 @@ const Upload: React.FC = () => {
   // Upload
   const handleUpload = async () => {
     if (files.length === 0) {
-      toast({ title: 'No files selected', status: 'warning', duration: 3000 });
+      toast({ title: t('toasts.noFilesSelected'), status: 'warning', duration: 3000 });
       return;
     }
 
@@ -311,8 +323,8 @@ const Upload: React.FC = () => {
       });
 
       toast({
-        title: 'Upload successful',
-        description: `${files.length} file(s) submitted for analysis`,
+        title: t('toasts.success'),
+        description: t('uploadSuccess', { count: files.length }),
         status: 'success',
         duration: 3000,
       });
@@ -320,7 +332,7 @@ const Upload: React.FC = () => {
       setFiles([]);
       navigate('/dashboard/results');
     } catch (err: unknown) {
-      let errorMessage = 'There was an error uploading your files';
+      let errorMessage = t('common:error');
       if (err && typeof err === 'object' && 'response' in err) {
         const axiosErr = err as { response?: { data?: { detail?: string; message?: string } } };
         errorMessage =
@@ -329,7 +341,7 @@ const Upload: React.FC = () => {
           errorMessage;
       }
       toast({
-        title: 'Upload failed',
+        title: t('toasts.failed'),
         description: errorMessage,
         status: 'error',
         duration: 6000,
@@ -394,7 +406,7 @@ const Upload: React.FC = () => {
             <HStack spacing={6} wrap="wrap">
               <Box>
                 <Text fontSize="sm" color={mutedColor} mb={1}>
-                  Language
+                  {t('language')}
                 </Text>
                 <Select
                   value={language}
@@ -402,19 +414,16 @@ const Upload: React.FC = () => {
                   maxW="200px"
                   size="sm"
                 >
-                  <option value="python">Python</option>
-                  <option value="javascript">JavaScript</option>
-                  <option value="typescript">TypeScript</option>
-                  <option value="cpp">C++</option>
-                  <option value="c">C</option>
-                  <option value="java">Java</option>
-                  <option value="go">Go</option>
-                  <option value="rust">Rust</option>
+                  {languageOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {t(`languages.${opt.key}`)}
+                    </option>
+                  ))}
                 </Select>
               </Box>
               <Box>
                 <Text fontSize="sm" color={mutedColor} mb={1}>
-                  Analysis Scope
+                  {t('analysisScope')}
                 </Text>
                 <Select
                   value={selectedAssignmentId}
@@ -422,7 +431,7 @@ const Upload: React.FC = () => {
                   maxW="250px"
                   size="sm"
                 >
-                  <option value="">Full DB Scan</option>
+                  <option value="">{t('fullDbScan')}</option>
                   {(assignmentsData?.items || []).map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
@@ -432,7 +441,7 @@ const Upload: React.FC = () => {
               </Box>
               <Box>
                 <Text fontSize="sm" color={mutedColor} mb={1}>
-                  Max file size
+                  {t('maxFileSize')}
                 </Text>
                 <Text fontWeight="medium" pt={1}>
                   {formatFileSize(MAX_FILE_SIZE)}
@@ -482,9 +491,9 @@ const Upload: React.FC = () => {
                   transform={isDragActive ? 'translateY(-4px)' : 'none'}
                 />
                 <Text fontSize="lg" fontWeight="medium">
-                  {isDragActive ? 'Drop files here' : 'Drag & drop files here'}
+                  {isDragActive ? t('dragAndDrop') : t('dragAndDrop')}
                 </Text>
-                <Text color={mutedColor}>or click to select files</Text>
+                <Text color={mutedColor}>{t('orClickToSelect')}</Text>
                 <HStack spacing={1} flexWrap="wrap" justify="center">
                   {['.py', '.js', '.ts', '.cpp', '.c', '.java', '.go', '.rs', '.txt'].map(
                     (ext) => (
@@ -495,7 +504,7 @@ const Upload: React.FC = () => {
                   )}
                 </HStack>
                 <Text fontSize="xs" color={mutedColor}>
-                  Max {formatFileSize(MAX_FILE_SIZE)} per file &middot; Up to {MAX_FILES} files
+                  {t('maxPerFile', { size: formatFileSize(MAX_FILE_SIZE) })} &middot; {t('maxFiles', { max: MAX_FILES })}
                 </Text>
               </VStack>
             </Box>
@@ -525,8 +534,8 @@ const Upload: React.FC = () => {
                 color={mutedColor}
               >
                 <Icon as={FiFolder} boxSize={10} mb={3} />
-                <Text fontWeight="medium">No files selected</Text>
-                <Text fontSize="sm">Drop files on the upload area to get started</Text>
+                <Text fontWeight="medium">{t('noFilesSelected')}</Text>
+                <Text fontSize="sm">{t('dropFilesToStart')}</Text>
               </Flex>
             ) : (
               <>
@@ -534,7 +543,7 @@ const Upload: React.FC = () => {
                 <Box p={4} pb={2} flexShrink={0}>
                   <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
                     <Text fontWeight="semibold">
-                      Selected Files
+                      {t('selectedFiles')}
                     </Text>
                     <Button
                       size="xs"
@@ -544,16 +553,16 @@ const Upload: React.FC = () => {
                       onClick={onClearOpen}
                       isDisabled={isUploading}
                     >
-                      Clear All
+                      {t('common:clearAll')}
                     </Button>
                   </Flex>
                   <HStack spacing={4} mt={2}>
                     <Stat size="sm">
-                      <StatLabel fontSize="xs">Files</StatLabel>
+                      <StatLabel fontSize="xs">{t('filesCount', { count: files.length })}</StatLabel>
                       <StatNumber fontSize="md">{files.length}</StatNumber>
                     </Stat>
                     <Stat size="sm">
-                      <StatLabel fontSize="xs">Total Size</StatLabel>
+                      <StatLabel fontSize="xs">{t('totalSize')}</StatLabel>
                       <StatNumber fontSize="md">{formatFileSize(totalSize)}</StatNumber>
                     </Stat>
                   </HStack>
@@ -568,7 +577,7 @@ const Upload: React.FC = () => {
                       <Icon as={FiSearch} color={mutedColor} />
                     </InputLeftElement>
                     <Input
-                      placeholder="Filter files..."
+                      placeholder={t('filterFiles')}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       isDisabled={isUploading}
@@ -595,7 +604,7 @@ const Upload: React.FC = () => {
                       isDisabled={currentPage === 0 || isUploading}
                       leftIcon={<FiChevronLeft />}
                     >
-                      Prev
+                      {t('common:prev')}
                     </Button>
                     <Text fontSize="xs" color={mutedColor}>
                       {currentPage + 1} / {totalPages}
@@ -606,12 +615,12 @@ const Upload: React.FC = () => {
                       isDisabled={currentPage >= totalPages - 1 || isUploading}
                       rightIcon={<FiChevronRight />}
                     >
-                      Next
+                      {t('common:next')}
                     </Button>
                   </HStack>
                   <HStack spacing={2}>
                     <Text fontSize="xs" color={mutedColor}>
-                      Show:
+                      {t('common:show')}
                     </Text>
                     <Select
                       size="xs"
@@ -625,7 +634,7 @@ const Upload: React.FC = () => {
                       <option value="100">100</option>
                     </Select>
                     <Text fontSize="xs" color={mutedColor}>
-                      {showingStart}-{showingEnd} of {filteredFiles.length}
+                      {showingStart}-{showingEnd} {t('common:of', { total: filteredFiles.length })}
                       {searchQuery && ` (filtered)`}
                     </Text>
                   </HStack>
@@ -671,7 +680,7 @@ const Upload: React.FC = () => {
                             )}
                           </HStack>
                           <IconButton
-                            aria-label="Remove file"
+                            aria-label={t('common:actions')}
                             icon={<FiX />}
                             size="xs"
                             variant="ghost"
@@ -701,7 +710,7 @@ const Upload: React.FC = () => {
                         isAnimated
                       />
                       <Text fontSize="xs" textAlign="center" mt={1} color={mutedColor}>
-                        Uploading... {uploadProgress}%
+                        {t('uploading')} {uploadProgress}%
                       </Text>
                     </Box>
                   )}
@@ -711,10 +720,10 @@ const Upload: React.FC = () => {
                     w="full"
                     onClick={handleUpload}
                     isLoading={isUploading}
-                    loadingText="Uploading..."
+                    loadingText={t('uploading')}
                     leftIcon={isUploading ? <Spinner size="sm" /> : <FiCheckCircle />}
                   >
-                    Upload {files.length} file{files.length !== 1 ? 's' : ''} ({formatFileSize(totalSize)})
+                    {t('upload', { count: files.length, size: formatFileSize(totalSize) })}
                   </Button>
                 </Box>
               </>
@@ -732,19 +741,19 @@ const Upload: React.FC = () => {
         <AlertDialogOverlay>
           <AlertDialogContent>
             <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Clear All Files
+              {t('common:clearAllFiles')}
             </AlertDialogHeader>
             <AlertDialogBody>
-              Are you sure? This will remove all {files.length} selected files.
+              {t('common:areYouSure')} {files.length} {t('common:clearAllFiles')}.
             </AlertDialogBody>
-            <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onClearClose}>
-                Cancel
-              </Button>
-              <Button colorScheme="red" onClick={clearAll} ml={3}>
-                Clear All
-              </Button>
-            </AlertDialogFooter>
+             <AlertDialogFooter>
+               <Button ref={cancelRef} onClick={onClearClose}>
+                 {t('common:cancel')}
+               </Button>
+               <Button colorScheme="red" onClick={clearAll} ml={3}>
+                 {t('common:clearAll')}
+               </Button>
+             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>
       </AlertDialog>

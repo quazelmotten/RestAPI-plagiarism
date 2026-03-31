@@ -23,6 +23,7 @@ import {
   FiChevronDown,
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../services/api';
 import type { TaskListItem, TaskDetails, PlagiarismResult } from '../types';
 import TaskStats from '../components/Results/TaskStats';
@@ -87,43 +88,44 @@ const getStatusColorScheme = (status: string) => {
 
 const Results: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation(['results', 'common', 'status']);
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
-   const [isTaskPickerOpen, setIsTaskPickerOpen] = useState(false);
-   const [loading, setLoading] = useState(true);
-   const [error, setError] = useState<string | null>(null);
+  const [isTaskPickerOpen, setIsTaskPickerOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'heatmap'>('cards');
   const [selectedTaskDetails, setSelectedTaskDetails] = useState<TaskDetails | null>(null);
   const [loadingTaskDetails, setLoadingTaskDetails] = useState(false);
 
-   const loadTasks = useCallback(async () => {
-      try {
-        setLoading(true);
-        const response = await api.get<{ items: TaskListItem[] }>(API_ENDPOINTS.TASKS);
-        const taskList = response.data.items;
+    const loadTasks = useCallback(async () => {
+       try {
+         setLoading(true);
+         const response = await api.get<{ items: TaskListItem[] }>(API_ENDPOINTS.TASKS);
+         const taskList = response.data.items;
 
-        if (!Array.isArray(taskList)) {
-          console.error('Expected array from /plagiarism/tasks, got:', typeof taskList, taskList);
-          setError('Invalid data format received from server');
-          setTasks([]);
-          return;
-        }
+         if (!Array.isArray(taskList)) {
+           console.error('Expected array from /plagiarism/tasks, got:', typeof taskList, taskList);
+           setError(t('invalidDataFormat'));
+           setTasks([]);
+           return;
+         }
 
-        // Sort by created_at descending (most recent first)
-        taskList.sort((a, b) => {
-          const dateA = new Date(a.created_at || 0).getTime();
-          const dateB = new Date(b.created_at || 0).getTime();
-          return dateB - dateA;
-        });
+         // Sort by created_at descending (most recent first)
+         taskList.sort((a, b) => {
+           const dateA = new Date(a.created_at || 0).getTime();
+           const dateB = new Date(b.created_at || 0).getTime();
+           return dateB - dateA;
+         });
 
-        setTasks(taskList);
-      } catch (err) {
-        setError('Failed to fetch plagiarism tasks');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }, []);
+         setTasks(taskList);
+       } catch (err) {
+         setError(t('failedToFetchTasks'));
+         console.error(err);
+       } finally {
+         setLoading(false);
+       }
+     }, [t]);
 
    useEffect(() => {
      loadTasks();
@@ -245,94 +247,94 @@ const Results: React.FC = () => {
    const borderColor = useColorModeValue('gray.200', 'gray.700');
    const hoverBg = useColorModeValue('gray.50', 'gray.700');
   
-   if (loading) {
+    if (loading) {
+      return (
+        <Box display="flex" justifyContent="center" alignItems="center" h="400px">
+          <Spinner size="xl" color="blue.500" />
+        </Box>
+      );
+    }
+    
+    if (error) {
      return (
-       <Box display="flex" justifyContent="center" alignItems="center" h="400px">
-         <Spinner size="xl" color="blue.500" />
-       </Box>
+       <Alert status="error">
+         <AlertIcon />
+         {error}
+       </Alert>
      );
    }
    
-   if (error) {
-    return (
-      <Alert status="error">
-        <AlertIcon />
-        {error}
-      </Alert>
-    );
-  }
-  
-  return (
-    <Box display="flex" flexDirection="column" flex={1} minH={0} overflowY="auto">
-      {tasks.length === 0 ? (
-        <Card bg={cardBg}>
-          <CardBody>
-            <Text textAlign="center" color="gray.500" py={8}>
-              No plagiarism checks found. Upload files to get started!
-            </Text>
-          </CardBody>
-        </Card>
-      ) : (
-        <VStack spacing={6} align="stretch">
-          {/* Task Selector */}
-          <Card bg={cardBg}>
-            <CardBody>
-              <HStack justify="space-between" wrap="wrap" spacing={4}>
-                <HStack>
-                  <Text fontWeight="semibold">Select Task:</Text>
-                  <Button
-                    size="sm"
-                    rightIcon={<FiChevronDown />}
-                    onClick={() => setIsTaskPickerOpen(true)}
-                    minW="320px"
-                    variant="outline"
-                  >
-                    {selectedTaskListItem ? (
-                      <HStack spacing={2} isTruncated>
-                        {getStatusIcon(selectedTaskListItem.status)}
-                        <Text isTruncated fontSize="sm">
-                          {selectedTaskListItem.task_id.substring(0, 12)}...
-                        </Text>
-                        <Badge size="sm" colorScheme={getStatusColorScheme(selectedTaskListItem.status)}>
-                          {selectedTaskListItem.status}
-                        </Badge>
-                        {['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(selectedTaskListItem.status) && selectedTaskListItem.progress && (
-                          <Text fontSize="xs" color="gray.500">
-                            {selectedTaskListItem.progress.display}
-                          </Text>
-                        )}
-                      </HStack>
-                    ) : (
-                      'Select a task'
-                    )}
-                  </Button>
-                   {selectedTaskListItem && ['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(selectedTaskListItem.status) && (
-                     <Spinner size="sm" color="orange.500" speed="0.8s" />
-                   )}
+   return (
+     <Box display="flex" flexDirection="column" flex={1} minH={0} overflowY="auto">
+       {tasks.length === 0 ? (
+         <Card bg={cardBg}>
+           <CardBody>
+             <Text textAlign="center" color="gray.500" py={8}>
+               {t('noChecks')}
+             </Text>
+           </CardBody>
+         </Card>
+       ) : (
+         <VStack spacing={6} align="stretch">
+           {/* Task Selector */}
+           <Card bg={cardBg}>
+             <CardBody>
+               <HStack justify="space-between" wrap="wrap" spacing={4}>
+                 <HStack>
+                   <Text fontWeight="semibold">{t('selectTask')}</Text>
                    <Button
                      size="sm"
-                     leftIcon={<FiRefreshCw />}
-                     onClick={handleRefresh}
-                     isLoading={loading}
+                     rightIcon={<FiChevronDown />}
+                     onClick={() => setIsTaskPickerOpen(true)}
+                     minW="320px"
+                     variant="outline"
                    >
-                     Refresh
+                     {selectedTaskListItem ? (
+                       <HStack spacing={2} isTruncated>
+                         {getStatusIcon(selectedTaskListItem.status)}
+                         <Text isTruncated fontSize="sm">
+                           {selectedTaskListItem.task_id.substring(0, 12)}...
+                         </Text>
+                         <Badge size="sm" colorScheme={getStatusColorScheme(selectedTaskListItem.status)}>
+                           {t(`status:${selectedTaskListItem.status}`)}
+                         </Badge>
+                         {['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(selectedTaskListItem.status) && selectedTaskListItem.progress && (
+                           <Text fontSize="xs" color="gray.500">
+                             {selectedTaskListItem.progress.display}
+                           </Text>
+                         )}
+                       </HStack>
+                     ) : (
+                       t('selectTaskPrompt')
+                     )}
                    </Button>
-                </HStack>
+                    {selectedTaskListItem && ['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(selectedTaskListItem.status) && (
+                       <Spinner size="sm" color="orange.500" speed="0.8s" />
+                    )}
+                    <Button
+                      size="sm"
+                      leftIcon={<FiRefreshCw />}
+                      onClick={handleRefresh}
+                      isLoading={loading}
+                    >
+                      {t('common:refresh')}
+                    </Button>
+                 </HStack>
 
-                <HStack>
-                  <Text fontWeight="semibold">View:</Text>
-                  <Select
-                    value={viewMode}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setViewMode(e.target.value as 'cards' | 'heatmap')}
-                    w="150px"
-                  >
-                    <option value="cards">Cards</option>
-                    <option value="heatmap">Heatmap</option>
-                  </Select>
-                </HStack>
-              </HStack>
-            </CardBody>
-          </Card>
+                 <HStack>
+                   <Text fontWeight="semibold">{t('view')}:</Text>
+                   <Select
+                     value={viewMode}
+                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setViewMode(e.target.value as 'cards' | 'heatmap')}
+                     w="150px"
+                   >
+                     <option value="cards">{t('cards')}</option>
+                      <option value="heatmap">{t('heatmap.title')}</option>
+                   </Select>
+                 </HStack>
+               </HStack>
+             </CardBody>
+           </Card>
 
           <TaskPickerModal
             isOpen={isTaskPickerOpen}
