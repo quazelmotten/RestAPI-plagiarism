@@ -2,6 +2,8 @@
 Tasks domain repository - data access for plagiarism tasks.
 """
 
+import uuid
+
 from shared.models import File, PlagiarismTask, SimilarityResult
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,10 +42,66 @@ class TaskRepository:
         )
 
     async def get_all_tasks(
-        self, limit: int = 50, offset: int = 0, high_similarity_threshold: float = 0.8
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        high_similarity_threshold: float = 0.8,
+        assignment_id: str | None = None,
     ) -> PaginatedResponse:
-        """Get all plagiarism tasks with pagination and aggregated stats using SQL joins."""
-        # Single query with LEFT JOINs for file counts and high similarity counts
+        """Get plagiarism tasks with optional assignment_id filter.
+
+        When assignment_id is provided, returns lightweight task info
+        without expensive aggregation subqueries (much faster for large datasets).
+        """
+        # Build base filter
+        task_filter = (
+            PlagiarismTask.assignment_id == uuid.UUID(assignment_id) if assignment_id else None
+        )
+
+        # Fast path: assignment-scoped query skips heavy subqueries
+        if assignment_id:
+            count_q = select(func.count()).select_from(PlagiarismTask)
+            if task_filter is not None:
+                count_q = count_q.where(task_filter)
+            count_result = await self.db.execute(count_q)
+            total = count_result.scalar_one()
+
+            query = (
+                select(PlagiarismTask)
+                .order_by(PlagiarismTask.id.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            if task_filter is not None:
+                query = query.where(task_filter)
+
+            result = await self.db.execute(query)
+            tasks = result.scalars().all()
+
+            items = [
+                TaskListResponse(
+                    task_id=str(t.id),
+                    status=t.status,
+                    similarity=t.similarity,
+                    matches=t.matches,
+                    error=t.error,
+                    created_at=t.created_at.isoformat() if t.created_at else None,
+                    progress=TaskProgress(
+                        completed=t.processed_pairs or 0,
+                        total=t.total_pairs or 0,
+                        percentage=round((t.progress or 0) * 100, 1),
+                        display=f"{t.processed_pairs or 0}/{t.total_pairs or 0}",
+                    ),
+                    files_count=0,
+                    high_similarity_count=0,
+                    total_pairs=t.total_pairs or 0,
+                )
+                for t in tasks
+            ]
+
+            return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
+
+        # Full path: global query with aggregation (original behavior)
         files_count_subq = (
             select(File.task_id, func.count().label("files_count"))
             .group_by(File.task_id)
@@ -60,11 +118,9 @@ class TaskRepository:
             .subquery()
         )
 
-        # Count total
         count_result = await self.db.execute(select(func.count()).select_from(PlagiarismTask))
         total = count_result.scalar_one()
 
-        # Main query with LEFT JOINs
         query = (
             select(
                 PlagiarismTask,

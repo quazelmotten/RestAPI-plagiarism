@@ -1,5 +1,5 @@
 {
-  "dashboard": "Панель преподавателя",
+  "dashboard": "Проверка на плагиат",
   "overview": "Главная страница",
   "assignments": "Задания студентам",
   "submissions": "Таблица файлов",
@@ -7,5 +7,11 @@
   "uploadFiles": "Загрузка файлов",
   "results": "Результаты проверок",
   "pairComparison": "Попарное сравнение",
-  "logo": "plagitype"
+  "logo": "plagitype",
+  "tasks": "задач",
+  "filesLabel": "файлов",
+  "noAssignments": "Заданий пока нет",
+  "newAssignment": "Новое задание",
+  "modeAssignments": "По заданиям",
+  "modeClassic": "Классический вид"
 }

@@ -41,13 +41,6 @@ const getSimilarityColor = (similarity: number) => {
   return 'green';
 };
 
-const getSimilarityGradient = (similarity: number) => {
-  if (similarity >= 0.8) return 'linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%)';
-  if (similarity >= 0.5) return 'linear-gradient(135deg, #ffa726 0%, #fb8c00 100%)';
-  if (similarity >= 0.3) return 'linear-gradient(135deg, #ffca28 0%, #ffb300 100%)';
-  return 'linear-gradient(135deg, #66bb6a 0%, #4caf50 100%)';
-};
-
 const getStatusIcon = (status: string) => {
   switch (status) {
     case 'completed':
@@ -370,7 +363,6 @@ const Results: React.FC = () => {
                 {viewMode === 'heatmap' && selectedTask.files.length > 1 ? (
                   <HeatmapView
                     selectedTask={selectedTask}
-                    getSimilarityGradient={getSimilarityGradient}
                     handleCompare={handleCompare}
                     cardBg={cardBg}
                   />

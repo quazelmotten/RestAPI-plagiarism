@@ -104,9 +104,10 @@ async def get_all_tasks(
     task_service: TaskService = Depends(get_task_service),
     limit: int = Query(default=50, ge=1, le=500, description="Number of tasks to return (1-500)"),
     offset: int = Query(default=0, ge=0, description="Number of tasks to skip for pagination"),
+    assignment_id: str | None = Query(default=None, description="Filter tasks by assignment UUID"),
 ):
     """Get all plagiarism tasks with their results and progress."""
-    return await task_service.get_all_tasks(limit=limit, offset=offset)
+    return await task_service.get_all_tasks(limit=limit, offset=offset, assignment_id=assignment_id)
 
 
 @router.get(

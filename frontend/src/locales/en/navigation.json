@@ -1,5 +1,5 @@
 {
-  "dashboard": "Teacher Dashboard",
+  "dashboard": "Plagiarism Detection",
   "overview": "Overview",
   "assignments": "Assignments",
   "submissions": "Submissions",
@@ -7,5 +7,11 @@
   "uploadFiles": "Upload Files",
   "results": "Results",
   "pairComparison": "Pair Comparison",
-  "logo": "plagitype"
+  "logo": "plagitype",
+  "tasks": "tasks",
+  "filesLabel": "files",
+  "noAssignments": "No assignments yet",
+  "newAssignment": "New Assignment",
+  "modeAssignments": "By Assignment",
+  "modeClassic": "Classic View"
 }

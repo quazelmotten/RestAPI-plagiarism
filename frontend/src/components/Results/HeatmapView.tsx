@@ -1,119 +1,198 @@
-import React from 'react';
-import { Box, Grid, GridItem, Text, Tooltip, Card, CardBody, Heading } from '@chakra-ui/react';
+import React, { useMemo } from 'react';
+import { Box, Text, Tooltip, Card, CardBody, Heading } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
 import type { TaskDetails, PlagiarismResult } from '../../types';
 
 interface HeatmapViewProps {
   selectedTask: TaskDetails;
-  getSimilarityGradient: (similarity: number) => string;
   handleCompare: (result: PlagiarismResult) => void;
   cardBg?: string;
 }
 
-const HeatmapView: React.FC<HeatmapViewProps> = ({ selectedTask, getSimilarityGradient, handleCompare, cardBg }) => {
+const MAX_HEATMAP_FILES = 30;
+
+const HeatmapView: React.FC<HeatmapViewProps> = ({ selectedTask, handleCompare, cardBg }) => {
   const { t } = useTranslation(['results']);
-  if (!selectedTask || selectedTask.files.length < 2) return null;
 
-  const files = selectedTask.files;
-  const matrix: number[][] = [];
+  // Pre-index results into a Map for O(1) lookup instead of O(M) find()
+  const resultIndex = useMemo(() => {
+    const map = new Map<string, PlagiarismResult>();
+    for (const r of selectedTask.results) {
+      const key1 = `${r.file_a.id}|${r.file_b.id}`;
+      const key2 = `${r.file_b.id}|${r.file_a.id}`;
+      map.set(key1, r);
+      map.set(key2, r);
+    }
+    return map;
+  }, [selectedTask.results]);
 
-  for (let i = 0; i < files.length; i++) {
-    matrix[i] = [];
-    for (let j = 0; j < files.length; j++) {
-      if (i === j) {
-        matrix[i][j] = 1;
-      } else {
-        const result = selectedTask.results.find(
-          (r: PlagiarismResult) =>
-            (r.file_a.id === files[i].id && r.file_b.id === files[j].id) ||
-            (r.file_a.id === files[j].id && r.file_b.id === files[i].id)
-        );
-        matrix[i][j] = result ? (result.ast_similarity || 0) : 0;
+  const allFiles = selectedTask.files;
+  const tooManyFiles = allFiles.length > MAX_HEATMAP_FILES;
+  const files = tooManyFiles ? allFiles.slice(0, MAX_HEATMAP_FILES) : allFiles;
+
+  const matrix = useMemo(() => {
+    const n = files.length;
+    const mat: number[][] = new Array(n);
+    for (let i = 0; i < n; i++) {
+      mat[i] = new Array(n);
+      for (let j = 0; j < n; j++) {
+        if (i === j) {
+          mat[i][j] = 1;
+        } else {
+          const result = resultIndex.get(`${files[i].id}|${files[j].id}`);
+          mat[i][j] = result ? (result.ast_similarity || 0) : 0;
+        }
       }
     }
-  }
+    return mat;
+  }, [files, resultIndex]);
+
+  if (!selectedTask || allFiles.length < 2) return null;
+
+  // Build index for cell click lookups
+  const handleClick = (i: number, j: number) => {
+    if (i === j) return;
+    const result = resultIndex.get(`${files[i].id}|${files[j].id}`);
+    if (result) handleCompare(result);
+  };
 
   return (
     <Card bg={cardBg}>
       <CardBody>
-        <Heading size="sm" mb={4}>{t('heatmap:title')}</Heading>
-        <Box overflowX="auto">
-          <Grid
-            templateColumns={`repeat(${files.length + 1}, minmax(80px, 1fr))`}
-            gap={2}
-            p={4}
-          >
-            {/* Header row */}
-            <GridItem />
-            {files.map((file: { id: string; filename: string }, idx: number) => (
-              <GridItem key={idx}>
-                <Text
-                  fontSize="xs"
-                  fontWeight="semibold"
-                  textAlign="center"
-                  noOfLines={2}
-                  h="40px"
-                >
-                  {file.filename}
-                </Text>
-              </GridItem>
-            ))}
+        <Heading size="sm" mb={4}>
+          {t('heatmap:title')}
+          {tooManyFiles && (
+            <Text as="span" fontWeight="normal" fontSize="xs" ml={2} color="gray.500">
+              (showing {MAX_HEATMAP_FILES} of {allFiles.length} files)
+            </Text>
+          )}
+        </Heading>
 
-            {/* Data rows */}
-            {files.map((fileA: { id: string; filename: string }, i: number) => (
-              <React.Fragment key={i}>
-                <GridItem display="flex" alignItems="center">
-                  <Text
-                    fontSize="xs"
-                    fontWeight="semibold"
-                    noOfLines={2}
-                  >
-                    {fileA.filename}
-                  </Text>
-                </GridItem>
-                {files.map((fileB: { id: string; filename: string }, j: number) => (
-                  <GridItem key={j}>
-                     <Tooltip
-                       label={i === j ? fileA.filename : t('heatmap:tooltip', { 
-                         fileA: fileA.filename, 
-                         fileB: fileB.filename, 
-                         percentage: (matrix[i][j] * 100).toFixed(1) 
-                       })}
-                       placement="top"
-                     >
-                      <Box
-                        w="100%"
-                        h="100%"
-                        minH="60px"
-                        bg={i === j ? 'gray.200' : getSimilarityGradient(matrix[i][j])}
-                        color={i === j ? 'gray.500' : 'white'}
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                        fontSize="sm"
-                        fontWeight="bold"
-                        borderRadius="md"
-                        cursor={i === j ? 'default' : 'pointer'}
-                        opacity={i === j ? 0.5 : 1}
-                        onClick={() => {
-                          if (i !== j) {
-                            const result = selectedTask?.results.find(
-                              (r) => (r.file_a.id === files[i].id && r.file_b.id === files[j].id) ||
-                                   (r.file_a.id === files[j].id && r.file_b.id === files[i].id)
-                            );
-                            if (result) handleCompare(result);
-                          }
-                        }}
-                      >
-                        {i === j ? '—' : `${(matrix[i][j] * 100).toFixed(0)}%`}
-                      </Box>
-                    </Tooltip>
-                  </GridItem>
+        {tooManyFiles ? (
+          <Box overflowX="auto">
+            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '4px', fontSize: '11px', minWidth: '120px', textAlign: 'left', position: 'sticky', left: 0, background: 'inherit', zIndex: 1 }}></th>
+                  {files.map((file, j) => (
+                    <th key={j} style={{ padding: '4px', fontSize: '10px', textAlign: 'center', minWidth: '60px', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {file.filename}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {files.map((fileA, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '4px', fontSize: '10px', fontWeight: 600, position: 'sticky', left: 0, background: 'inherit', zIndex: 1, minWidth: '120px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {fileA.filename}
+                    </td>
+                    {files.map((fileB, j) => {
+                      const sim = matrix[i][j];
+                      const isDiag = i === j;
+                      const cellStyle: React.CSSProperties = {
+                        padding: '4px',
+                        textAlign: 'center',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        cursor: isDiag ? 'default' : 'pointer',
+                        opacity: isDiag ? 0.5 : 1,
+                        borderRadius: '2px',
+                        minWidth: '60px',
+                        color: 'white',
+                      };
+
+                      if (isDiag) {
+                        cellStyle.background = '#e2e8f0';
+                        cellStyle.color = '#a0aec0';
+                      } else if (sim >= 0.8) {
+                        cellStyle.background = '#ff6b6b';
+                      } else if (sim >= 0.5) {
+                        cellStyle.background = '#ffa726';
+                      } else if (sim >= 0.3) {
+                        cellStyle.background = '#ffca28';
+                        cellStyle.color = '#333';
+                      } else {
+                        cellStyle.background = '#66bb6a';
+                      }
+
+                      return (
+                        <td
+                          key={j}
+                          style={cellStyle}
+                          onClick={() => handleClick(i, j)}
+                          title={isDiag ? fileA.filename : `${fileA.filename} vs ${fileB.filename}: ${(sim * 100).toFixed(1)}%`}
+                        >
+                          {isDiag ? '—' : `${(sim * 100).toFixed(0)}%`}
+                        </td>
+                      );
+                    })}
+                  </tr>
                 ))}
-              </React.Fragment>
-            ))}
-          </Grid>
-        </Box>
+              </tbody>
+            </table>
+          </Box>
+        ) : (
+          // Original Chakra UI heatmap for small file counts
+          <Box overflowX="auto">
+            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '6px' }}></th>
+                  {files.map((file, j) => (
+                    <th key={j} style={{ padding: '6px', fontSize: '11px', textAlign: 'center', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {file.filename}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {files.map((fileA, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '6px', fontSize: '11px', fontWeight: 600, maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {fileA.filename}
+                    </td>
+                    {files.map((fileB, j) => {
+                      const sim = matrix[i][j];
+                      const isDiag = i === j;
+                      let bg = '#66bb6a';
+                      if (isDiag) bg = '#e2e8f0';
+                      else if (sim >= 0.8) bg = '#ff6b6b';
+                      else if (sim >= 0.5) bg = '#ffa726';
+                      else if (sim >= 0.3) bg = '#ffca28';
+
+                      return (
+                        <Tooltip
+                          key={j}
+                          label={isDiag ? fileA.filename : `${fileA.filename} vs ${fileB.filename}: ${(sim * 100).toFixed(1)}%`}
+                          placement="top"
+                        >
+                          <td
+                            style={{
+                              padding: '6px',
+                              textAlign: 'center',
+                              fontSize: '12px',
+                              fontWeight: 'bold',
+                              cursor: isDiag ? 'default' : 'pointer',
+                              opacity: isDiag ? 0.5 : 1,
+                              background: bg,
+                              color: isDiag ? '#a0aec0' : sim >= 0.3 && sim < 0.5 ? '#333' : 'white',
+                              borderRadius: '4px',
+                              minWidth: '70px',
+                            }}
+                            onClick={() => handleClick(i, j)}
+                          >
+                            {isDiag ? '—' : `${(sim * 100).toFixed(0)}%`}
+                          </td>
+                        </Tooltip>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Box>
+        )}
       </CardBody>
     </Card>
   );

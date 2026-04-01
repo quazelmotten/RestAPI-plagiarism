@@ -94,8 +94,15 @@ class TaskService:
         return await self.repo.get_task(task_id)
 
     async def get_all_tasks(
-        self, limit: int = 50, offset: int = 0, high_similarity_threshold: float = 0.8
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        high_similarity_threshold: float = 0.8,
+        assignment_id: str | None = None,
     ) -> PaginatedResponse:
         return await self.repo.get_all_tasks(
-            limit=limit, offset=offset, high_similarity_threshold=high_similarity_threshold
+            limit=limit,
+            offset=offset,
+            high_similarity_threshold=high_similarity_threshold,
+            assignment_id=assignment_id,
         )

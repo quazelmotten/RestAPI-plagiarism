@@ -37,5 +37,6 @@
     "en": "English",
     "ru": "Русский"
   },
-  "failedToLoadFiles": "Failed to load files"
+  "failedToLoadFiles": "Failed to load files",
+  "tasks": "tasks"
 }
