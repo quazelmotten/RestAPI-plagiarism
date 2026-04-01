@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
   // Assignments
   ASSIGNMENTS: '/plagiarism/assignments',
   ASSIGNMENT_DETAILS: (id: string) => `/plagiarism/assignments/${id}`,
+  ASSIGNMENT_FULL: (id: string) => `/plagiarism/assignments/${id}/full`,
 
   // Health & version
   HEALTH: '/health',

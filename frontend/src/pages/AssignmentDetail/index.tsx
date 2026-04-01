@@ -58,7 +58,7 @@ import {
 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../../services/api';
-import type { TaskDetails, PlagiarismResult } from '../../types';
+import type { AssignmentFullResponse, PlagiarismResult, TaskListItem } from '../../types';
 import TaskProgress from '../../components/Results/TaskProgress';
 import SimilarityDistribution from '../../components/Results/SimilarityDistribution';
 import HeatmapView from '../../components/Results/HeatmapView';
@@ -67,15 +67,6 @@ import PairComparisonModal from '../../components/PairComparisonModal';
 const MAX_FILE_SIZE = 1 * 1024 * 1024;
 const MAX_FILES = 1000;
 const LANG_STORAGE_KEY = 'upload_last_language';
-
-interface Assignment {
-  id: string;
-  name: string;
-  description: string | null;
-  created_at: string | null;
-  tasks_count: number;
-  files_count: number;
-}
 
 const getFileKey = (file: File): string => `${file.name}-${file.size}-${file.lastModified}`;
 
@@ -136,26 +127,14 @@ const AssignmentDetail: React.FC = () => {
   const { t } = useTranslation(['upload', 'results', 'common', 'assignments', 'overview', 'status', 'languages']);
   const toast = useToast();
 
-  // Assignment - lightweight query, always fast
-  const { data: assignment, isLoading: assignmentLoading } = useQuery<Assignment>({
-    queryKey: ['assignment', assignmentId],
-    queryFn: async () => {
-      const res = await api.get(API_ENDPOINTS.ASSIGNMENT_DETAILS(assignmentId!));
-      return res.data;
-    },
-    enabled: !!assignmentId,
-  });
-
   // Upload state
   const [files, setFiles] = useState<File[]>([]);
   const [language, setLanguage] = useState(getLastLanguage);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
-  // Task state - loaded lazily, not blocking the page
-  const [taskDetails, setTaskDetails] = useState<TaskDetails | null>(null);
-  const [loadingTask, setLoadingTask] = useState(false);
-  const [taskStatus, setTaskStatus] = useState<string | null>(null);
+  // Task filter state
+  const [selectedTaskId, setSelectedTaskId] = useState<string>('');
 
   // Results state
   const [resultsSearch, setResultsSearch] = useState('');
@@ -169,37 +148,28 @@ const AssignmentDetail: React.FC = () => {
     ast_similarity: number;
   } | null>(null);
 
-  // Fetch task details for this assignment only (fast path when assignment_id is set)
-  const fetchTaskDetails = useCallback(async () => {
-    if (!assignmentId) return;
-    setLoadingTask(true);
-    try {
-      const res = await api.get<{ items: Array<{ task_id: string; status: string }> }>(API_ENDPOINTS.TASKS, {
-        params: { limit: 1, offset: 0, assignment_id: assignmentId }
-      });
-      const latestTask = res.data.items?.[0];
-      if (!latestTask) {
-        setTaskDetails(null);
-        setTaskStatus(null);
-        return;
-      }
-      setTaskStatus(latestTask.status);
+  // Fetch full assignment data
+  const fetchAssignmentFull = useCallback(async (): Promise<AssignmentFullResponse> => {
+    const params: Record<string, string> = {};
+    if (selectedTaskId) params.task_id = selectedTaskId;
+    const res = await api.get<AssignmentFullResponse>(API_ENDPOINTS.ASSIGNMENT_FULL(assignmentId!), { params });
+    return res.data;
+  }, [assignmentId, selectedTaskId]);
 
-      const detailsRes = await api.get<TaskDetails>(API_ENDPOINTS.TASK_DETAILS(latestTask.task_id), {
-        params: { limit: 50, offset: 0 }
-      });
-      setTaskDetails(detailsRes.data);
-    } catch (err) {
-      console.error('Failed to fetch task details:', err);
-    } finally {
-      setLoadingTask(false);
-    }
-  }, [assignmentId]);
+  const { data: assignmentData, isLoading, refetch } = useQuery<AssignmentFullResponse>({
+    queryKey: ['assignmentFull', assignmentId, selectedTaskId],
+    queryFn: fetchAssignmentFull,
+    enabled: !!assignmentId,
+  });
 
-  // Only fetch task details on first load, not blocking the page
-  useEffect(() => {
-    if (assignmentId) fetchTaskDetails();
-  }, [assignmentId, fetchTaskDetails]);
+  // Find any active (processing) task
+  const activeTask = assignmentData?.tasks.find(t => ACTIVE_STATUSES.includes(t.status));
+  const isProcessing = !!activeTask;
+
+  // Refresh after upload
+  const refreshData = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
   // Upload handler
   const onDrop = useCallback(
@@ -256,8 +226,7 @@ const AssignmentDetail: React.FC = () => {
 
       toast({ title: t('toasts.success'), status: 'success', duration: 3000 });
       setFiles([]);
-      // Refresh task details after upload
-      setTimeout(fetchTaskDetails, 2000);
+      setTimeout(refreshData, 2000);
     } catch (err: unknown) {
       let msg = t('common:error');
       if (err && typeof err === 'object' && 'response' in err) {
@@ -273,8 +242,8 @@ const AssignmentDetail: React.FC = () => {
 
   // Filtered results
   const filteredResults = (() => {
-    if (!taskDetails?.results) return [];
-    let results = [...taskDetails.results];
+    if (!assignmentData?.results) return [];
+    let results = [...assignmentData.results];
     if (similarityFilter === 'high') results = results.filter(r => (r.ast_similarity || 0) >= 0.8);
     else if (similarityFilter === 'medium') results = results.filter(r => (r.ast_similarity || 0) >= 0.5 && (r.ast_similarity || 0) < 0.8);
     else if (similarityFilter === 'low') results = results.filter(r => (r.ast_similarity || 0) < 0.5);
@@ -287,24 +256,14 @@ const AssignmentDetail: React.FC = () => {
     return results;
   })();
 
-  // Stats
+  // Stats from aggregated data
   const stats = (() => {
-    if (!taskDetails) return { high: 0, medium: 0, low: 0, avg: 0 };
-    if (taskDetails.overall_stats) {
-      return {
-        high: taskDetails.overall_stats.high,
-        medium: taskDetails.overall_stats.medium,
-        low: taskDetails.overall_stats.low,
-        avg: taskDetails.overall_stats.avg_similarity,
-      };
-    }
-    if (!taskDetails.results) return { high: 0, medium: 0, low: 0, avg: 0 };
-    const sims = taskDetails.results.map((r) => r.ast_similarity || 0);
+    if (!assignmentData?.overall_stats) return { high: 0, medium: 0, low: 0, avg: 0 };
     return {
-      high: sims.filter(s => s >= 0.5).length,
-      medium: sims.filter(s => s >= 0.25 && s < 0.5).length,
-      low: sims.filter(s => s < 0.25).length,
-      avg: sims.length > 0 ? sims.reduce((a, b) => a + b, 0) / sims.length : 0,
+      high: assignmentData.overall_stats.high,
+      medium: assignmentData.overall_stats.medium,
+      low: assignmentData.overall_stats.low,
+      avg: assignmentData.overall_stats.avg_similarity,
     };
   })();
 
@@ -323,9 +282,9 @@ const AssignmentDetail: React.FC = () => {
   const mutedColor = useColorModeValue('gray.500', 'gray.400');
   const dropzoneHoverBg = useColorModeValue('brand.50', 'gray.600');
   const breadcrumbColor = useColorModeValue('gray.500', 'gray.400');
+  const taskRowBg = useColorModeValue('gray.50', 'gray.700');
 
-  // Only block on assignment loading (lightweight). Task data loads asynchronously.
-  if (assignmentLoading) {
+  if (isLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" h="400px">
         <Spinner size="xl" color="blue.500" />
@@ -333,15 +292,13 @@ const AssignmentDetail: React.FC = () => {
     );
   }
 
-  if (!assignment) {
+  if (!assignmentData) {
     return (
       <Box textAlign="center" py={12}>
         <Text fontSize="lg" color="red.500">Assignment not found</Text>
       </Box>
     );
   }
-
-  const isProcessing = taskStatus && ACTIVE_STATUSES.includes(taskStatus);
 
   return (
     <Box display="flex" flexDirection="column" flex={1} minH={0} overflow="hidden" position="relative">
@@ -353,7 +310,7 @@ const AssignmentDetail: React.FC = () => {
           </BreadcrumbLink>
         </BreadcrumbItem>
         <BreadcrumbItem isCurrentPage>
-          <Text fontSize="sm" fontWeight="semibold">{assignment.name}</Text>
+          <Text fontSize="sm" fontWeight="semibold">{assignmentData.name}</Text>
         </BreadcrumbItem>
       </Breadcrumb>
 
@@ -361,23 +318,24 @@ const AssignmentDetail: React.FC = () => {
       <Flex justify="space-between" align="flex-start" mb={4} flexShrink={0} wrap="wrap" gap={3}>
         <Box>
           <HStack spacing={3} align="center">
-            <Text fontSize="2xl" fontWeight="bold">{assignment.name}</Text>
-            <Badge colorScheme="blue" fontSize="sm">{assignment.files_count} {t('common:files')}</Badge>
+            <Text fontSize="2xl" fontWeight="bold">{assignmentData.name}</Text>
+            <Badge colorScheme="blue" fontSize="sm">{assignmentData.files_count} {t('common:files')}</Badge>
+            <Badge colorScheme="purple" fontSize="sm">{assignmentData.tasks_count} {t('assignments:table.tasks') || 'tasks'}</Badge>
           </HStack>
-          {assignment.description && (
-            <Text fontSize="sm" color={mutedColor} mt={1}>{assignment.description}</Text>
+          {assignmentData.description && (
+            <Text fontSize="sm" color={mutedColor} mt={1}>{assignmentData.description}</Text>
           )}
         </Box>
         <HStack>
-          {taskStatus && (
+          {isProcessing && activeTask && (
             <HStack>
-              {getStatusIcon(taskStatus)}
-              <Badge colorScheme={getStatusColorScheme(taskStatus)}>
-                {t(`status:${taskStatus}`)}
+              {getStatusIcon(activeTask.status)}
+              <Badge colorScheme={getStatusColorScheme(activeTask.status)}>
+                {t(`status:${activeTask.status}`)}
               </Badge>
             </HStack>
           )}
-          <Button size="sm" leftIcon={<FiRefreshCw />} onClick={fetchTaskDetails} isLoading={loadingTask}>
+          <Button size="sm" leftIcon={<FiRefreshCw />} onClick={refreshData} isLoading={isLoading}>
             {t('common:refresh')}
           </Button>
         </HStack>
@@ -464,143 +422,208 @@ const AssignmentDetail: React.FC = () => {
         </Flex>
       </Box>
 
-      {/* Task progress - shown only when actively processing */}
-      {taskDetails?.task_id && isProcessing && (
+      {/* Tasks summary */}
+      {assignmentData.tasks.length > 0 && (
+        <Box bg={cardBg} borderRadius="lg" borderWidth="1px" borderColor={borderColor} p={4} mb={4} flexShrink={0}>
+          <Flex justify="space-between" align="center" mb={3}>
+            <Text fontSize="sm" fontWeight="semibold">Tasks ({assignmentData.tasks.length})</Text>
+            <HStack>
+              <Text fontSize="xs" color={mutedColor}>Filter by task:</Text>
+              <Select
+                size="xs"
+                w="200px"
+                value={selectedTaskId}
+                onChange={(e) => setSelectedTaskId(e.target.value)}
+              >
+                <option value="">All tasks</option>
+                {assignmentData.tasks.map((task) => (
+                  <option key={task.task_id} value={task.task_id}>
+                    {task.task_id.substring(0, 8)}... ({task.status})
+                  </option>
+                ))}
+              </Select>
+            </HStack>
+          </Flex>
+          <Box overflowX="auto">
+            <Table size="xs" variant="simple">
+              <Thead>
+                <Tr>
+                  <Th fontSize="xs">Task ID</Th>
+                  <Th fontSize="xs">Status</Th>
+                  <Th fontSize="xs" isNumeric>Files</Th>
+                  <Th fontSize="xs" isNumeric>Pairs</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {assignmentData.tasks.map((task) => (
+                  <Tr
+                    key={task.task_id}
+                    bg={selectedTaskId === task.task_id ? taskRowBg : undefined}
+                    cursor="pointer"
+                    onClick={() => setSelectedTaskId(selectedTaskId === task.task_id ? '' : task.task_id)}
+                    _hover={{ bg: hoverBg }}
+                  >
+                    <Td fontSize="xs" fontFamily="monospace">{task.task_id.substring(0, 12)}...</Td>
+                    <Td>
+                      <HStack spacing={1}>
+                        {getStatusIcon(task.status)}
+                        <Badge colorScheme={getStatusColorScheme(task.status)} fontSize="xs">
+                          {task.status}
+                        </Badge>
+                      </HStack>
+                    </Td>
+                    <Td fontSize="xs" isNumeric>{task.files_count ?? '-'}</Td>
+                    <Td fontSize="xs" isNumeric>{task.total_pairs ?? 0}</Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </Box>
+        </Box>
+      )}
+
+      {/* Task progress - shown when actively processing */}
+      {activeTask && (
         <Box mb={4} flexShrink={0}>
           <TaskProgress
-            taskId={taskDetails.task_id}
-            status={taskStatus!}
+            taskId={activeTask.task_id}
+            status={activeTask.status}
             cardBg={cardBg}
-            onCompleted={fetchTaskDetails}
+            onCompleted={refreshData}
           />
         </Box>
       )}
 
       {/* Results */}
-      {loadingTask ? (
-        <Box textAlign="center" py={8}><Spinner size="lg" /></Box>
-      ) : taskDetails ? (
+      {assignmentData.results.length > 0 || assignmentData.total_pairs > 0 ? (
         <Box flex={1} minH={0} display="flex" flexDirection="column" overflow="hidden">
           <Box flex={1} minH={0} display="flex" flexDirection="column" overflow="hidden">
             <Tabs variant="enclosed" display="flex" flexDirection="column" flex={1} minH={0} overflow="hidden">
               <TabList flexShrink={0}>
-              <Tab fontSize="sm">{t('results:resultsList.topSimilarities')}</Tab>
-              <Tab fontSize="sm">{t('results:distribution.title')}</Tab>
-              <Tab fontSize="sm">{t('results:heatmap.title')}</Tab>
-            </TabList>
+                <Tab fontSize="sm">{t('results:resultsList.topSimilarities')}</Tab>
+                <Tab fontSize="sm">{t('results:distribution.title')}</Tab>
+                <Tab fontSize="sm">{t('results:heatmap.title')}</Tab>
+              </TabList>
 
-            <TabPanels flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
-              {/* Top Offenders */}
-              <TabPanel flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden" p={0} pt={4}>
-                <VStack align="stretch" spacing={3} flexShrink={0}>
-                  <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>
-                    <Card bg={cardBg} size="sm"><CardBody py={3}>
-                      <Stat size="sm"><StatLabel fontSize="xs">{t('results:taskStats.files')}</StatLabel>
-                        <StatNumber fontSize="lg">{taskDetails.files.length}</StatNumber></Stat>
-                    </CardBody></Card>
-                    <Card bg={cardBg} size="sm"><CardBody py={3}>
-                      <Stat size="sm"><StatLabel fontSize="xs">{t('results:taskStats.comparisons')}</StatLabel>
-                        <StatNumber fontSize="lg">{taskDetails.total_pairs}</StatNumber></Stat>
-                    </CardBody></Card>
-                    <Card bg={cardBg} size="sm"><CardBody py={3}>
-                      <Stat size="sm"><StatLabel fontSize="xs">{t('overview:highSimilarity')}</StatLabel>
-                        <StatNumber fontSize="lg" color="red.500">{stats.high}</StatNumber></Stat>
-                    </CardBody></Card>
-                    <Card bg={cardBg} size="sm"><CardBody py={3}>
-                      <Stat size="sm"><StatLabel fontSize="xs">{t('results:taskStats.avgSimilarity')}</StatLabel>
-                        <StatNumber fontSize="lg" color={getSimilarityColor(stats.avg)}>
-                          {(stats.avg * 100).toFixed(1)}%
-                        </StatNumber></Stat>
-                    </CardBody></Card>
-                  </SimpleGrid>
+              <TabPanels flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
+                {/* Top Similarities */}
+                <TabPanel flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden" p={0} pt={4}>
+                  <VStack align="stretch" spacing={3} flexShrink={0}>
+                    <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>
+                      <Card bg={cardBg} size="sm"><CardBody py={3}>
+                        <Stat size="sm"><StatLabel fontSize="xs">{t('results:taskStats.files')}</StatLabel>
+                          <StatNumber fontSize="lg">{assignmentData.files.length}</StatNumber></Stat>
+                      </CardBody></Card>
+                      <Card bg={cardBg} size="sm"><CardBody py={3}>
+                        <Stat size="sm"><StatLabel fontSize="xs">{t('results:taskStats.comparisons')}</StatLabel>
+                          <StatNumber fontSize="lg">{assignmentData.total_pairs}</StatNumber></Stat>
+                      </CardBody></Card>
+                      <Card bg={cardBg} size="sm"><CardBody py={3}>
+                        <Stat size="sm"><StatLabel fontSize="xs">{t('overview:highSimilarity')}</StatLabel>
+                          <StatNumber fontSize="lg" color="red.500">{stats.high}</StatNumber></Stat>
+                      </CardBody></Card>
+                      <Card bg={cardBg} size="sm"><CardBody py={3}>
+                        <Stat size="sm"><StatLabel fontSize="xs">{t('results:taskStats.avgSimilarity')}</StatLabel>
+                          <StatNumber fontSize="lg" color={getSimilarityColor(stats.avg)}>
+                            {(stats.avg * 100).toFixed(1)}%
+                          </StatNumber></Stat>
+                      </CardBody></Card>
+                    </SimpleGrid>
 
-                  <HStack>
-                    <InputGroup size="sm" maxW="300px">
-                      <InputLeftElement pointerEvents="none">
-                        <Icon as={FiSearch} color={mutedColor} />
-                      </InputLeftElement>
-                      <Input placeholder={t('results:taskPicker.search')} value={resultsSearch} onChange={(e) => setResultsSearch(e.target.value)} />
-                    </InputGroup>
-                    <Select size="sm" w="160px" value={similarityFilter} onChange={(e) => setSimilarityFilter(e.target.value)}>
-                      <option value="all">{t('common:all')}</option>
-                      <option value="high">High (≥80%)</option>
-                      <option value="medium">Medium (50-80%)</option>
-                      <option value="low">Low (&lt;50%)</option>
-                    </Select>
-                    <Text fontSize="sm" color={mutedColor}>
-                      {filteredResults.length} of {taskDetails.total_pairs}
-                    </Text>
-                  </HStack>
-                </VStack>
+                    <HStack>
+                      <InputGroup size="sm" maxW="300px">
+                        <InputLeftElement pointerEvents="none">
+                          <Icon as={FiSearch} color={mutedColor} />
+                        </InputLeftElement>
+                        <Input placeholder={t('results:taskPicker.search')} value={resultsSearch} onChange={(e) => setResultsSearch(e.target.value)} />
+                      </InputGroup>
+                      <Select size="sm" w="160px" value={similarityFilter} onChange={(e) => setSimilarityFilter(e.target.value)}>
+                        <option value="all">{t('common:all')}</option>
+                        <option value="high">High (&ge;80%)</option>
+                        <option value="medium">Medium (50-80%)</option>
+                        <option value="low">Low (&lt;50%)</option>
+                      </Select>
+                      <Text fontSize="sm" color={mutedColor}>
+                        {filteredResults.length} of {assignmentData.total_pairs}
+                      </Text>
+                    </HStack>
+                  </VStack>
 
-                <Box flex={1} minH={0} overflowY="auto" mt={3}>
-                  <TableContainer>
-                    <Table variant="simple" size="sm">
-                      <Thead position="sticky" top={0} bg={cardBg} zIndex={1}>
-                        <Tr>
-                          <Th>{t('results:resultsList.topSimilarities')}</Th>
-                          <Th isNumeric>Similarity</Th>
-                          <Th w="100px"></Th>
-                        </Tr>
-                      </Thead>
-                      <Tbody>
-                        {filteredResults.map((result, idx) => (
-                          <Tr key={idx} _hover={{ bg: hoverBg }}>
-                            <Td>
-                              <HStack spacing={2}>
-                                <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="220px">
-                                  {result.file_a.filename}
-                                </Text>
-                                <Text fontSize="xs" color={mutedColor}>vs</Text>
-                                <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="220px">
-                                  {result.file_b.filename}
-                                </Text>
-                              </HStack>
-                            </Td>
-                            <Td isNumeric>
-                              <Badge colorScheme={getSimilarityColor(result.ast_similarity || 0)} fontSize="sm" px={2} py={0.5}>
-                                {((result.ast_similarity || 0) * 100).toFixed(1)}%
-                              </Badge>
-                            </Td>
-                            <Td>
-                              <Button size="xs" rightIcon={<FiArrowRight />} variant="outline" colorScheme={getSimilarityColor(result.ast_similarity || 0)} onClick={() => handleCompare(result)}>
-                                Review
-                              </Button>
-                            </Td>
+                  <Box flex={1} minH={0} overflowY="auto" mt={3}>
+                    <TableContainer>
+                      <Table variant="simple" size="sm">
+                        <Thead position="sticky" top={0} bg={cardBg} zIndex={1}>
+                          <Tr>
+                            <Th>{t('results:resultsList.topSimilarities')}</Th>
+                            <Th isNumeric>Similarity</Th>
+                            <Th w="100px"></Th>
                           </Tr>
-                        ))}
-                      </Tbody>
-                    </Table>
-                  </TableContainer>
+                        </Thead>
+                        <Tbody>
+                          {filteredResults.map((result, idx) => (
+                            <Tr key={idx} _hover={{ bg: hoverBg }}>
+                              <Td>
+                                <HStack spacing={2}>
+                                  <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="220px">
+                                    {result.file_a.filename}
+                                  </Text>
+                                  <Text fontSize="xs" color={mutedColor}>vs</Text>
+                                  <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="220px">
+                                    {result.file_b.filename}
+                                  </Text>
+                                </HStack>
+                              </Td>
+                              <Td isNumeric>
+                                <Badge colorScheme={getSimilarityColor(result.ast_similarity || 0)} fontSize="sm" px={2} py={0.5}>
+                                  {((result.ast_similarity || 0) * 100).toFixed(1)}%
+                                </Badge>
+                              </Td>
+                              <Td>
+                                <Button size="xs" rightIcon={<FiArrowRight />} variant="outline" colorScheme={getSimilarityColor(result.ast_similarity || 0)} onClick={() => handleCompare(result)}>
+                                  Review
+                                </Button>
+                              </Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </TableContainer>
 
-                  {filteredResults.length === 0 && (
-                    <Box textAlign="center" py={8} color={mutedColor}>
-                      <Text>{taskDetails.total_pairs === 0 ? t('results:noChecks') : t('results:taskPicker.noMatches')}</Text>
-                    </Box>
-                  )}
-                </Box>
-              </TabPanel>
+                    {filteredResults.length === 0 && (
+                      <Box textAlign="center" py={8} color={mutedColor}>
+                        <Text>{assignmentData.total_pairs === 0 ? t('results:noChecks') : t('results:taskPicker.noMatches')}</Text>
+                      </Box>
+                    )}
+                  </Box>
+                </TabPanel>
 
-              {/* Distribution */}
-              <TabPanel flex={1} display="flex" flexDirection="column" minH={0} overflowY="auto" p={0} pt={4}>
-                <SimilarityDistribution
-                  results={taskDetails.results}
-                  totalPairs={taskDetails.total_pairs}
-                  cardBg={cardBg}
-                  taskId={taskDetails.task_id}
-                  stats={stats}
-                />
-              </TabPanel>
+                {/* Distribution */}
+                <TabPanel flex={1} display="flex" flexDirection="column" minH={0} overflowY="auto" p={0} pt={4}>
+                  <SimilarityDistribution
+                    results={assignmentData.results}
+                    totalPairs={assignmentData.total_pairs}
+                    cardBg={cardBg}
+                    taskId={selectedTaskId || undefined}
+                    stats={stats}
+                  />
+                </TabPanel>
 
-              {/* Heatmap */}
-              <TabPanel flex={1} display="flex" flexDirection="column" minH={0} overflowY="auto" p={0} pt={4}>
-                <HeatmapView
-                  selectedTask={taskDetails}
-                  handleCompare={handleCompare}
-                  cardBg={cardBg}
-                />
-              </TabPanel>
-            </TabPanels>
+                {/* Heatmap */}
+                <TabPanel flex={1} display="flex" flexDirection="column" minH={0} overflowY="auto" p={0} pt={4}>
+                  <HeatmapView
+                    selectedTask={{
+                      task_id: selectedTaskId || assignmentData.id,
+                      status: 'completed',
+                      total_pairs: assignmentData.total_pairs,
+                      files: assignmentData.files.map(f => ({ id: f.id, filename: f.filename, task_id: f.task_id || undefined })),
+                      results: assignmentData.results,
+                      overall_stats: assignmentData.overall_stats || undefined,
+                    }}
+                    handleCompare={handleCompare}
+                    cardBg={cardBg}
+                  />
+                </TabPanel>
+              </TabPanels>
             </Tabs>
           </Box>
         </Box>
@@ -617,7 +640,7 @@ const AssignmentDetail: React.FC = () => {
         onClose={() => { setPairModalOpen(false); setSelectedPair(null); }}
         initialFileA={selectedPair?.file_a}
         initialFileB={selectedPair?.file_b}
-        assignmentName={assignment.name}
+        assignmentName={assignmentData.name}
       />
     </Box>
   );

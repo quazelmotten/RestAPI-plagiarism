@@ -1019,8 +1019,12 @@ def canonicalize_type4(code: str, use_ast: bool = True, lang_code: str = "python
       - arithmetic → ARITHMETIC(op, left, right)
       - boolean ops → BOOL_OP(...)
     """
-    if use_ast:
-        # Use AST-based canonicalization (works for all supported languages)
+    if use_ast and lang_code == "python":
+        # AST-based canonicalization designed for Python's semantic patterns
+        # (f-strings, comprehensions, lambdas, etc.). For other languages,
+        # _emit_canonical is too aggressive — it replaces all identifiers with
+        # [identifier], causing different code to produce identical canonical
+        # forms and false Type 4 matches.
         return ast_canonicalize(code, lang_code)
     elif lang_code == "python":
         # Legacy regex-based approach (kept for backward compatibility)

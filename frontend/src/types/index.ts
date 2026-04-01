@@ -134,4 +134,32 @@ export interface ApiError {
   message?: string;
 }
 
+export interface AssignmentFullFile {
+  id: string;
+  filename: string;
+  task_id: string | null;
+}
+
+export interface AssignmentFullStats {
+  avg_similarity: number;
+  high: number;
+  medium: number;
+  low: number;
+  total_results: number;
+}
+
+export interface AssignmentFullResponse {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string | null;
+  tasks_count: number;
+  files_count: number;
+  tasks: TaskListItem[];
+  files: AssignmentFullFile[];
+  results: PlagiarismResult[];
+  total_pairs: number;
+  overall_stats: AssignmentFullStats | null;
+}
+
 export type { PlagiarismMatch as Match };

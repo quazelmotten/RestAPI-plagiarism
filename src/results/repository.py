@@ -2,6 +2,8 @@
 Results domain repository - data access for similarity results using SQL-first approach.
 """
 
+import uuid
+
 from shared.models import File, PlagiarismTask, SimilarityResult
 from sqlalchemy import case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -208,6 +210,170 @@ class ResultRepository:
             results=formatted_results,
             overall_stats=overall_stats,
         )
+
+    async def get_assignment_results(
+        self,
+        assignment_id: str,
+        task_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        """Get similarity results for an assignment, optionally filtered by task_id.
+
+        Returns paginated results, all files, all tasks, total pairs, and stats.
+        """
+        assignment_uuid = uuid.UUID(assignment_id)
+
+        # Get all tasks for this assignment
+        tasks_query = (
+            select(PlagiarismTask)
+            .where(PlagiarismTask.assignment_id == assignment_uuid)
+            .order_by(desc(PlagiarismTask.id))
+        )
+        tasks_result = await self.db.execute(tasks_query)
+        all_tasks = tasks_result.scalars().all()
+
+        if not all_tasks:
+            return None
+
+        # Get all files across all tasks in the assignment
+        all_files_query = (
+            select(File.id, File.filename, File.task_id)
+            .where(File.task_id.in_([t.id for t in all_tasks]))
+            .order_by(File.filename)
+        )
+        all_files_result = await self.db.execute(all_files_query)
+        all_files_rows = all_files_result.all()
+
+        # Build file map for filename lookups
+        file_map = {str(row.id): row.filename for row in all_files_rows}
+
+        # Determine which task_ids to filter results by
+        if task_id:
+            filter_task_ids = [uuid.UUID(task_id)]
+            total_pairs_count = next(
+                (t.total_pairs or 0 for t in all_tasks if str(t.id) == task_id), 0
+            )
+        else:
+            filter_task_ids = [t.id for t in all_tasks]
+            total_pairs_count = sum(t.total_pairs or 0 for t in all_tasks)
+
+        # Count total results for pagination
+        count_query = (
+            select(func.count())
+            .select_from(SimilarityResult)
+            .where(SimilarityResult.task_id.in_(filter_task_ids))
+        )
+        count_result = await self.db.execute(count_query)
+        total_results = count_result.scalar_one()
+
+        # Query paginated results
+        results_query = (
+            select(SimilarityResult)
+            .where(SimilarityResult.task_id.in_(filter_task_ids))
+            .order_by(desc(SimilarityResult.ast_similarity))
+            .limit(limit)
+            .offset(offset)
+        )
+        results_result = await self.db.execute(results_query)
+        results = results_result.scalars().all()
+
+        formatted_results = [
+            ResultItem(
+                file_a={
+                    "id": str(r.file_a_id),
+                    "filename": file_map.get(str(r.file_a_id), "Unknown"),
+                },
+                file_b={
+                    "id": str(r.file_b_id),
+                    "filename": file_map.get(str(r.file_b_id), "Unknown"),
+                },
+                ast_similarity=r.ast_similarity,
+                matches=r.matches or [],
+                created_at=str(r.created_at) if r.created_at else None,
+            )
+            for r in results
+        ]
+
+        # Compute aggregated stats
+        agg_query = (
+            select(
+                func.count().label("total"),
+                func.coalesce(func.avg(SimilarityResult.ast_similarity), 0).label("avg_similarity"),
+                func.sum(case((SimilarityResult.ast_similarity >= 0.5, 1), else_=0)).label(
+                    "high_count"
+                ),
+                func.sum(case((SimilarityResult.ast_similarity >= 0.25, 1), else_=0)).label(
+                    "medium_or_high"
+                ),
+                func.sum(case((SimilarityResult.ast_similarity.is_(None), 1), else_=0)).label(
+                    "null_count"
+                ),
+            )
+            .select_from(SimilarityResult)
+            .where(SimilarityResult.task_id.in_(filter_task_ids))
+        )
+        agg_result = await self.db.execute(agg_query)
+        agg_row = agg_result.first()
+
+        overall_stats = None
+        if agg_row:
+            total_count = agg_row.total or 0
+            avg_sim = float(agg_row.avg_similarity or 0)
+            high_count = int(agg_row.high_count or 0)
+            medium_or_high = int(agg_row.medium_or_high or 0)
+            null_count = int(agg_row.null_count or 0)
+            medium_count = medium_or_high - high_count
+            low_count = total_count - high_count - medium_count - null_count
+
+            overall_stats = {
+                "avg_similarity": avg_sim,
+                "high": high_count,
+                "medium": medium_count,
+                "low": low_count,
+                "total_results": total_count,
+            }
+
+        # Build task list responses with individual stats
+        from tasks.schemas import TaskListResponse
+
+        task_items = []
+        for t in all_tasks:
+            task_items.append(
+                TaskListResponse(
+                    task_id=str(t.id),
+                    status=t.status,
+                    similarity=t.similarity,
+                    matches=t.matches,
+                    error=t.error,
+                    created_at=t.created_at.isoformat() if t.created_at else None,
+                    progress=TaskProgress(
+                        completed=t.processed_pairs or 0,
+                        total=t.total_pairs or 0,
+                        percentage=round((t.progress or 0) * 100, 1),
+                        display=f"{t.processed_pairs or 0}/{t.total_pairs or 0}",
+                    ),
+                    files_count=0,
+                    high_similarity_count=0,
+                    total_pairs=t.total_pairs or 0,
+                )
+            )
+
+        return {
+            "tasks": task_items,
+            "files": [
+                FileInfo(
+                    id=str(row.id),
+                    filename=row.filename,
+                    task_id=str(row.task_id),
+                )
+                for row in all_files_rows
+            ],
+            "results": formatted_results,
+            "total_pairs": total_pairs_count,
+            "total_results": total_results,
+            "overall_stats": overall_stats,
+        }
 
     async def get_file_pair(self, file_a_id: str, file_b_id: str) -> ResultItem | None:
         """Get a specific file pair result using SQL."""

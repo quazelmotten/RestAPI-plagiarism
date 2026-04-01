@@ -7,8 +7,14 @@ import logging
 from fastapi import APIRouter, Depends, Query, status
 
 from assignments.dependencies import get_assignment_service, valid_assignment_id
-from assignments.schemas import AssignmentCreate, AssignmentResponse, AssignmentUpdate
+from assignments.schemas import (
+    AssignmentCreate,
+    AssignmentFullResponse,
+    AssignmentResponse,
+    AssignmentUpdate,
+)
 from assignments.service import AssignmentService
+from exceptions.exceptions import NotFoundError
 from schemas.common import PaginatedResponse
 
 router = APIRouter(prefix="/plagiarism/assignments", tags=["Assignments"])
@@ -82,6 +88,42 @@ async def get_assignment(
 ):
     """Get assignment by ID. Uses dependency validation to ensure assignment exists."""
     return assignment
+
+
+@router.get(
+    "/{assignment_id}/full",
+    response_model=AssignmentFullResponse,
+    summary="Get full assignment details with all tasks, files, and results",
+    description="Retrieve complete assignment information including all tasks, files, "
+    "paginated similarity results, and aggregated statistics.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": AssignmentFullResponse,
+            "description": "Full assignment details returned",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Assignment not found",
+        },
+    },
+)
+async def get_assignment_full(
+    assignment_id: str,
+    assignment_service: AssignmentService = Depends(get_assignment_service),
+    task_id: str | None = Query(default=None, description="Filter results to a specific task"),
+    limit: int = Query(default=50, ge=1, le=500, description="Number of results to return"),
+    offset: int = Query(default=0, ge=0, description="Number of results to skip"),
+):
+    """Get full assignment details with aggregated results across all tasks."""
+    result = await assignment_service.get_assignment_full(
+        assignment_id=assignment_id,
+        task_id=task_id,
+        limit=limit,
+        offset=offset,
+    )
+    if not result:
+        raise NotFoundError("Assignment not found")
+    return result
 
 
 @router.patch(

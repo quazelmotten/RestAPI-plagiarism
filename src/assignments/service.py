@@ -7,7 +7,12 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from assignments.repository import AssignmentRepository
-from assignments.schemas import AssignmentCreate, AssignmentResponse, AssignmentUpdate
+from assignments.schemas import (
+    AssignmentCreate,
+    AssignmentFullResponse,
+    AssignmentResponse,
+    AssignmentUpdate,
+)
 from schemas.common import PaginatedResponse
 
 
@@ -26,6 +31,20 @@ class AssignmentService:
 
     async def get_assignment(self, assignment_id: str) -> AssignmentResponse | None:
         return await self.repo.get_assignment(assignment_id)
+
+    async def get_assignment_full(
+        self,
+        assignment_id: str,
+        task_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> AssignmentFullResponse | None:
+        return await self.repo.get_assignment_full(
+            assignment_id=assignment_id,
+            task_id=task_id,
+            limit=limit,
+            offset=offset,
+        )
 
     async def get_all_assignments(self, limit: int = 50, offset: int = 0) -> PaginatedResponse:
         return await self.repo.get_all_assignments(limit=limit, offset=offset)

@@ -6,7 +6,8 @@ from shared.models import Assignment, File, PlagiarismTask
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from assignments.schemas import AssignmentResponse
+from assignments.schemas import AssignmentFullResponse, AssignmentResponse
+from results.repository import ResultRepository
 from schemas.common import PaginatedResponse
 
 
@@ -44,6 +45,72 @@ class AssignmentRepository:
             created_at=assignment.created_at.isoformat() if assignment.created_at else None,
             tasks_count=tasks_count,
             files_count=files_count,
+        )
+
+    async def get_assignment_full(
+        self,
+        assignment_id: str,
+        task_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> AssignmentFullResponse | None:
+        """Get full assignment details with all tasks, files, results, and stats."""
+        assignment = await self.db.get(Assignment, assignment_id)
+        if not assignment:
+            return None
+
+        # Get counts
+        tasks_count_result = await self.db.execute(
+            select(func.count())
+            .select_from(PlagiarismTask)
+            .where(PlagiarismTask.assignment_id == assignment_id)
+        )
+        tasks_count = tasks_count_result.scalar_one()
+
+        files_count_result = await self.db.execute(
+            select(func.count())
+            .select_from(File)
+            .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == assignment_id)
+        )
+        files_count = files_count_result.scalar_one()
+
+        # Get aggregated results using ResultRepository
+        result_repo = ResultRepository(self.db)
+        agg_data = await result_repo.get_assignment_results(
+            assignment_id=assignment_id,
+            task_id=task_id,
+            limit=limit,
+            offset=offset,
+        )
+
+        if agg_data is None:
+            return AssignmentFullResponse(
+                id=str(assignment.id),
+                name=assignment.name,
+                description=assignment.description,
+                created_at=assignment.created_at.isoformat() if assignment.created_at else None,
+                tasks_count=tasks_count,
+                files_count=files_count,
+                tasks=[],
+                files=[],
+                results=[],
+                total_pairs=0,
+                overall_stats=None,
+            )
+
+        return AssignmentFullResponse(
+            id=str(assignment.id),
+            name=assignment.name,
+            description=assignment.description,
+            created_at=assignment.created_at.isoformat() if assignment.created_at else None,
+            tasks_count=tasks_count,
+            files_count=files_count,
+            tasks=agg_data["tasks"],
+            files=agg_data["files"],
+            results=agg_data["results"],
+            total_pairs=agg_data["total_pairs"],
+            overall_stats=agg_data["overall_stats"],
         )
 
     async def get_all_assignments(self, limit: int = 50, offset: int = 0) -> PaginatedResponse:
