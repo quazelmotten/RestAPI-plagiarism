@@ -89,6 +89,7 @@ export interface TaskListItem {
   };
   files_count?: number;
   high_similarity_count?: number;
+  avg_similarity?: number;
   created_at?: string;
 }
 
@@ -138,6 +139,7 @@ export interface AssignmentFullFile {
   id: string;
   filename: string;
   task_id: string | null;
+  max_similarity?: number;
 }
 
 export interface AssignmentFullStats {
@@ -159,6 +161,7 @@ export interface AssignmentFullResponse {
   files: AssignmentFullFile[];
   results: PlagiarismResult[];
   total_pairs: number;
+  total_results: number;
   overall_stats: AssignmentFullStats | null;
 }
 

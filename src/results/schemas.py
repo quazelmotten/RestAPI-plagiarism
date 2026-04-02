@@ -31,6 +31,7 @@ class FileInfo(CustomBaseModel):
     id: str
     filename: str
     task_id: str | None = None
+    max_similarity: float | None = None
 
 
 class ResultItem(CustomBaseModel):

@@ -37,6 +37,7 @@ class TaskListResponse(CustomBaseModel):
     files_count: int = 0
     high_similarity_count: int = 0
     total_pairs: int = 0
+    avg_similarity: float = 0.0
 
 
 class TaskCreateResponse(CustomBaseModel):

@@ -14,6 +14,7 @@ from assignments.schemas import (
     AssignmentUpdate,
 )
 from assignments.service import AssignmentService
+from database import get_async_session
 from exceptions.exceptions import NotFoundError
 from schemas.common import PaginatedResponse
 
@@ -124,6 +125,70 @@ async def get_assignment_full(
     if not result:
         raise NotFoundError("Assignment not found")
     return result
+
+
+@router.get(
+    "/{assignment_id}/histogram",
+    summary="Get similarity histogram for an assignment",
+    description="Generate histogram distribution of similarity scores for all tasks in an assignment.",
+)
+async def get_assignment_histogram(
+    assignment_id: str,
+    bins: int = Query(200, ge=5, le=1000, description="Number of histogram bins"),
+    task_id: str | None = Query(default=None, description="Filter to a specific task"),
+    db=Depends(get_async_session),
+):
+    """Get histogram data for an assignment's similarity distribution."""
+    import uuid as _uuid
+
+    from shared.models import PlagiarismTask, SimilarityResult
+    from sqlalchemy import func, select
+
+    assignment_uuid = _uuid.UUID(assignment_id)
+
+    # Get task IDs for this assignment
+    tasks_q = select(PlagiarismTask.id).where(PlagiarismTask.assignment_id == assignment_uuid)
+    if task_id:
+        tasks_q = tasks_q.where(PlagiarismTask.id == _uuid.UUID(task_id))
+    tasks_result = await db.execute(tasks_q)
+    task_ids = [row[0] for row in tasks_result.all()]
+
+    if not task_ids:
+        return {"histogram": [], "total": 0, "bins": bins}
+
+    bins = max(10, min(1000, bins))
+    bin_index = func.floor(SimilarityResult.ast_similarity * bins).label("bin_index")
+
+    stmt = (
+        select(bin_index, func.count().label("count"))
+        .where(
+            SimilarityResult.task_id.in_(task_ids),
+            SimilarityResult.ast_similarity.is_not(None),
+        )
+        .group_by(bin_index)
+        .order_by(bin_index)
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    counts_dict = {}
+    total = 0
+    for row in rows:
+        idx = int(row.bin_index)
+        if idx >= bins:
+            idx = bins - 1
+        counts_dict[idx] = counts_dict.get(idx, 0) + int(row.count)
+
+    histogram = []
+    for i in range(bins):
+        count = counts_dict.get(i, 0)
+        total += count
+        lower_pct = round((i / bins) * 100)
+        upper_pct = round(((i + 1) / bins) * 100)
+        histogram.append({"range": f"{lower_pct}-{upper_pct}%", "count": count})
+
+    return {"histogram": histogram, "total": total, "bins": bins}
 
 
 @router.patch(

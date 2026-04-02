@@ -334,14 +334,27 @@ class ResultRepository:
                 "total_results": total_count,
             }
 
-        # Build task list responses with individual stats
+        # Compute per-task stats
         from tasks.schemas import TaskListResponse
 
         task_items = []
         for t in all_tasks:
+            task_uuid = str(t.id)
+            # Files count for this task
+            task_files_count = sum(1 for row in all_files_rows if str(row.task_id) == task_uuid)
+
+            # Per-task result stats
+            task_agg_q = select(
+                func.count().label("total"),
+                func.coalesce(func.avg(SimilarityResult.ast_similarity), 0).label("avg_sim"),
+                func.sum(case((SimilarityResult.ast_similarity >= 0.5, 1), else_=0)).label("high"),
+            ).where(SimilarityResult.task_id == t.id)
+            task_agg = await self.db.execute(task_agg_q)
+            trow = task_agg.first()
+
             task_items.append(
                 TaskListResponse(
-                    task_id=str(t.id),
+                    task_id=task_uuid,
                     status=t.status,
                     similarity=t.similarity,
                     matches=t.matches,
@@ -353,11 +366,45 @@ class ResultRepository:
                         percentage=round((t.progress or 0) * 100, 1),
                         display=f"{t.processed_pairs or 0}/{t.total_pairs or 0}",
                     ),
-                    files_count=0,
-                    high_similarity_count=0,
+                    files_count=task_files_count,
+                    high_similarity_count=int(trow.high or 0) if trow else 0,
                     total_pairs=t.total_pairs or 0,
+                    avg_similarity=float(trow.avg_sim or 0) if trow else 0.0,
                 )
             )
+
+        # Compute max similarity per file with a single query
+        max_sim_subq_a = (
+            select(
+                SimilarityResult.file_a_id.label("fid"),
+                func.max(SimilarityResult.ast_similarity).label("max_sim"),
+            )
+            .group_by(SimilarityResult.file_a_id)
+            .subquery()
+        )
+        max_sim_subq_b = (
+            select(
+                SimilarityResult.file_b_id.label("fid"),
+                func.max(SimilarityResult.ast_similarity).label("max_sim"),
+            )
+            .group_by(SimilarityResult.file_b_id)
+            .subquery()
+        )
+        file_ids_list = [row.id for row in all_files_rows]
+        max_sim_q = (
+            select(
+                File.id,
+                func.greatest(
+                    func.coalesce(max_sim_subq_a.c.max_sim, 0),
+                    func.coalesce(max_sim_subq_b.c.max_sim, 0),
+                ).label("max_sim"),
+            )
+            .outerjoin(max_sim_subq_a, File.id == max_sim_subq_a.c.fid)
+            .outerjoin(max_sim_subq_b, File.id == max_sim_subq_b.c.fid)
+            .where(File.id.in_(file_ids_list))
+        )
+        max_sim_result = await self.db.execute(max_sim_q)
+        file_max_sim = {str(row.id): float(row.max_sim or 0) for row in max_sim_result.all()}
 
         return {
             "tasks": task_items,
@@ -366,6 +413,7 @@ class ResultRepository:
                     id=str(row.id),
                     filename=row.filename,
                     task_id=str(row.task_id),
+                    max_similarity=file_max_sim.get(str(row.id), 0.0),
                 )
                 for row in all_files_rows
             ],

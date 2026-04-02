@@ -26,6 +26,7 @@ interface SimilarityDistributionProps {
   totalPairs: number;
   cardBg?: string;
   taskId?: string;
+  assignmentId?: string;
   stats?: {
     high: number;
     medium: number;
@@ -47,6 +48,7 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
   totalPairs,
   cardBg,
   taskId,
+  assignmentId,
   stats,
 }) => {
   const { t } = useTranslation(['results']);
@@ -62,12 +64,15 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
   const scrollbarTrackBg = useColorModeValue('gray.100', 'gray.700');
   const scrollbarThumbBg = useColorModeValue('gray.400', 'gray.500');
 
-  // Cache high-res histogram per task: stores raw counts array for 200 bins
+  // Cache high-res histogram per key: stores raw counts array for 200 bins
   const highResCacheRef = useRef<Map<string, number[]>>(new Map());
 
+  // Build a cache key that reflects current filter scope
+  const cacheKey = assignmentId ? `assign:${assignmentId}:${taskId || 'all'}` : `task:${taskId}`;
+
   // Fetch high-resolution histogram (200 uniform bins) from API
-  const fetchHighResHistogram = useCallback(async (tid: string) => {
-    const cached = highResCacheRef.current.get(tid);
+  const fetchHighResHistogram = useCallback(async () => {
+    const cached = highResCacheRef.current.get(cacheKey);
     if (cached) {
       setHighResCounts(cached);
       return;
@@ -76,14 +81,21 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
     setLoading(true);
     setError(null);
     try {
-      // Request 200 bins for high resolution
-      const { data } = await api.get<{ histogram: HistogramBin[]; total: number }>(
-        API_ENDPOINTS.TASK_HISTOGRAM(tid, HIGH_RES_BINS)
-      );
-      
-      // Extract raw counts from histogram bins (they're already in order)
+      let url: string;
+      if (assignmentId) {
+        url = API_ENDPOINTS.ASSIGNMENT_HISTOGRAM(assignmentId, HIGH_RES_BINS, taskId);
+      } else if (taskId) {
+        url = API_ENDPOINTS.TASK_HISTOGRAM(taskId, HIGH_RES_BINS);
+      } else {
+        setHighResCounts(null);
+        setLoading(false);
+        return;
+      }
+
+      const { data } = await api.get<{ histogram: HistogramBin[]; total: number }>(url);
+
       const rawCounts = (data.histogram || []).map(bin => bin.count);
-      highResCacheRef.current.set(tid, rawCounts);
+      highResCacheRef.current.set(cacheKey, rawCounts);
       setHighResCounts(rawCounts);
     } catch (err) {
       console.error('Failed to fetch histogram:', err);
@@ -91,20 +103,20 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cacheKey, assignmentId, taskId]);
 
-  // Load high-res histogram when task changes
+  // Load high-res histogram when scope changes
   useEffect(() => {
-    if (taskId) {
-      fetchHighResHistogram(taskId);
+    if (assignmentId || taskId) {
+      fetchHighResHistogram();
     } else {
       setHighResCounts(null);
     }
-  }, [taskId, fetchHighResHistogram]);
+  }, [assignmentId, taskId, fetchHighResHistogram]);
 
   // Derive display bins by combining high-res bins
   const displayData = useMemo(() => {
-    if (!taskId || !highResCounts) return [];
+    if ((!taskId && !assignmentId) || !highResCounts) return [];
     
     const sourceBins = HIGH_RES_BINS;
     const targetBins = binCount;
@@ -171,7 +183,7 @@ const SimilarityDistribution: React.FC<SimilarityDistributionProps> = ({
     return 'red.500';
   };
 
-  const showIncompleteWarning = results.length < totalPairs && !taskId;
+  const showIncompleteWarning = results.length < totalPairs && !taskId && !assignmentId;
 
   return (
     <Card bg={cardBg}>

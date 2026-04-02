@@ -39,4 +39,5 @@ class AssignmentFullResponse(CustomBaseModel):
     files: list[FileInfo] = []
     results: list[ResultItem] = []
     total_pairs: int = 0
+    total_results: int = 0
     overall_stats: dict | None = None

@@ -96,6 +96,7 @@ class AssignmentRepository:
                 files=[],
                 results=[],
                 total_pairs=0,
+                total_results=0,
                 overall_stats=None,
             )
 
@@ -110,6 +111,7 @@ class AssignmentRepository:
             files=agg_data["files"],
             results=agg_data["results"],
             total_pairs=agg_data["total_pairs"],
+            total_results=agg_data["total_results"],
             overall_stats=agg_data["overall_stats"],
         )
 

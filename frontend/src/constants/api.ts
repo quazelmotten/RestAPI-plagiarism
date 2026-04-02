@@ -20,6 +20,8 @@ export const API_ENDPOINTS = {
   ASSIGNMENTS: '/plagiarism/assignments',
   ASSIGNMENT_DETAILS: (id: string) => `/plagiarism/assignments/${id}`,
   ASSIGNMENT_FULL: (id: string) => `/plagiarism/assignments/${id}/full`,
+  ASSIGNMENT_HISTOGRAM: (id: string, bins: number, taskId?: string) =>
+    `/plagiarism/assignments/${id}/histogram?bins=${bins}${taskId ? `&task_id=${taskId}` : ''}`,
 
   // Health & version
   HEALTH: '/health',
