@@ -2,11 +2,11 @@
 Merge strategies for match fragments.
 """
 
-from ..models import Match, PlagiarismType, Region, Point
-from typing import List
+
+from ..models import Match, Point, Region
 
 
-def merge_adjacent_matches(matches: List[Match], gap_threshold: int = 2) -> List[Match]:
+def merge_adjacent_matches(matches: list[Match], gap_threshold: int = 2) -> list[Match]:
     """
     Merge adjacent matches of the same plagiarism type.
 
@@ -69,7 +69,7 @@ def merge_adjacent_matches(matches: List[Match], gap_threshold: int = 2) -> List
     return merged_all
 
 
-def resolve_overlaps(matches: List[Match]) -> List[Match]:
+def resolve_overlaps(matches: list[Match]) -> list[Match]:
     """
     Resolve overlapping matches using weighted interval scheduling.
     Selects the maximum total weight (kgram_count) set of non-overlapping matches.

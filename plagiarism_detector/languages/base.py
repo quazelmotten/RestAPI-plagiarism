@@ -5,7 +5,7 @@ Each profile defines language-specific node types, builtins, comment markers,
 and normalization rules. Profiles are auto-registered in the global registry.
 """
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import ClassVar
 
 
@@ -322,10 +322,6 @@ class JavaProfile(LanguageProfile):
         "import",
         "super",
         "this",
-        "void",
-        "null",
-        "true",
-        "false",
         # Common methods
         "main",
         "toString",
@@ -477,7 +473,6 @@ class TypeScriptProfile(JavaScriptProfile):
         "is",
         "asserts",
         "assert",
-        "unknown",
         "Partial",
         "Required",
         "Readonly",
@@ -686,7 +681,6 @@ class RustProfile(LanguageProfile):
         "as",
         "dyn",
         "extern",
-        "crate",
         "use",
         "mod",
         "where",
@@ -718,15 +712,7 @@ class RustProfile(LanguageProfile):
         "HashMap",
         "HashSet",
         "BTreeMap",
-        "Ok",
-        "Err",
-        "Some",
-        "None",
-        "Result",
-        "Option",
-        "Box",
         "Deref",
-        "Drop",
         "Drop",
         "Fn",
         "FnOnce",

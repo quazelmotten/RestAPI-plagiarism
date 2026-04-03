@@ -5,9 +5,9 @@ Matches functions based on semantic hash (ignoring identifier names and
 normalizing equivalent constructs like for↔while, comprehensions, etc.).
 """
 
+from ..models import FunctionInfo, Match, PlagiarismType, Point, Region
 from ..parsing.parser import ParsedFile
 from .base import BaseMatcher
-from ..models import Match, PlagiarismType, Region, Point, FunctionInfo
 
 
 class SemanticFunctionMatcher(BaseMatcher):

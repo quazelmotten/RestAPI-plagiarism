@@ -6,9 +6,9 @@ each avoiding regions already covered by previous matchers.
 """
 
 from ..config import DetectionConfig
+from ..matching import merge_adjacent_matches, resolve_overlaps
 from ..models import Match
 from .base import BaseMatcher
-from ..matching import merge_adjacent_matches, resolve_overlaps
 
 
 class DetectionPipeline:

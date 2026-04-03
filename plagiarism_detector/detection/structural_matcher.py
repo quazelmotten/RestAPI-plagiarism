@@ -6,10 +6,10 @@ Uses AST subtree hashing with scope-normalized identifiers.
 Also performs line-level exact and renamed matching within matched function bodies.
 """
 
+from ..models import FunctionInfo, Match, PlagiarismType, Point, Region
 from ..normalization.identifiers import normalize_identifiers
 from ..parsing.parser import ParsedFile
 from .base import BaseMatcher
-from ..models import Match, PlagiarismType, Region, Point, FunctionInfo
 
 
 class StructuralFunctionMatcher(BaseMatcher):

@@ -11,7 +11,6 @@ from typing import ClassVar
 from tree_sitter import Node
 
 from ..parsing.parser import ParsedFile
-from ..parsing.queries import QueryCache
 
 
 @dataclass(frozen=True)

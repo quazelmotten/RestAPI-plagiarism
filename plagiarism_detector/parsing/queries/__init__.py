@@ -6,7 +6,7 @@ import pkgutil
 from pathlib import Path
 from typing import ClassVar
 
-from tree_sitter import Language, Query
+from tree_sitter import Query
 
 from ..parser import get_tree_sitter_language
 

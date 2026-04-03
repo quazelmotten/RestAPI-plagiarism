@@ -2,15 +2,19 @@
 Tree-sitter parser wrapper with caching and error handling.
 """
 
+from __future__ import annotations
+
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING
 
 from tree_sitter import Language, Parser, Tree
 
 from ..languages import get_language_profile
 
+if TYPE_CHECKING:
+    from ..languages.base import LanguageProfile
 
 # Cache for tree-sitter Language objects (expensive to create)
 _language_cache: dict[str, Language] = {}
@@ -63,7 +67,7 @@ class ParsedFile:
     tree: Tree
     source_bytes: bytes
     language: str
-    profile: "LanguageProfile"
+    profile: LanguageProfile
     path: Path | None = None
 
     def get_root_node(self):

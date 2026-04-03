@@ -4,10 +4,10 @@ Renamed identifier line matching matcher (Type 2).
 Matches lines after normalizing identifiers to VAR_N placeholders.
 """
 
+from ..models import Match, PlagiarismType, Point, Region
 from ..normalization.identifiers import normalize_identifiers
 from ..parsing.parser import ParsedFile
 from .base import BaseMatcher
-from ..models import Match, PlagiarismType, Region, Point
 
 
 class RenamedLineMatcher(BaseMatcher):

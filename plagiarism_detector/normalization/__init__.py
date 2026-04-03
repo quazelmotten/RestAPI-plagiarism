@@ -1,6 +1,6 @@
 """Normalization utilities: identifier replacement and semantic canonicalization."""
 
-from .identifiers import normalize_identifiers
 from .canonicalizer import SemanticCanonicalizer
+from .identifiers import normalize_identifiers
 
 __all__ = ["normalize_identifiers", "SemanticCanonicalizer"]

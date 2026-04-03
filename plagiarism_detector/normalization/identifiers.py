@@ -5,7 +5,6 @@ This module uses the proven legacy logic from the original monolithic detector
 to ensure correct handling across all supported languages.
 """
 
-from typing import ClassVar
 
 from ..parsing.parser import ParsedFile
 

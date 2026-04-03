@@ -9,9 +9,8 @@ Each scenario has:
   - Description of what changed
 """
 
-from plagiarism_core.plagiarism_detector import detect_plagiarism
 from plagiarism_core.models import PlagiarismType
-
+from plagiarism_core.plagiarism_detector import detect_plagiarism
 
 # ─── TYPE 1: EXACT COPY ────────────────────────────────────────────────
 
@@ -1144,7 +1143,7 @@ def run_all_scenarios():
     print(f"\n{'=' * 60}")
     print(f"Results: {passed} passed, {failed} failed out of {len(SCENARIOS)} scenarios")
     if issues:
-        print(f"\n--- ISSUES ---")
+        print("\n--- ISSUES ---")
         for issue in issues:
             print(issue)
 

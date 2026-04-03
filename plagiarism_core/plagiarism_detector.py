@@ -592,6 +592,13 @@ def _extract_name(node: Node, source_bytes: bytes) -> str | None:
         # For decorated definitions (Python), descend into the actual function
         if sub.type == "function_definition":
             return _extract_name(sub, source_bytes)
+        # For C/C++: name is inside function_declarator
+        if sub.type == "function_declarator":
+            return _extract_name(sub, source_bytes)
+        # For Java: method_declaration has identifier directly
+        if sub.type == "formal_parameters":
+            # Already past the name, look at siblings
+            pass
     return None
 
 
@@ -691,10 +698,12 @@ def _extract_functions(
 
 
 def _is_main_block(node: Node, source_bytes: bytes, lang_code: str = "python") -> bool:
-    """Check if a node is an if __name__ == "__main__": block (Python)
-    or equivalent entry-point guards in other languages."""
+    """Check if a node is an entry-point block.
+
+    Python: if __name__ == "__main__":
+    C/C++/Java/Go/Rust: int main() / func main() / fn main()
+    """
     if lang_code == "python" and node.type == "if_statement":
-        # Check condition: __name__ == "__main__"
         for child in node.children:
             if child.type == "comparison_operator":
                 text = source_bytes[child.start_byte : child.end_byte].decode(
@@ -702,29 +711,78 @@ def _is_main_block(node: Node, source_bytes: bytes, lang_code: str = "python") -
                 )
                 if "__name__" in text and "__main__" in text:
                     return True
+
+    elif lang_code in ("cpp", "c") and node.type == "function_definition":
+        for child in node.children:
+            if child.type == "function_declarator":
+                for sub in child.children:
+                    if sub.type == "identifier":
+                        name = source_bytes[sub.start_byte : sub.end_byte].decode(
+                            "utf-8", errors="ignore"
+                        )
+                        if name == "main":
+                            return True
+
+    elif lang_code == "java" and node.type == "method_declaration":
+        for child in node.children:
+            if child.type == "identifier":
+                name = source_bytes[child.start_byte : child.end_byte].decode(
+                    "utf-8", errors="ignore"
+                )
+                if name == "main":
+                    return True
+
+    elif lang_code == "go" and node.type == "function_declaration":
+        for child in node.children:
+            if child.type == "identifier":
+                name = source_bytes[child.start_byte : child.end_byte].decode(
+                    "utf-8", errors="ignore"
+                )
+                if name == "main":
+                    return True
+
+    elif lang_code == "rust" and node.type == "function_item":
+        for child in node.children:
+            if child.type == "identifier":
+                name = source_bytes[child.start_byte : child.end_byte].decode(
+                    "utf-8", errors="ignore"
+                )
+                if name == "main":
+                    return True
+
     return False
 
 
 def _extract_main_block(
     root_node: Node, source_bytes: bytes, lang_code: str = "python"
 ) -> dict | None:
-    """Extract the if __name__ == "__main__": block as a pseudo-function.
+    """Extract the entry-point block as a pseudo-function.
 
-    Returns a dict with start_line, end_line, body (list of AST block children),
-    and structural/semantic hashes for the body content.
+    Python: if __name__ == "__main__": body
+    C/C++/Java/Go/Rust: main() function body
+
+    Returns a dict with start_line, end_line, body, and hashes.
     """
     for child in root_node.children:
         if _is_main_block(child, source_bytes, lang_code):
-            # Find the block child (the body)
             body_node = None
-            for sub in child.children:
-                if sub.type == "block":
-                    body_node = sub
-                    break
+            if lang_code == "python":
+                for sub in child.children:
+                    if sub.type == "block":
+                        body_node = sub
+                        break
+            elif lang_code in ("cpp", "c"):
+                body_node = _get_child_by_type(child, "compound_statement")
+            elif lang_code == "java":
+                body_node = _get_child_by_type(child, "block")
+            elif lang_code == "go":
+                body_node = _get_child_by_type(child, "block")
+            elif lang_code == "rust":
+                body_node = _get_child_by_type(child, "block")
+
             if body_node is None:
                 continue
 
-            # Build a synthetic node for hashing: just the body block contents
             struct_hash = _hash_ast_subtree(body_node)
             semantic_hash = _hash_ast_subtree_semantic(body_node)
 
@@ -732,7 +790,7 @@ def _extract_main_block(
                 "name": "__main__",
                 "start_line": body_node.start_point[0],
                 "end_line": body_node.end_point[0],
-                "if_start_line": child.start_point[0],  # include the if line itself
+                "if_start_line": child.start_point[0],
                 "struct_hash": struct_hash,
                 "semantic_hash": semantic_hash,
                 "node": body_node,
@@ -985,6 +1043,46 @@ def _semantic_line_matches(
     raw: list[tuple[int, int, int]] = []
     visited: set[int] = set()
 
+    # Common boilerplate canonical patterns that should be rejected
+    # These appear in nearly every C/C++/Java/JS competitive programming file
+    _common_boilerplate_hashes: set[int] = set()
+    _boilerplate_patterns = [
+        "int n;",
+        "int t;",
+        "int m;",
+        "int i;",
+        "int j;",
+        "int k;",
+        "return 0;",
+        "return 0",
+        "using namespace std;",
+        # Canonicalized forms (after _canonicalize_type4_light)
+        "cin in n;",
+        "cin in t;",
+        "cin in m;",
+        "cin in n",
+        "cin in t",
+        "cin in m",
+        "cin IN n;",
+        "cin IN t;",
+        "cin IN m;",
+        "cin IN n",
+        "cin IN t",
+        "cin IN m",
+        "cin >> n;",
+        "cin >> t;",
+        "cin >> m;",
+        "loop(",
+        "loop (",
+        "for (int i = 0; i < n; i++)",
+        "for (int i=0; i<n; i++)",
+        "loop (int i = 0; i < n; i++)",
+    ]
+    for bp in _boilerplate_patterns:
+        _common_boilerplate_hashes.add(_line_hash(bp))
+        _common_boilerplate_hashes.add(_line_hash(bp.lower()))
+        _common_boilerplate_hashes.add(_line_hash(bp.upper()))
+
     for start_a in sorted(pair_map.keys()):
         if start_a in visited:
             continue
@@ -1003,6 +1101,15 @@ def _semantic_line_matches(
                 ia += 1
                 ib += 1
             if length >= min_match_lines:
+                # Reject if all matched lines are common boilerplate
+                all_boilerplate = True
+                for offset in range(length):
+                    h = _line_hash(canon_a_lines[start_a + offset])
+                    if h not in _common_boilerplate_hashes:
+                        all_boilerplate = False
+                        break
+                if all_boilerplate:
+                    continue
                 raw.append((start_a, start_b, length))
 
     # Greedy longest-first selection
@@ -1632,9 +1739,6 @@ def _extract_conditional_assign_signature(stmts, source_bytes) -> str | None:
                 break
     if not cond:
         return None
-    cond_text = (
-        source_bytes[cond.start_byte : cond.end_byte].decode("utf-8", errors="ignore").strip()
-    )
 
     # Get if-body assignment
     if_body = _get_child_by_type(if_node, "block")
@@ -1926,7 +2030,7 @@ def _extract_tuple_return_signature(stmts, source_bytes) -> str | None:
                                         assignments.append((target, value_node))
                     if len(assignments) == len(ret_vars):
                         all_match = True
-                        for (t, _), rv in zip(assignments, ret_vars):
+                        for (t, _), rv in zip(assignments, ret_vars, strict=False):
                             if t != rv:
                                 all_match = False
                                 break
@@ -1947,7 +2051,12 @@ def _extract_return_chain_signature(node, source_bytes) -> str | None:
     """For complete if/elif/else chains where all branches return, extract sorted return values."""
     ret_vals = []
 
+    # Python uses 'block', C/C++/Java/JS use 'compound_statement' or 'statement_block'
     body = _get_child_by_type(node, "block")
+    if body is None:
+        body = _get_child_by_type(node, "compound_statement")
+    if body is None:
+        body = _get_child_by_type(node, "statement_block")
     if body is None:
         return None
     ret = _extract_return_value(body, source_bytes)
@@ -1960,6 +2069,8 @@ def _extract_return_chain_signature(node, source_bytes) -> str | None:
         if child.type == "elif_clause":
             elif_body = _get_child_by_type(child, "block")
             if elif_body is None:
+                elif_body = _get_child_by_type(child, "compound_statement")
+            if elif_body is None:
                 return None
             elif_ret = _extract_return_value(elif_body, source_bytes)
             if elif_ret is None:
@@ -1967,6 +2078,10 @@ def _extract_return_chain_signature(node, source_bytes) -> str | None:
             ret_vals.append(elif_ret)
         elif child.type == "else_clause":
             else_body = _get_child_by_type(child, "block")
+            if else_body is None:
+                else_body = _get_child_by_type(child, "compound_statement")
+            if else_body is None:
+                else_body = _get_child_by_type(child, "statement_block")
             if else_body is None:
                 return None
             else_ret = _extract_return_value(else_body, source_bytes)
@@ -1999,9 +2114,6 @@ def _extract_body_signature(source: str, lang_code: str = "python") -> str | Non
       - Try/except ↔ pre-check → SAFE_OP(op, fallback)
       - Single return expression → RETURN(expr)
     """
-    if lang_code != "python":
-        return None
-
     try:
         tree, source_bytes = parse_file_once_from_string(source, lang_code)
     except Exception:
@@ -2009,66 +2121,130 @@ def _extract_body_signature(source: str, lang_code: str = "python") -> str | Non
 
     root = tree.root_node
 
-    # If the source includes a function definition, extract its body
-    for child in root.children:
-        fn_node = None
-        if child.type == "function_definition":
-            fn_node = child
-        elif child.type == "decorated_definition":
-            fn_node = _get_child_by_type(child, "function_definition")
-        if fn_node:
-            body_node = _get_child_by_type(fn_node, "block")
-            if body_node:
-                source = source_bytes[body_node.start_byte : body_node.end_byte].decode(
-                    "utf-8", errors="ignore"
-                )
-                try:
-                    tree, source_bytes = parse_file_once_from_string(source, lang_code)
-                    root = tree.root_node
-                except Exception:
-                    return None
-            break
+    # Language-specific function body extraction
+    if lang_code == "python":
+        for child in root.children:
+            fn_node = None
+            if child.type == "function_definition":
+                fn_node = child
+            elif child.type == "decorated_definition":
+                fn_node = _get_child_by_type(child, "function_definition")
+            if fn_node:
+                body_node = _get_child_by_type(fn_node, "block")
+                if body_node:
+                    source = source_bytes[body_node.start_byte : body_node.end_byte].decode(
+                        "utf-8", errors="ignore"
+                    )
+                    try:
+                        tree, source_bytes = parse_file_once_from_string(source, lang_code)
+                        root = tree.root_node
+                    except Exception:
+                        return None
+                break
+    elif lang_code in ("cpp", "c"):
+        for child in root.children:
+            if child.type == "function_definition":
+                body_node = _get_child_by_type(child, "compound_statement")
+                if body_node:
+                    source = source_bytes[body_node.start_byte : body_node.end_byte].decode(
+                        "utf-8", errors="ignore"
+                    )
+                    try:
+                        tree, source_bytes = parse_file_once_from_string(source, lang_code)
+                        root = tree.root_node
+                        # Re-parsed compound_statement wraps the body — unwrap it
+                        if root.children and root.children[0].type == "compound_statement":
+                            root = root.children[0]
+                    except Exception:
+                        return None
+                break
+    elif lang_code == "java":
+        for child in root.children:
+            if child.type in ("method_declaration", "constructor_declaration"):
+                body_node = _get_child_by_type(child, "block")
+                if body_node:
+                    source = source_bytes[body_node.start_byte : body_node.end_byte].decode(
+                        "utf-8", errors="ignore"
+                    )
+                    try:
+                        tree, source_bytes = parse_file_once_from_string(source, lang_code)
+                        root = tree.root_node
+                        if root.children and root.children[0].type == "block":
+                            root = root.children[0]
+                    except Exception:
+                        return None
+                break
+    elif lang_code in ("javascript", "typescript", "tsx"):
+        for child in root.children:
+            if child.type in (
+                "function_declaration",
+                "method_definition",
+                "arrow_function",
+                "function",
+            ):
+                body_node = _get_child_by_type(child, "statement_block")
+                if not body_node:
+                    body_node = _get_child_by_type(child, "expression")
+                if body_node:
+                    source = source_bytes[body_node.start_byte : body_node.end_byte].decode(
+                        "utf-8", errors="ignore"
+                    )
+                    try:
+                        tree, source_bytes = parse_file_once_from_string(source, lang_code)
+                        root = tree.root_node
+                        if root.children and root.children[0].type == "statement_block":
+                            root = root.children[0]
+                    except Exception:
+                        return None
+                break
+    elif lang_code == "go":
+        for child in root.children:
+            if child.type == "function_declaration":
+                body_node = _get_child_by_type(child, "block")
+                if body_node:
+                    source = source_bytes[body_node.start_byte : body_node.end_byte].decode(
+                        "utf-8", errors="ignore"
+                    )
+                    try:
+                        tree, source_bytes = parse_file_once_from_string(source, lang_code)
+                        root = tree.root_node
+                        if root.children and root.children[0].type == "block":
+                            root = root.children[0]
+                    except Exception:
+                        return None
+                break
+    elif lang_code == "rust":
+        for child in root.children:
+            if child.type == "function_item":
+                body_node = _get_child_by_type(child, "block")
+                if body_node:
+                    source = source_bytes[body_node.start_byte : body_node.end_byte].decode(
+                        "utf-8", errors="ignore"
+                    )
+                    try:
+                        tree, source_bytes = parse_file_once_from_string(source, lang_code)
+                        root = tree.root_node
+                        if root.children and root.children[0].type == "block":
+                            root = root.children[0]
+                    except Exception:
+                        return None
+                break
 
-    stmts = [c for c in root.children if c.type not in ("comment", "NEWLINE", "")]
+    stmts = [
+        c
+        for c in root.children
+        if c.type not in ("comment", "NEWLINE", "", "whitespace", ";", "{", "}")
+    ]
     if not stmts:
         return None
 
-    # Strategy 0: Lambda assignment (module-level)
-    if len(stmts) == 1:
-        stmt = stmts[0]
-        if stmt.type == "expression_statement":
-            assign = _get_child_by_type(stmt, "assignment")
-            if assign:
-                after_eq = False
-                value_node = None
-                for c in assign.children:
-                    if c.type == "=":
-                        after_eq = True
-                    elif after_eq and c.type not in ("comment",):
-                        value_node = c
-                        break
-                if value_node and value_node.type == "lambda":
-                    body_node = None
-                    for sub in value_node.children:
-                        if sub.type not in ("lambda", "parameters", ":", "comment"):
-                            body_node = sub
-                            break
-                    if body_node:
-                        body_expr = (
-                            source_bytes[body_node.start_byte : body_node.end_byte]
-                            .decode("utf-8", errors="ignore")
-                            .strip()
-                        )
-                        return f"RETURNS({body_expr})"
-
-    # Strategy 1: Complete if/elif/else return chain
+    # Strategy 1: Complete if/elif/else return chain (works for Python, C++, Java, JS)
     if stmts[0].type == "if_statement":
         sig = _extract_return_chain_signature(stmts[0], source_bytes)
         if sig:
             return sig
 
-    # Strategy 1b: If/else assignment pattern (result = val1 or val2, then return result)
-    # This catches both if/else blocks and ternary expressions
+    # Strategy 1b: If/else assignment pattern
     if stmts[0].type == "if_statement" and len(stmts) >= 2:
         sig = _extract_conditional_assign_signature(stmts, source_bytes)
         if sig:
@@ -2080,75 +2256,40 @@ def _extract_body_signature(source: str, lang_code: str = "python") -> str | Non
         if sig:
             return sig
 
-    # Strategy 1c: LBYL (if-check → return fallback, then return operation)
+    # Strategy 1c: LBYL pattern
     if stmts[0].type == "if_statement" and len(stmts) >= 2:
         sig = _extract_lbyl_signature(stmts, source_bytes)
         if sig:
             return sig
 
-    # Strategy 2: Single expression statement (ternary return, comprehension, etc.)
+    # Strategy 2: Single expression statement (ternary return, etc.)
     if len(stmts) <= 2:
         for stmt in stmts:
-            # Return statement
+            # Return statement (Python, C++, Java, Go)
             if stmt.type == "return_statement":
                 for child in stmt.children:
-                    if child.type == "list_comprehension":
-                        pat = _extract_comprehension_parts(child, source_bytes)
-                        if pat:
-                            filter_part = f", {pat['filter']}" if "filter" in pat else ""
-                            return f"COLLECT({pat['iterable']}, {pat['variable']}, {pat['element']}{filter_part})"
-                    elif child.type == "call":
-                        # Check for list(generator_expression) or list(map(lambda ...))
-                        func_identifier = None
-                        for sub in child.children:
-                            if sub.type == "identifier":
-                                func_identifier = (
-                                    source_bytes[sub.start_byte : sub.end_byte]
-                                    .decode("utf-8", errors="ignore")
-                                    .strip()
-                                )
-                                break
-                        if func_identifier == "list":
-                            arg_list = _get_child_by_type(child, "argument_list")
-                            if arg_list:
-                                # Check for generator_expression
-                                for arg in arg_list.children:
-                                    if arg.type == "generator_expression":
-                                        pat = _extract_comprehension_parts(arg, source_bytes)
-                                        if pat:
-                                            filter_part = (
-                                                f", {pat['filter']}" if "filter" in pat else ""
-                                            )
-                                            return f"COLLECT({pat['iterable']}, {pat['variable']}, {pat['element']}{filter_part})"
-                                # Check for map(lambda ...)
-                                for arg in arg_list.children:
-                                    if arg.type == "call":
-                                        map_func_id = None
-                                        for sub in arg.children:
-                                            if sub.type == "identifier":
-                                                map_func_id = (
-                                                    source_bytes[sub.start_byte : sub.end_byte]
-                                                    .decode("utf-8", errors="ignore")
-                                                    .strip()
-                                                )
-                                                break
-                                        if map_func_id == "map":
-                                            map_pat = _extract_map_lambda_parts(arg, source_bytes)
-                                            if map_pat:
-                                                return f"COLLECT({map_pat['iterable']}, {map_pat['variable']}, {map_pat['element']})"
-                    elif child.type == "conditional_expression":
+                    if child.type in ("conditional_expression", "ternary_expression"):
                         sig = _extract_ternary_signature(child, source_bytes)
                         if sig:
                             return sig
-                    elif child.type not in ("return",):
+                    elif child.type not in ("return", ";", "comment"):
                         expr = (
                             source_bytes[child.start_byte : child.end_byte]
                             .decode("utf-8", errors="ignore")
                             .strip()
                         )
-                        if expr:
-                            return f"RETURNS({expr})"
-            # Expression statement with assignment (e.g., x = ternary, x = lambda)
+                        if expr and expr != ";":
+                            # Only produce RETURNS for expressions with meaningful structure
+                            # A bare identifier like "return a;" is too generic for matching
+                            if child.type in (
+                                "binary_expression",
+                                "call",
+                                "conditional_expression",
+                                "ternary_expression",
+                                "parenthesized_expression",
+                            ):
+                                return f"RETURNS({expr})"
+            # Expression statement with assignment
             if stmt.type == "expression_statement":
                 assign = _get_child_by_type(stmt, "assignment")
                 if assign:
@@ -2159,76 +2300,34 @@ def _extract_body_signature(source: str, lang_code: str = "python") -> str | Non
                             target_node = sub
                         elif sub.type not in ("=",):
                             val_node = sub
-                    if val_node and val_node.type == "conditional_expression":
+                    if val_node and val_node.type in (
+                        "conditional_expression",
+                        "ternary_expression",
+                    ):
                         sig = _extract_ternary_signature(val_node, source_bytes)
                         if sig:
-                            target = (
-                                source_bytes[target_node.start_byte : target_node.end_byte].decode(
-                                    "utf-8", errors="ignore"
-                                )
-                                if target_node
-                                else ""
-                            )
-                            # Check if followed by return target
-                            for s in stmts:
-                                if s.type == "return_statement":
-                                    for sub in s.children:
-                                        if sub.type == "identifier":
-                                            ret_name = (
-                                                source_bytes[sub.start_byte : sub.end_byte]
-                                                .decode("utf-8", errors="ignore")
-                                                .strip()
-                                            )
-                                            if ret_name == target:
-                                                return sig
-                    if val_node and val_node.type == "lambda":
-                        body_node = _get_child_by_type(val_node, "body")
-                        if body_node:
-                            body_expr = (
-                                source_bytes[body_node.start_byte : body_node.end_byte]
-                                .decode("utf-8", errors="ignore")
-                                .strip()
-                            )
-                            return f"FUNC_BODY({body_expr})"
-
-    # Strategy 3: Comprehension/loop+append pattern (multi-statement body)
-    pat = _extract_comprehension_pattern(source, lang_code)
-    if pat:
-        filter_part = f", {pat['filter']}" if "filter" in pat else ""
-        return f"COLLECT({pat['iterable']}, {pat['variable']}, {pat['element']}{filter_part})"
-
-    # Strategy 4: Dict comprehension ↔ loop
-    if stmts:
-        dict_sig = _extract_dict_pattern(stmts, source_bytes)
-        if dict_sig:
-            return dict_sig
-
-    # Strategy 5: Try/except ↔ pre-check
-    if stmts[0].type == "try_statement":
-        sig = _extract_try_signature(stmts[0], source_bytes)
-        if sig:
-            return sig
-
-    # Strategy X: Tuple return with intermediate variables
-    if len(stmts) >= 2:
-        sig = _extract_tuple_return_signature(stmts, source_bytes)
-        if sig:
-            return sig
-
-    # Strategy 6: If-check at top (LBYL pattern) — already handled by Strategy 1c
-    # (kept for cases where stmts[0] is if_statement but Strategy 1c didn't match)
+                            return sig
 
     # Strategy 7: Single return (any expression)
     if len(stmts) == 1 and stmts[0].type == "return_statement":
         for child in stmts[0].children:
-            if child.type not in ("return",):
+            if child.type not in ("return", ";", "comment"):
                 expr = (
                     source_bytes[child.start_byte : child.end_byte]
                     .decode("utf-8", errors="ignore")
                     .strip()
                 )
-                if expr:
-                    return f"RETURNS({expr})"
+                if expr and expr != ";":
+                    # Only produce RETURNS for expressions with meaningful structure
+                    if child.type in (
+                        "binary_expression",
+                        "call",
+                        "conditional_expression",
+                        "ternary_expression",
+                        "parenthesized_expression",
+                        "unary_expression",
+                    ):
+                        return f"RETURNS({expr})"
 
     return None
 
@@ -2239,11 +2338,6 @@ def _extract_ternary_signature(node, source_bytes) -> str | None:
     if len(children) == 3:
         true_text = (
             source_bytes[children[0].start_byte : children[0].end_byte]
-            .decode("utf-8", errors="ignore")
-            .strip()
-        )
-        cond_text = (
-            source_bytes[children[1].start_byte : children[1].end_byte]
             .decode("utf-8", errors="ignore")
             .strip()
         )
@@ -2327,7 +2421,7 @@ def _extract_dict_pattern(stmts, source_bytes) -> str | None:
                                                 for c in assign.children
                                                 if c.type not in ("comment",)
                                             ]
-                                            if len(acheildren) >= 3:
+                                            if len(achildren) >= 3:
                                                 lhs = source_bytes[
                                                     achildren[0].start_byte : achildren[0].end_byte
                                                 ].decode("utf-8", errors="ignore")
@@ -2603,9 +2697,10 @@ def detect_plagiarism(
                 fn_shadow_a = shadow_a[fa["start_line"] : fa["end_line"] + 1]
                 fn_shadow_b = shadow_b[fb["start_line"] : fb["end_line"] + 1]
 
-                # Check for any matching line (shadow or canonical)
+                # Check for meaningful body overlap using shadow lines
+                # Require at least 3 matching lines or 20% of the smaller function
                 body_line_match = _line_level_matches(
-                    fn_lines_a, fn_lines_b, fn_shadow_a, fn_shadow_b, 2
+                    fn_lines_a, fn_lines_b, fn_shadow_a, fn_shadow_b, 3
                 )
                 body_sem_match = _semantic_line_matches(
                     "\n".join(fn_lines_a),
@@ -2616,9 +2711,27 @@ def detect_plagiarism(
                     fn_lines_b,
                     fn_shadow_a,
                     fn_shadow_b,
-                    min_match_lines=1,
+                    min_match_lines=3,
                     lang_code=lang_code,
                 )
+
+                # For large functions (like main() in competitive programming),
+                # require that matched lines represent a meaningful fraction
+                # of the function body, not just scattered boilerplate
+                if body_line_match or body_sem_match:
+                    total_matched_lines = 0
+                    for m in body_line_match:
+                        total_matched_lines += m.file1["end_line"] - m.file1["start_line"] + 1
+                    for m in body_sem_match:
+                        total_matched_lines += m.file1["end_line"] - m.file1["start_line"] + 1
+                    min_func_lines = min(len(fn_lines_a), len(fn_lines_b))
+                    if min_func_lines > 50:
+                        # For large functions, require at least 40% overlap
+                        overlap_ratio = total_matched_lines / min_func_lines
+                        if overlap_ratio < 0.4:
+                            body_line_match = []
+                            body_sem_match = []
+
                 if not body_line_match and not body_sem_match:
                     # Fallback: compare body-level signatures.
                     # Per-line canonicalization can't bridge multi-line constructs
@@ -2631,11 +2744,17 @@ def detect_plagiarism(
                         sig_a = _extract_body_signature(body_src_a, lang_code)
                         sig_b = _extract_body_signature(body_src_b, lang_code)
                         if not (sig_a and sig_b and sig_a == sig_b):
-                            # Final fallback: raw canonical comparison
+                            # Final fallback: raw canonical comparison — but only
+                            # accept if the canonical forms are sufficiently detailed.
+                            # Reject short canonical forms that are too coarse.
                             body_canon_a = ast_canonicalize(body_src_a, lang_code)
                             body_canon_b = ast_canonicalize(body_src_b, lang_code)
                             if body_canon_a != body_canon_b:
                                 continue  # no similarity
+                            # Even if canonical forms match, require minimum complexity
+                            # to avoid false positives on trivial functions
+                            if len(body_canon_a) < 50:
+                                continue  # too short to be meaningful
                     except Exception:
                         continue  # parse error, skip
 
@@ -2681,6 +2800,53 @@ def detect_plagiarism(
                     # let Phase 3 find EXACT matches
                     continue
 
+                # Check if the trimmed middle has meaningful differences.
+                # If most lines are identical, don't create a T4 match —
+                # let Phase 2 find exact sub-matches and Phase 4 handle
+                # the truly differing lines.
+                differing_lines = 0
+                for k in range(prefix_len, min_body - suffix_len):
+                    exact_a = (fn_lines_a[k] or "").strip()
+                    exact_b = (fn_lines_b[k] or "").strip()
+                    sa = (fn_shadow_a[k] or "").strip()
+                    sb = (fn_shadow_b[k] or "").strip()
+                    if exact_a != exact_b and not (sa and sb and _line_hash(sa) == _line_hash(sb)):
+                        differing_lines += 1
+
+                total_trimmed = min_body - prefix_len - suffix_len
+                if total_trimmed > 0 and differing_lines / total_trimmed < 0.1:
+                    # Less than 10% of trimmed lines actually differ —
+                    # Create a RENAMED function-level match so Phase 2 can
+                    # find exact sub-matches within it. Phase 2 will then
+                    # remove this function-level match if sub-matches cover
+                    # the function body well enough.
+                    name_match = Match(
+                        file1={
+                            "start_line": fa["start_line"],
+                            "start_col": 0,
+                            "end_line": fa["end_line"],
+                            "end_col": 0,
+                        },
+                        file2={
+                            "start_line": fb["start_line"],
+                            "start_col": 0,
+                            "end_line": fb["end_line"],
+                            "end_col": 0,
+                        },
+                        kgram_count=fa["end_line"] - fa["start_line"] + 1,
+                        plagiarism_type=PlagiarismType.RENAMED,
+                        similarity=1.0 - (differing_lines / total_trimmed),
+                        details={
+                            "original_function": fa["name"],
+                            "matched_function": fb["name"],
+                            "_mostly_identical": True,
+                        },
+                        description=f"Renamed function: {fa['name']} ↔ {fb['name']} (mostly identical)",
+                    )
+                    all_matches.append(name_match)
+                    name_b_index[fa["name"]].remove(j)
+                    break
+
                 # Trimmed SEMANTIC match for only the differing portion
                 name_match = Match(
                     file1={
@@ -2715,10 +2881,19 @@ def detect_plagiarism(
             if func_lines_a & covered_a:
                 continue
             # Try all remaining (uncovered) functions in B
-            for j, fb in enumerate(funcs_b):
+            for _j, fb in enumerate(funcs_b):
                 func_lines_b = set(range(fb["start_line"], fb["end_line"] + 1))
                 if func_lines_b & covered_b:
                     continue
+                # Require minimum structural similarity before comparing body signatures
+                # Functions with very different sizes or structures shouldn't match
+                size_a = fa["end_line"] - fa["start_line"] + 1
+                size_b = fb["end_line"] - fb["start_line"] + 1
+                if size_a < 3 or size_b < 3:
+                    continue  # Too small for meaningful comparison
+                size_ratio = min(size_a, size_b) / max(size_a, size_b)
+                if size_ratio < 0.5:
+                    continue  # Size difference too large
                 # Compare body signatures
                 fn_lines_a = lines_a[fa["start_line"] : fa["end_line"] + 1]
                 fn_lines_b = lines_b[fb["start_line"] : fb["end_line"] + 1]
@@ -2794,6 +2969,10 @@ def detect_plagiarism(
                 break  # break inner loop, move to next fa
 
         # ─── Phase 2: Line matching WITHIN matched function pairs ────────
+        # Run on all function-level matches (Type 1/2/3 and Type 4).
+        # For Type 4 matches, this refines the match: exact sub-ranges become
+        # Type 1, and the T4 match gets trimmed to only truly differing lines.
+        # If a T4 match gets fully covered by Type 1 sub-matches, it's removed.
         for fm in all_matches[:]:  # copy to avoid modification during iteration
             a_start, a_end = fm.file1["start_line"], fm.file1["end_line"]
             b_start, b_end = fm.file2["start_line"], fm.file2["end_line"]
@@ -2867,6 +3046,37 @@ def detect_plagiarism(
 
             all_matches.extend(fn_line_matches)
             all_matches.extend(fn_sem_matches)
+
+            # If the function-level match (fm) is mostly covered by line-level
+            # sub-matches, remove it. The line-level matches provide more
+            # accurate type classification (Type 1 for exact, etc.).
+            # For "_mostly_identical" matches, remove if sub-matches cover
+            # at least 90% of the function body.
+            fm_a_range = set(range(a_start, a_end + 1))
+            fm_b_range = set(range(b_start, b_end + 1))
+            covered_by_sub_a = set()
+            covered_by_sub_b = set()
+            for m in fn_line_matches:
+                for line in range(m.file1["start_line"], m.file1["end_line"] + 1):
+                    covered_by_sub_a.add(line)
+                for line in range(m.file2["start_line"], m.file2["end_line"] + 1):
+                    covered_by_sub_b.add(line)
+            for m in fn_sem_matches:
+                for line in range(m.file1["start_line"], m.file1["end_line"] + 1):
+                    covered_by_sub_a.add(line)
+                for line in range(m.file2["start_line"], m.file2["end_line"] + 1):
+                    covered_by_sub_b.add(line)
+
+            is_mostly_identical = (
+                fm.details.get("_mostly_identical", False) if fm.details else False
+            )
+            if is_mostly_identical:
+                coverage_a = len(covered_by_sub_a) / len(fm_a_range) if fm_a_range else 0
+                coverage_b = len(covered_by_sub_b) / len(fm_b_range) if fm_b_range else 0
+                if coverage_a >= 0.9 and coverage_b >= 0.9:
+                    all_matches.remove(fm)
+            elif covered_by_sub_a == fm_a_range and covered_by_sub_b == fm_b_range:
+                all_matches.remove(fm)
 
     # ─── Phase 3: Line matching for module-level code (outside functions) ──
     module_line_matches = _line_level_matches(lines_a, lines_b, shadow_a, shadow_b, min_match_lines)

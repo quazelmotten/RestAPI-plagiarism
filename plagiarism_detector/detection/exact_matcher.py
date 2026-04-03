@@ -4,10 +4,9 @@ Exact line matching matcher (Type 1).
 Compares lines after normalizing whitespace and stripping comments.
 """
 
-from ..normalization.identifiers import normalize_identifiers
+from ..models import Match, PlagiarismType, Point, Region
 from ..parsing.parser import ParsedFile
 from .base import BaseMatcher
-from ..models import Match, PlagiarismType, Region, Point
 
 
 class ExactLineMatcher(BaseMatcher):

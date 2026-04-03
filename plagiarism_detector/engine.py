@@ -6,30 +6,30 @@ primary entry point for the entire system. It orchestrates parsing, pipeline
 execution, and result conversion.
 """
 
-from typing import List
 
 from .config import DetectionConfig
-from .languages import get_language_profile
-from .parsing.parser import ParserWrapper
-from .detection.pipeline import DetectionPipeline
 from .detection.exact_matcher import ExactLineMatcher
+from .detection.pipeline import DetectionPipeline
 from .detection.renamed_matcher import RenamedLineMatcher
-from .detection.structural_matcher import StructuralFunctionMatcher
-from .detection.semantic_matcher import SemanticFunctionMatcher
 from .detection.semantic_line_matcher import SemanticLineMatcher
+from .detection.semantic_matcher import SemanticFunctionMatcher
+from .detection.structural_matcher import StructuralFunctionMatcher
+from .parsing.parser import ParserWrapper
 
 # Import the legacy Match model for backward compatibility
 # This comes from the existing plagiarism_core.models
 try:
-    from plagiarism_core.models import Match as LegacyMatch, PlagiarismType as LegacyPlagiarismType
+    from plagiarism_core.models import Match as LegacyMatch
+    from plagiarism_core.models import PlagiarismType as LegacyPlagiarismType
 except ImportError:
     # Fallback if moved
-    from ..models import Match as LegacyMatch, PlagiarismType as LegacyPlagiarismType
+    from ..models import Match as LegacyMatch
+    from ..models import PlagiarismType as LegacyPlagiarismType
 
 
 def detect_plagiarism(
     source_a: str, source_b: str, lang_code: str = "python", min_match_lines: int = 2, **kwargs
-) -> List[LegacyMatch]:
+) -> list[LegacyMatch]:
     """
     Detect plagiarism between two source code strings.
 

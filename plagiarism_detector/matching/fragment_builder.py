@@ -2,10 +2,9 @@
 Fragment builder for constructing match regions from token-level matches.
 """
 
-from typing import List
 
-from ..models import Match, PlagiarismType, Region, Point
 from ..fingerprinting import Fingerprint
+from ..models import Match
 
 
 class FragmentBuilder:
@@ -13,10 +12,10 @@ class FragmentBuilder:
 
     @staticmethod
     def build_from_fingerprints(
-        fingerprints_a: List[Fingerprint],
-        fingerprints_b: List[Fingerprint],
+        fingerprints_a: list[Fingerprint],
+        fingerprints_b: list[Fingerprint],
         min_fingerprints: int = 3,
-    ) -> List[Match]:
+    ) -> list[Match]:
         """
         Construct matches by aligning fingerprint sequences.
 

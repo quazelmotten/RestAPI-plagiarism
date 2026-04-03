@@ -2,11 +2,11 @@
 
 from .base import BaseMatcher
 from .exact_matcher import ExactLineMatcher
-from .renamed_matcher import RenamedLineMatcher
-from .structural_matcher import StructuralFunctionMatcher
-from .semantic_matcher import SemanticFunctionMatcher
-from .semantic_line_matcher import SemanticLineMatcher
 from .pipeline import DetectionPipeline
+from .renamed_matcher import RenamedLineMatcher
+from .semantic_line_matcher import SemanticLineMatcher
+from .semantic_matcher import SemanticFunctionMatcher
+from .structural_matcher import StructuralFunctionMatcher
 
 __all__ = [
     "BaseMatcher",

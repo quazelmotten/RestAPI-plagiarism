@@ -14,7 +14,6 @@ import sys
 from pathlib import Path
 
 from .engine import detect_plagiarism
-from .config import DetectionConfig
 
 
 def main(argv: list[str] | None = None) -> int:

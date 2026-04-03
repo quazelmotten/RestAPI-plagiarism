@@ -32,10 +32,15 @@ SEMANTIC_NODE_MAP: dict[str, str] = {
     "do_statement": "LOOP",
     "for_in_statement": "LOOP",  # JS/TS: for...in
     "enhanced_for_statement": "LOOP",  # Java: for(Type x : collection)
+    "for_range_loop": "LOOP",  # C++: for(auto& x : container)
     # Loops - Rust
     "for_expression": "LOOP",
     "loop_expression": "LOOP",
     "while_expression": "LOOP",
+    # Conditionals
+    "if_expression": "COND",  # Rust: if expr { } else { }
+    "ternary_expression": "TERNARY",  # Java: a ? b : c
+    "conditional_expression": "TERNARY",  # C/C++/JS: a ? b : c
     # Collection comprehensions - canonicalize to COLLECTION (Python)
     "list_comprehension": "COLLECTION",
     "generator_expression": "COLLECTION",
@@ -44,12 +49,20 @@ SEMANTIC_NODE_MAP: dict[str, str] = {
     # String formatting - canonicalize to STRING_FORMAT
     "fstring": "STRING_FORMAT",
     "string": "STRING_FORMAT",  # tree-sitter uses 'string' for f-strings
+    "raw_string_literal": "STRING_FORMAT",  # C++ raw strings
+    "string_literal": "STRING_FORMAT",  # C++/Go/Java string literals
+    "interpreted_string_literal": "STRING_FORMAT",  # Go
     # Lambda - canonicalize to FUNCTION_LITERAL
     "lambda": "FUNCTION_LITERAL",
     "lambda_expression": "FUNCTION_LITERAL",  # Java/JS
+    "closure_expression": "FUNCTION_LITERAL",  # Rust
+    "func_literal": "FUNCTION_LITERAL",  # Go
+    "arrow_function": "FUNCTION_LITERAL",  # JS/TS
     # Augmented assignment - canonicalize to ASSIGN
     "augmented_assignment": "ASSIGN",
     "augmented_assignment_expression": "ASSIGN",  # Rust
+    "update_expression": "ASSIGN",  # C/C++: i++, ++i
+    "inc_statement": "ASSIGN",  # Go: i++
     # Comparison operators - normalize to canonical comparison
     "comparison_operator": "COMPARISON",
     # NOTE: binary_expression removed from COMPARISON — it's too broad
@@ -57,12 +70,13 @@ SEMANTIC_NODE_MAP: dict[str, str] = {
     # Instead, we handle it in _emit_canonical by checking the operator token.
     # Boolean operations - normalize to canonical form
     "boolean_operator": "BOOLEAN_OP",
+    "parenthesized_expression": "GROUP",  # C/C++/Java: (expr)
 }
 
 # Operators that indicate a binary_expression should be treated as comparison
 _COMPARISON_OPS = frozenset({"==", "!=", "<", ">", "<=", ">="})
 _ARITHMETIC_OPS = frozenset({"+", "-", "*", "/", "%", "//", "**"})
-_LOGICAL_OPS = frozenset({"and", "or", "&&", "||"})
+_LOGICAL_OPS = frozenset({"and", "or", "&&", "||", "!"})
 
 # Node types that should be ignored entirely (comments, whitespace, etc.)
 IGNORABLE_NODE_TYPES: set[str] = {
@@ -72,6 +86,7 @@ IGNORABLE_NODE_TYPES: set[str] = {
     "dedent",
     "NEWLINE",
     "END_MARKER",
+    "whitespace",
 }
 
 
@@ -289,6 +304,10 @@ def _emit_canonical(node: Node, source_bytes: bytes, depth: int = 0) -> str:
     if node.type == "binary_expression":
         return _emit_binary_expression(node, source_bytes, depth)
 
+    # Handle C++/Java/JS assignment_expression (x += y, x *= y, etc.)
+    if node.type == "assignment_expression":
+        return _emit_assignment_expression(node, source_bytes, depth)
+
     # Normalize complete if/elif/else chains where all branches return.
     # Sort branches by their return value so that inverted condition chains
     # (e.g., >=90,>=80,>=70 vs <70,<80,<90) produce the same canonical form.
@@ -349,6 +368,34 @@ def _emit_canonical(node: Node, source_bytes: bytes, depth: int = 0) -> str:
     return "".join(parts)
 
 
+def _emit_assignment_expression(node: Node, source_bytes: bytes, depth: int) -> str:
+    """Handle C++/Java/JS assignment_expression (x += y, x = y, etc.)."""
+    ops = []
+    operands = []
+    for child in node.children:
+        text = _get_source_text(child, source_bytes).strip()
+        if text in ("+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "|=", "^="):
+            ops.append(text)
+        elif text == "=":
+            ops.append("=")
+        elif child.type not in IGNORABLE_NODE_TYPES:
+            operands.append(_emit_canonical(child, source_bytes, depth + 1))
+
+    if ops and len(operands) >= 2:
+        op = ops[0]
+        target = operands[0]
+        value = operands[1]
+        return f"ASSIGN({target}, {op}, {value})"
+
+    # Fallback: emit children
+    parts = []
+    for child in node.children:
+        if child.type in IGNORABLE_NODE_TYPES:
+            continue
+        parts.append(_emit_canonical(child, source_bytes, depth + 1))
+    return "".join(parts) if parts else "ASSIGN()"
+
+
 def _emit_binary_expression(node: Node, source_bytes: bytes, depth: int) -> str:
     """
     Handle binary_expression by detecting the operator type.
@@ -398,34 +445,96 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
     """Emit a canonical representation for a semantically-mapped node type."""
 
     if sem_type == "LOOP":
-        # Both for and while loops canonicalize to LOOP(ITERABLE)
         iterable = ""
+        # Python for_statement
         if node.type == "for_statement":
             iter_node = _get_child_by_type(node, "iterable")
             if iter_node:
                 iterable = _emit_canonical(iter_node, source_bytes, depth + 1)
-        elif node.type == "while_statement":
+        # C/C++/Go for_statement (C-style: for(init; cond; update))
+        elif node.type == "for_statement":
+            # Try for_clause (Go) or init_declarator + condition (C/C++)
+            for_clause = _get_child_by_type(node, "for_clause")
+            if for_clause:
+                # Go: for init; cond; update
+                iterable = _emit_canonical(for_clause, source_bytes, depth + 1)
+            else:
+                # C/C++: extract condition from children
+                for child in node.children:
+                    if child.type == "binary_expression":
+                        iterable = _emit_canonical(child, source_bytes, depth + 1)
+                        break
+        # C++ range-based for loop: for(auto& x : container)
+        elif node.type == "for_range_loop":
+            # Find the iterable (after the ':' colon)
+            for child in node.children:
+                if child.type == "identifier" and child != _get_child_by_type(node, "for"):
+                    # Check if this is after the ':' — it's the iterable
+                    iterable = _emit_canonical(child, source_bytes, depth + 1)
+        # Java enhanced_for_statement: for(Type x : collection)
+        elif node.type == "enhanced_for_statement":
+            for child in node.children:
+                if child.type == "identifier":
+                    # Second identifier is usually the iterable
+                    pass
+            # The iterable is typically the last identifier before the closing paren
+            identifiers = [c for c in node.children if c.type == "identifier"]
+            if identifiers:
+                iterable = _emit_canonical(identifiers[-1], source_bytes, depth + 1)
+        # while_statement / while_expression
+        elif node.type in ("while_statement", "while_expression"):
             cond_node = _get_child_by_type(node, "condition")
             if cond_node:
                 iterable = _emit_canonical(cond_node, source_bytes, depth + 1)
+            else:
+                # C++: condition_clause contains parenthesized_expression
+                cond_clause = _get_child_by_type(node, "condition_clause")
+                if cond_clause:
+                    paren = _get_child_by_type(cond_clause, "parenthesized_expression")
+                    if paren:
+                        iterable = _emit_canonical(paren, source_bytes, depth + 1)
+        # do_statement
+        elif node.type == "do_statement":
+            paren = _get_child_by_type(node, "parenthesized_expression")
+            if paren:
+                iterable = _emit_canonical(paren, source_bytes, depth + 1)
+        # Rust for_expression: for x in iter
+        elif node.type == "for_expression":
+            # Find the iterable (after 'in')
+            found_in = False
+            for child in node.children:
+                text = _get_source_text(child, source_bytes).strip()
+                if text == "in":
+                    found_in = True
+                    continue
+                if found_in and child.type == "identifier":
+                    iterable = _emit_canonical(child, source_bytes, depth + 1)
+                    break
+        # Rust loop_expression: loop { }
+        elif node.type == "loop_expression":
+            iterable = "INFINITE"
+        # Go for_statement with range_clause
+        elif node.type == "for_statement":
+            range_clause = _get_child_by_type(node, "range_clause")
+            if range_clause:
+                iterable = _emit_canonical(range_clause, source_bytes, depth + 1)
+            for_clause = _get_child_by_type(node, "for_clause")
+            if for_clause:
+                iterable = _emit_canonical(for_clause, source_bytes, depth + 1)
         return f"LOOP({iterable})"
 
     elif sem_type == "COLLECTION":
-        # List comprehensions, generator expressions, list(map(...))
         element = ""
         iter_src = ""
 
         if node.type == "list_comprehension":
-            # Find element (the expression before 'for') - it's the first non-bracket child
             for child in node.children:
                 if child.type in ("[", "]"):
                     continue
                 if child.type == "for_in_clause":
                     break
-                # This is the element expression
                 if not element:
                     element = _emit_canonical(child, source_bytes, depth + 1)
-            # Find iterable from for_in_clause (the last identifier in the clause)
             for child in node.children:
                 if child.type == "for_in_clause":
                     for sub in child.children:
@@ -445,30 +554,24 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
                         if sub.type == "identifier":
                             iter_src = _emit_canonical(sub, source_bytes, depth + 1)
         elif node.type == "call":
-            # Handle list(map(...)) or list(... for ... in ...)
             func_node = _get_child_by_type(node, "function")
             if func_node:
-                # Check for 'list' call with single argument
                 list_name = _get_source_text(func_node, source_bytes)
                 if list_name == "list":
                     args_node = _get_child_by_type(node, "arguments")
                     if args_node:
                         first_arg = args_node.children[0] if args_node.children else None
                         if first_arg:
-                            # Recursively get the semantic form of the argument
                             arg_sem = _semantic_node_type(first_arg)
                             if arg_sem == "COLLECTION":
-                                # Already a collection comprehension
                                 return _emit_semantic_node(
                                     first_arg, source_bytes, "COLLECTION", depth + 1
                                 )
                             elif first_arg.type == "call":
-                                # It's a call - check if it's map/filter
                                 inner_func = _get_child_by_type(first_arg, "function")
                                 if inner_func:
                                     inner_name = _get_source_text(inner_func, source_bytes)
                                     if "map" in inner_name or "filter" in inner_name:
-                                        # Extract from map/filter call
                                         inner_args = _get_child_by_type(first_arg, "arguments")
                                         if inner_args and len(inner_args.children) >= 2:
                                             elem = _emit_canonical(
@@ -502,8 +605,7 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
         return f"DICT_COLLECT({key_expr}, {val_expr}, {iter_src})"
 
     elif sem_type == "STRING_FORMAT":
-        # Normalize both f-strings and .format() to:
-        #   STRING_FORMAT('template with {}', arg1, arg2, ...)
+        # Python f-strings
         if node.type in ("fstring", "string"):
             template_parts = []
             args = []
@@ -518,27 +620,81 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
                         if sub.type not in ("{", "}"):
                             args.append(_emit_canonical(sub, source_bytes, depth + 1))
                 elif child.type in ("string_start", "string_end"):
-                    pass  # skip delimiters
+                    pass
 
             template = "".join(template_parts)
             parts = [repr(template)] + args
             return f"STRING_FORMAT({', '.join(parts)})"
 
-        return f"STRING_FORMAT({', '.join(parts)})" if parts else "STRING_FORMAT()"
+        # C++/Java/Go/JS string literals — just normalize to placeholder
+        elif node.type in (
+            "string_literal",
+            "raw_string_literal",
+            "interpreted_string_literal",
+            "string_fragment",
+        ):
+            return "STRING_FORMAT(STR)"
+
+        return "STRING_FORMAT()"
 
     elif sem_type == "FUNCTION_LITERAL":
         params = ""
         body = ""
 
+        # Python lambda
         param_list = _get_child_by_type(node, "parameters")
+        if not param_list:
+            # Java/JS lambda: formal_parameters
+            param_list = _get_child_by_type(node, "formal_parameters")
+        if not param_list:
+            # Rust closure: closure_parameters
+            param_list = _get_child_by_type(node, "closure_parameters")
+        if not param_list:
+            # Go func_literal: parameter_list
+            param_list = _get_child_by_type(node, "parameter_list")
+        if not param_list:
+            # C++ lambda: abstract_function_declarator > parameter_list
+            abs_decl = _get_child_by_type(node, "abstract_function_declarator")
+            if abs_decl:
+                param_list = _get_child_by_type(abs_decl, "parameter_list")
+
         if param_list:
             param_parts = []
             for child in param_list.children:
-                if child.type == "identifier":
-                    param_parts.append("VAR")
+                if child.type in (
+                    "identifier",
+                    "parameter_declaration",
+                    "type_identifier",
+                    "primitive_type",
+                    "required_parameter",
+                    "optional_parameter",
+                ):
+                    # For parameter_declaration, extract the identifier
+                    if child.type in (
+                        "parameter_declaration",
+                        "required_parameter",
+                        "optional_parameter",
+                    ):
+                        for sub in child.children:
+                            if sub.type == "identifier":
+                                param_parts.append("VAR")
+                                break
+                    elif child.type not in ("(", ")", ",", ":", "|"):
+                        param_parts.append("VAR")
             params = ", ".join(param_parts)
 
         body_node = _get_child_by_type(node, "body")
+        if not body_node:
+            # C++/Java: compound_statement or block
+            body_node = _get_child_by_type(node, "compound_statement")
+        if not body_node:
+            body_node = _get_child_by_type(node, "block")
+        if not body_node and node.type == "arrow_function":
+            # JS/TS arrow function: body is the first non-param, non-arrow child
+            for child in node.children:
+                if child.type not in ("formal_parameters", "=>", "(", ")", ","):
+                    body_node = child
+                    break
         if body_node:
             body = _emit_canonical(body_node, source_bytes, depth + 1)
 
@@ -556,6 +712,28 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
             target = _emit_canonical(children_list[0], source_bytes, depth + 1)
             op = _get_source_text(children_list[1], source_bytes).strip()
             value = _emit_canonical(children_list[2], source_bytes, depth + 1)
+        # update_expression: i++ or ++i (C/C++)
+        elif node.type == "update_expression" and len(children_list) >= 1:
+            for child in children_list:
+                text = _get_source_text(child, source_bytes).strip()
+                if text in ("++", "--"):
+                    op = text
+                elif child.type == "identifier":
+                    if not target:
+                        target = _emit_canonical(child, source_bytes, depth + 1)
+                    else:
+                        value = _emit_canonical(child, source_bytes, depth + 1)
+            if not value:
+                value = "1"
+        # inc_statement: i++ (Go)
+        elif node.type == "inc_statement" and len(children_list) >= 1:
+            for child in children_list:
+                text = _get_source_text(child, source_bytes).strip()
+                if text in ("++", "--"):
+                    op = text
+                elif child.type == "identifier":
+                    target = _emit_canonical(child, source_bytes, depth + 1)
+            value = "1"
 
         return f"ASSIGN({target}, {op}, {value})"
 
@@ -588,6 +766,63 @@ def _emit_semantic_node(node: Node, source_bytes: bytes, sem_type: str, depth: i
         if "not" in ops:
             return f"BOOL_OP(NOT, {operands[0]})"
         return f"BOOL_OP({', '.join(operands)})"
+
+    elif sem_type == "TERNARY":
+        # C/C++/JS conditional_expression: cond ? true_val : false_val
+        # Java ternary_expression: cond ? true_val : false_val
+        parts = []
+        for child in node.children:
+            text = _get_source_text(child, source_bytes).strip()
+            if text in ("?", ":"):
+                continue
+            elif child.type not in IGNORABLE_NODE_TYPES:
+                parts.append(_emit_canonical(child, source_bytes, depth + 1))
+        cond = parts[0] if len(parts) > 0 else ""
+        true_val = parts[1] if len(parts) > 1 else ""
+        false_val = parts[2] if len(parts) > 2 else ""
+        return f"TERNARY({cond}, {true_val}, {false_val})"
+
+    elif sem_type == "COND":
+        # Rust if_expression
+        cond = ""
+        then_block = ""
+        else_block = ""
+
+        # Find condition (first non-keyword, non-block child)
+        found_if = False
+        for child in node.children:
+            text = _get_source_text(child, source_bytes).strip()
+            if text == "if":
+                found_if = True
+                continue
+            if found_if and child.type == "block":
+                if not then_block:
+                    then_block = _emit_canonical(child, source_bytes, depth + 1)
+                continue
+            if found_if and not then_block and child.type not in ("{", "}", "else", "else_clause"):
+                cond = _emit_canonical(child, source_bytes, depth + 1)
+
+        else_clause = _get_child_by_type(node, "else_clause")
+        if else_clause:
+            else_block_node = _get_child_by_type(else_clause, "block")
+            if else_block_node:
+                else_block = _emit_canonical(else_block_node, source_bytes, depth + 1)
+
+        return f"COND({cond}, {then_block}, {else_block})"
+
+    elif sem_type == "GROUP":
+        # Parenthesized expression — just emit the inner expression
+        paren = _get_child_by_type(node, "parenthesized_expression")
+        if paren:
+            return _emit_canonical(paren, source_bytes, depth + 1)
+        # Otherwise emit children directly
+        parts = []
+        for child in node.children:
+            if child.type not in IGNORABLE_NODE_TYPES and child.type not in ("(", ")"):
+                child_text = _emit_canonical(child, source_bytes, depth + 1)
+                if child_text:
+                    parts.append(child_text)
+        return "".join(parts) if parts else "GROUP()"
 
     # Fallback: emit semantic type with children
     parts = []
@@ -1021,11 +1256,21 @@ def canonicalize_type4(code: str, use_ast: bool = True, lang_code: str = "python
     """
     if use_ast and lang_code == "python":
         # AST-based canonicalization designed for Python's semantic patterns
-        # (f-strings, comprehensions, lambdas, etc.). For other languages,
-        # _emit_canonical is too aggressive — it replaces all identifiers with
-        # [identifier], causing different code to produce identical canonical
-        # forms and false Type 4 matches.
+        # (f-strings, comprehensions, lambdas, etc.)
         return ast_canonicalize(code, lang_code)
+    elif use_ast and lang_code != "python":
+        # For non-Python languages: use AST-based canonicalization for
+        # multi-line code (function bodies), but light canonicalization for
+        # single-line code (line-level semantic matching).
+        # Full AST canonicalization strips all identifiers, causing false matches
+        # on structurally similar but semantically different code at the line level.
+        line_count = code.count("\n")
+        if line_count >= 2:
+            # Multi-line: use AST-based canonicalization
+            return ast_canonicalize(code, lang_code)
+        else:
+            # Single line: use light canonicalization that preserves identifiers
+            return _canonicalize_type4_light(code, lang_code)
     elif lang_code == "python":
         # Legacy regex-based approach (kept for backward compatibility)
         for rule in _TYPE4_RULES:
@@ -1035,8 +1280,96 @@ def canonicalize_type4(code: str, use_ast: bool = True, lang_code: str = "python
                 logger.warning("Canonicalization rule %s failed", rule.__name__, exc_info=True)
         return code
     else:
-        # For non-Python languages, return as-is
+        # For non-Python languages without AST canonicalization, return as-is
         return code
+
+
+def _canonicalize_type4_light(code: str, lang_code: str) -> str:
+    """Light canonicalization for non-Python languages at the line level.
+
+    Preserves identifiers but normalizes:
+    - Augmented assignments: x += y → x = x + y (conceptually, just normalize the op)
+    - Comparison operators: ==, !=, <, >, <=, >= → COMP
+    - Boolean operators: &&, ||, and, or → BOOL
+    - for/while/do → LOOP
+    - if/elif → COND
+    - return → RETURN
+    - Numeric literals → NUM
+    - String literals → STR
+
+    This is used for line-level semantic matching where we want to detect
+    semantically equivalent lines without false positives from identifier stripping.
+    """
+    import re
+
+    line = code.strip().lower()
+    if not line:
+        return ""
+
+    # Skip preprocessor directives, blank lines, single braces
+    if line.startswith("#") or line in ("{", "}", ";", ""):
+        return ""
+
+    # Normalize augmented assignments: += -= *= /= %= → =
+    line = re.sub(r"\s*(\+=|-=|\*=|/=|%=|<<=|>>=|&=|\|=|\^=)\s*", " = ", line)
+
+    # Normalize comparison operators → COMP
+    line = re.sub(r"\s*(==|!=|<=|>=)\s*", " COMP ", line)
+    # Be careful with < and > — only normalize when used as comparison (not templates)
+    # Simple heuristic: normalize < and > when surrounded by spaces and identifiers/numbers
+    line = re.sub(r"\s(<|>)\s", " COMP ", line)
+
+    # Normalize boolean operators → BOOL
+    line = re.sub(r"\s+(and|or|&&|\|\|)\s+", " BOOL ", line)
+    line = re.sub(r"\s+(!)\s*", " NOT ", line)
+
+    # Normalize loop keywords → LOOP
+    line = re.sub(r"^\s*for\s*\(", "LOOP(", line)
+    line = re.sub(r"^\s*for\s+", "LOOP ", line)
+    line = re.sub(r"^\s*while\s*\(", "LOOP(", line)
+    line = re.sub(r"^\s*while\s+", "LOOP ", line)
+    line = re.sub(r"^\s*do\s*\{", "DO{", line)
+    line = re.sub(r"^\s*do\s+", "DO ", line)
+
+    # Normalize conditionals → COND
+    line = re.sub(r"^\s*if\s*\(", "COND(", line)
+    line = re.sub(r"^\s*if\s+", "COND ", line)
+    line = re.sub(r"^\s*else\s+if\s*\(", "COND(", line)
+    line = re.sub(r"^\s*else\s+if\s+", "COND ", line)
+    line = re.sub(r"^\s*switch\s*\(", "SWITCH(", line)
+    line = re.sub(r"^\s*switch\s+", "SWITCH ", line)
+    line = re.sub(r"^\s*case\s+", "CASE ", line)
+
+    # Normalize return → RETURN
+    line = re.sub(r"^\s*return\s+", "RETURN ", line)
+
+    # Normalize break/continue
+    line = re.sub(r"^\s*break\s*;", "BREAK", line)
+    line = re.sub(r"^\s*continue\s*;", "CONTINUE", line)
+
+    # Normalize numeric literals → NUM
+    line = re.sub(r"\b\d+\.\d+\b", "FLOAT", line)
+    line = re.sub(r"\b\d+\b", "NUM", line)
+
+    # Normalize string literals → STR
+    line = re.sub(r'"[^"]*"', "STR", line)
+    line = re.sub(r"'[^']*'", "STR", line)
+
+    # Normalize C++ stream operators
+    line = re.sub(r"<<", " OUT ", line)
+    line = re.sub(r">>", " IN ", line)
+
+    # Normalize Go := assignment
+    line = re.sub(r":=", " = ", line)
+
+    # Normalize Rust let mut
+    line = re.sub(r"\blet\s+mut\b", "LET_MUT", line)
+    line = re.sub(r"\blet\b", "LET", line)
+
+    # Normalize common patterns
+    line = re.sub(r"\s+", " ", line).strip()
+
+    return line
 
 
 def canonicalize_full(source: str, lang_code: str = "python", use_ast: bool = True) -> str:

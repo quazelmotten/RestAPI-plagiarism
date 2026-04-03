@@ -7,9 +7,8 @@ with similarity above threshold.
 """
 
 from dataclasses import dataclass
-from typing import ClassVar
 
-from .tokenizer import tokenize, Token
+from .tokenizer import Token
 
 
 @dataclass(frozen=True)
