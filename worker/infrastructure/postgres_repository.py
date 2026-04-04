@@ -128,53 +128,74 @@ class PostgresRepository(TaskRepository):
                 logger.debug("Failed to publish progress to Redis: %s", e)
 
     def bulk_insert_results(self, results: list[dict[str, Any]]) -> None:
-        """Bulk insert similarity results using SQLAlchemy bulk_insert_mappings."""
+        """Bulk insert similarity results using psycopg2 execute_values for speed."""
         if not results:
             return
 
         from uuid import uuid4
 
+        from psycopg2.extras import execute_values
+
         with get_session() as session:
+            raw_conn = session.connection().connection
+            cursor = raw_conn.cursor()
+
+            values = [
+                (
+                    str(uuid4()),
+                    r["task_id"],
+                    r["file_a_id"],
+                    r["file_b_id"],
+                    r.get("ast_similarity"),
+                    json.dumps(r.get("matches", {})),
+                )
+                for r in results
+            ]
+
             try:
-                session.bulk_insert_mappings(
-                    SimilarityResult,
-                    [
-                        {
-                            "id": str(uuid4()),
-                            "task_id": r["task_id"],
-                            "file_a_id": r["file_a_id"],
-                            "file_b_id": r["file_b_id"],
-                            "ast_similarity": r.get("ast_similarity"),
-                            "matches": r.get("matches", {}),
-                        }
-                        for r in results
-                    ],
+                execute_values(
+                    cursor,
+                    """
+                    INSERT INTO similarity_results
+                        (id, task_id, file_a_id, file_b_id, ast_similarity, matches)
+                    VALUES %s
+                    ON CONFLICT DO NOTHING
+                    """,
+                    values,
+                    page_size=5000,
                 )
                 session.commit()
-            except IntegrityError:
+            except Exception:
                 session.rollback()
                 logger.debug(
                     "Bulk insert of %d results failed, falling back to per-row insert", len(results)
                 )
                 for r in results:
                     try:
-                        result = SimilarityResult(
-                            id=str(uuid4()),
-                            task_id=r["task_id"],
-                            file_a_id=r["file_a_id"],
-                            file_b_id=r["file_b_id"],
-                            ast_similarity=r.get("ast_similarity"),
-                            matches=r.get("matches", {}),
+                        cursor.execute(
+                            """
+                            INSERT INTO similarity_results
+                                (id, task_id, file_a_id, file_b_id, ast_similarity, matches)
+                            VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                            ON CONFLICT DO NOTHING
+                            """,
+                            (
+                                str(uuid4()),
+                                r["task_id"],
+                                r["file_a_id"],
+                                r["file_b_id"],
+                                r.get("ast_similarity"),
+                                json.dumps(r.get("matches", {})),
+                            ),
                         )
-                        session.add(result)
-                        session.commit()
-                    except IntegrityError:
+                    except Exception:
                         session.rollback()
                         logger.debug(
                             "Skipping duplicate result for files %s <-> %s",
                             r["file_a_id"],
                             r["file_b_id"],
                         )
+                session.commit()
 
     def get_max_similarity(self, task_id: str) -> float:
         """Get maximum similarity score for a task."""

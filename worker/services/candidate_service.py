@@ -1,16 +1,15 @@
 """
 Candidate service - finds potential plagiarism candidate file pairs.
 
-Responsible for:
-- Finding candidate pairs within a set of files (intra-task)
-- Finding candidate pairs between two sets (cross-task)
-- Using inverted index to find similar files
+Uses an in-memory inverted index for batch candidate finding,
+eliminating per-file Redis round trips.
 """
 
 import logging
 import threading
 import time
 import warnings
+from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -23,8 +22,9 @@ logger = logging.getLogger(__name__)
 class CandidateService:
     """Generates candidate file pairs for analysis."""
 
-    def __init__(self, index: CandidateIndex):
+    def __init__(self, index: CandidateIndex, executor: ThreadPoolExecutor | None = None):
         self.index = index
+        self._executor = executor
 
     def find_candidate_pairs(
         self,
@@ -37,11 +37,8 @@ class CandidateService:
         """
         Find candidate plagiarism pairs using the inverted index.
 
-        This unified method handles both intra-task and cross-task scenarios:
-        - Intra-task: files_b=None, deduplicate=True (default)
-          Finds all unique pairs within files_a
-        - Cross-task: files_b=[existing_files], deduplicate=False (optional)
-          Finds pairs from files_a to files_b (unidirectional)
+        Loads the inverted index into memory once, then computes all candidate
+        pairs via in-memory hash lookups — no per-file Redis round trips.
         """
         if not files_a:
             return []
@@ -77,82 +74,87 @@ class CandidateService:
         elapsed_fetch = time.perf_counter() - t0
         logger.debug(f"Batch-fetched {len(file_hashes)} fingerprints in {elapsed_fetch:.2f}s")
 
-        # Split into batches for parallel processing
-        batch_size = max(1, len(valid_files) // 4)
-        batches = [valid_files[i : i + batch_size] for i in range(0, len(valid_files), batch_size)]
+        # Build in-memory inverted index: fp_hash -> set of file_hashes
+        # This replaces 1000 Redis round trips with a single in-memory dict lookup
+        inv_index: dict[str, set[str]] = defaultdict(set)
+        fp_counts: dict[str, int] = {}
+        for fh, fps in fingerprint_map.items():
+            if fps:
+                fp_counts[fh] = len(fps)
+                for fp_hash in fps:
+                    inv_index[fp_hash].add(fh)
 
-        total_a = len(valid_files)
-        lock = threading.Lock()
+        logger.debug(
+            f"In-memory index: {len(inv_index)} unique fingerprints, {len(fp_counts)} files indexed"
+        )
+
+        # Compute all candidate pairs in-memory
+        min_overlap_ratio = getattr(self.index, "min_overlap_threshold", 0.15)
+        max_fp_ratio = getattr(self.index, "MAX_FP_COUNT_RATIO", 4.0)
+
         all_pairs: list[tuple[dict, dict, float]] = []
         all_seen: set[frozenset] = set()
-        checked_counter = [0]
-        log_interval = max(1, total_a // 20)  # ~20 progress updates
+        checked_counter = 0
+        log_interval = max(1, len(valid_files) // 20)
 
-        def process_batch(batch: list[dict]):
-            local_pairs = []
-            local_checked = 0
-            for file_a in batch:
-                file_a_hash = file_a.get("hash") or file_a.get("file_hash")
-                if not file_a_hash:
+        for file_a in valid_files:
+            file_a_hash = file_a.get("hash") or file_a.get("file_hash")
+            if not file_a_hash:
+                continue
+
+            fps_a = fingerprint_map.get(file_a_hash)
+            if not fps_a:
+                checked_counter += 1
+                continue
+
+            query_count = len(fps_a)
+            min_overlap = max(1, int(query_count * min_overlap_ratio))
+
+            # Count overlaps via in-memory inverted index
+            overlap_counts: dict[str, int] = defaultdict(int)
+            for fp_hash in fps_a:
+                for candidate_fh in inv_index.get(fp_hash, ()):
+                    overlap_counts[candidate_fh] += 1
+
+            # Compute Jaccard for candidates meeting threshold
+            for file_b_hash, overlap in overlap_counts.items():
+                if overlap < min_overlap:
                     continue
 
-                fps_a = fingerprint_map.get(file_a_hash)
-                if not fps_a:
+                # Pre-filter by fingerprint count ratio
+                candidate_count = fp_counts.get(file_b_hash)
+                if candidate_count is not None:
+                    ratio = max(query_count, candidate_count) / min(query_count, candidate_count)
+                    if ratio > max_fp_ratio:
+                        continue
+
+                file_b = files_b_by_hash.get(file_b_hash)
+                if not file_b:
+                    continue
+                if is_intra and file_a_hash == file_b_hash:
                     continue
 
-                candidates = self.index.find_candidates(fps_a, language)
+                union = query_count + (candidate_count or query_count) - overlap
+                sim = overlap / union if union > 0 else 0.0
+                sim = min(sim, 1.0)
 
-                for file_b_hash, similarity in candidates.items():
-                    file_b = files_b_by_hash.get(file_b_hash)
-                    if not file_b:
-                        continue
-                    if is_intra and file_a_hash == file_b_hash:
-                        continue
-
-                    local_pairs.append((file_a, file_b, similarity))
-
-                local_checked += 1
-
-                # Report progress periodically within the batch
-                if local_checked % log_interval == 0:
-                    with lock:
-                        checked_counter[0] += log_interval
-                        if on_progress:
-                            on_progress(checked_counter[0], total_a)
-
-            # Final batch flush: deduplicate + commit remaining progress
-            with lock:
                 if deduplicate:
-                    for fa, fb, sim in local_pairs:
-                        pair_key = frozenset(
-                            [
-                                fa.get("hash") or fa.get("file_hash"),
-                                fb.get("hash") or fb.get("file_hash"),
-                            ]
-                        )
-                        if pair_key not in all_seen:
-                            all_seen.add(pair_key)
-                            all_pairs.append((fa, fb, sim))
-                else:
-                    all_pairs.extend(local_pairs)
+                    pair_key = frozenset([file_a_hash, file_b_hash])
+                    if pair_key in all_seen:
+                        continue
+                    all_seen.add(pair_key)
 
-                checked_counter[0] += local_checked % log_interval
+                all_pairs.append((file_a, file_b, sim))
+
+            checked_counter += 1
+            if checked_counter % log_interval == 0 and on_progress:
                 elapsed = time.perf_counter() - t0
-                speed = checked_counter[0] / elapsed if elapsed > 0 else 0
+                speed = checked_counter / elapsed if elapsed > 0 else 0
                 logger.info(
-                    f"  Checked {checked_counter[0]}/{total_a} files, "
+                    f"  Checked {checked_counter}/{len(valid_files)} files, "
                     f"{len(all_pairs)} pairs so far ({speed:.0f} files/sec)"
                 )
-                if on_progress:
-                    on_progress(checked_counter[0], total_a)
-
-            return local_pairs  # not used, but future.result() needs a return
-
-        # Process batches in parallel
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            futures = [pool.submit(process_batch, batch) for batch in batches]
-            for f in as_completed(futures):
-                f.result()  # propagate exceptions
+                on_progress(checked_counter, len(valid_files))
 
         elapsed = time.perf_counter() - t0
         files_checked = len(valid_files)

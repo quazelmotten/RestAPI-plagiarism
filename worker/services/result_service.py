@@ -27,7 +27,7 @@ class ResultService:
         self.repository = repository
 
     def store_similarity_scores(
-        self, task_id: str, pairs: list[tuple], batch_size: int = 5000
+        self, task_id: str, pairs: list[tuple], batch_size: int = 20000
     ) -> None:
         """
         Store similarity scores for candidate pairs.

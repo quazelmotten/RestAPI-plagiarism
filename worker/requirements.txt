@@ -18,6 +18,8 @@ tree-sitter-typescript
 tree-sitter-go
 tree-sitter-rust
 xxhash
+numpy>=1.24.0
+scipy>=1.10.0
 
 # Testing dependencies
 pytest

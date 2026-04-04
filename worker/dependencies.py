@@ -138,7 +138,8 @@ def get_candidate_service() -> CandidateService:
     from worker.services.candidate_service import CandidateService
 
     index = get_index()
-    return CandidateService(index)
+    executor = get_analysis_executor()
+    return CandidateService(index, executor)
 
 
 def get_analysis_service() -> AnalysisService:

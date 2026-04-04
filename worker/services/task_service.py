@@ -143,36 +143,39 @@ class TaskService:
                 f"in {intra_elapsed:.2f}s"
             )
 
-            # Phase 2b: Find cross-task pairs
-            self.repository.update_task(
-                task_id=task_id,
-                status="finding_cross_pairs",
-                processed_pairs=0,
-                total_pairs=total_files,
-            )
-
-            logger.info(
-                f"[Task {task_id}] Phase 2b: Finding cross-task pairs "
-                f"({total_files} new vs {len(existing_files)} existing)"
-            )
-
-            def on_cross_progress(processed: int, total: int) -> None:
+            # Phase 2b: Find cross-task pairs (skip if no existing files)
+            cross_pairs: list = []
+            if existing_files:
                 self.repository.update_task(
                     task_id=task_id,
                     status="finding_cross_pairs",
-                    processed_pairs=processed,
-                    total_pairs=total,
+                    processed_pairs=0,
+                    total_pairs=total_files,
                 )
 
-            cross_pairs = self.candidate_svc.find_candidate_pairs(
-                files_a=files,
-                files_b=existing_files,
-                language=language,
-                deduplicate=False,
-                on_progress=on_cross_progress,
-            )
+                logger.info(
+                    f"[Task {task_id}] Phase 2b: Finding cross-task pairs "
+                    f"({total_files} new vs {len(existing_files)} existing)"
+                )
 
-            phase_elapsed = time.perf_counter() - phase_start
+                def on_cross_progress(processed: int, total: int) -> None:
+                    self.repository.update_task(
+                        task_id=task_id,
+                        status="finding_cross_pairs",
+                        processed_pairs=processed,
+                        total_pairs=total,
+                    )
+
+                cross_pairs = self.candidate_svc.find_candidate_pairs(
+                    files_a=files,
+                    files_b=existing_files,
+                    language=language,
+                    deduplicate=False,
+                    on_progress=on_cross_progress,
+                )
+            else:
+                logger.info(f"[Task {task_id}] Phase 2b: SKIPPED (no existing files in scope)")
+
             cross_elapsed = time.perf_counter() - phase_start
             all_pairs = intra_pairs + cross_pairs
             total_pairs = len(all_pairs)
