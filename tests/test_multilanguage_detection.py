@@ -15,13 +15,13 @@ from plagiarism_core.canonicalizer import (
     normalize_identifiers,
     parse_file_once_from_string,
 )
+from plagiarism_core.fingerprinting.tokenizer import Tokenizer
 from plagiarism_core.plagiarism_detector import (
     _extract_body_signature,
     _extract_functions,
     _extract_main_block,
     _is_main_block,
 )
-from plagiarism_detector.fingerprinting.tokenizer import Tokenizer
 
 # ============================================================================
 # C++ Tests
@@ -578,7 +578,7 @@ class TestSemanticLineMatcherMultiLanguage:
 
     def test_cpp_keywords_in_canonicalization(self):
         """C++ keywords should be preserved in canonical output."""
-        from plagiarism_detector.detection.semantic_line_matcher import _get_keywords_for_language
+        from plagiarism_core.plagiarism_detector import _get_keywords_for_language
 
         keywords = _get_keywords_for_language("cpp")
         assert "for" in keywords
@@ -589,7 +589,7 @@ class TestSemanticLineMatcherMultiLanguage:
 
     def test_java_keywords_in_canonicalization(self):
         """Java keywords should be preserved in canonical output."""
-        from plagiarism_detector.detection.semantic_line_matcher import _get_keywords_for_language
+        from plagiarism_core.plagiarism_detector import _get_keywords_for_language
 
         keywords = _get_keywords_for_language("java")
         assert "for" in keywords
@@ -600,7 +600,7 @@ class TestSemanticLineMatcherMultiLanguage:
 
     def test_go_keywords_in_canonicalization(self):
         """Go keywords should be preserved in canonical output."""
-        from plagiarism_detector.detection.semantic_line_matcher import _get_keywords_for_language
+        from plagiarism_core.plagiarism_detector import _get_keywords_for_language
 
         keywords = _get_keywords_for_language("go")
         assert "for" in keywords
@@ -611,7 +611,7 @@ class TestSemanticLineMatcherMultiLanguage:
 
     def test_rust_keywords_in_canonicalization(self):
         """Rust keywords should be preserved in canonical output."""
-        from plagiarism_detector.detection.semantic_line_matcher import _get_keywords_for_language
+        from plagiarism_core.plagiarism_detector import _get_keywords_for_language
 
         keywords = _get_keywords_for_language("rust")
         assert "for" in keywords

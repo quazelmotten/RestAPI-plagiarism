@@ -4,17 +4,17 @@ Core data structures for plagiarism detection.
 
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Any
+from typing import TypedDict
 
 
 class PlagiarismType(IntEnum):
     """Classification of detected plagiarism."""
 
-    NONE = 0  # No match
-    EXACT = 1  # Exact copy (whitespace/comments may differ)
-    RENAMED = 2  # Same code structure, different identifiers
-    REORDERED = 3  # Same code units in different order
-    SEMANTIC = 4  # Semantically equivalent (for↔while, etc.)
+    NONE = 0
+    EXACT = 1
+    RENAMED = 2
+    REORDERED = 3
+    SEMANTIC = 4
 
 
 PLAGIARISM_TYPE_LABELS = {
@@ -26,17 +26,72 @@ PLAGIARISM_TYPE_LABELS = {
 }
 
 
+@dataclass(frozen=True)
+class Point:
+    """Zero-indexed position in source code."""
+
+    line: int
+    col: int
+
+
+@dataclass(frozen=True)
+class Region:
+    """Rectangular span of source code."""
+
+    start: Point
+    end: Point
+
+    @property
+    def line_count(self) -> int:
+        return self.end.line - self.start.line + 1
+
+
+class SourceRegion(TypedDict):
+    """Typed dict for match region coordinates."""
+
+    start_line: int
+    start_col: int
+    end_line: int
+    end_col: int
+
+
 @dataclass
 class Match:
     """A matching region between two files."""
 
-    file1: dict[str, Any]  # {'start_line', 'start_col', 'end_line', 'end_col'}
-    file2: dict[str, Any]
+    file1: SourceRegion
+    file2: SourceRegion
     kgram_count: int
     plagiarism_type: int = PlagiarismType.EXACT
     similarity: float = 1.0
-    details: dict[str, Any] | None = None
+    details: dict | None = None
     description: str | None = None
+
+    # New-style Region-based access
+    @property
+    def file1_region(self) -> Region:
+        return Region(
+            start=Point(line=self.file1["start_line"], col=self.file1["start_col"]),
+            end=Point(line=self.file1["end_line"], col=self.file1["end_col"]),
+        )
+
+    @property
+    def file2_region(self) -> Region:
+        return Region(
+            start=Point(line=self.file2["start_line"], col=self.file2["start_col"]),
+            end=Point(line=self.file2["end_line"], col=self.file2["end_col"]),
+        )
+
+
+@dataclass
+class FunctionInfo:
+    """Extracted function with structural and semantic hashes."""
+
+    name: str
+    qualified_name: str
+    region: Region
+    structural_hash: int
+    semantic_hash: int
 
 
 @dataclass

@@ -6,10 +6,12 @@ Uses the multi-level plagiarism detector to classify matches by type
 """
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from .ast_hash import ast_similarity as compute_ast_similarity
 from .ast_hash import extract_ast_hashes, hash_ast_subtrees
+from .fingerprinting.parser import parse_string_once
 from .models import (
     AnalysisResult,
     SimilarityMetrics,
@@ -28,16 +30,13 @@ class Analyzer:
     and optional details (renames, transformations).
     """
 
-    def __init__(self):
-        pass
-
     def analyze_sources(
         self,
         source1: str,
         source2: str,
         language: str = "python",
-        file1_path: str = None,
-        file2_path: str = None,
+        file1_path: str = "",
+        file2_path: str = "",
     ) -> AnalysisResult:
         """
         Analyze plagiarism given source code strings.
@@ -63,10 +62,8 @@ class Analyzer:
 
         # Compute AST hashes directly from source strings
         try:
-            from .canonicalizer import parse_file_once_from_string
-
-            tree1, bytes1 = parse_file_once_from_string(source1, language)
-            tree2, bytes2 = parse_file_once_from_string(source2, language)
+            tree1, bytes1 = parse_string_once(source1, language)
+            tree2, bytes2 = parse_string_once(source2, language)
             ast1 = hash_ast_subtrees(tree1.root_node)
             ast2 = hash_ast_subtrees(tree2.root_node)
         except Exception:
@@ -103,8 +100,8 @@ class Analyzer:
             similarity_ratio=ast_sim,
             matches=matches,
             metrics=metrics,
-            file1_path=file1_path or "",
-            file2_path=file2_path or "",
+            file1_path=file1_path,
+            file2_path=file2_path,
             language=language,
         )
 
@@ -141,9 +138,7 @@ class Analyzer:
         file2_path: str,
         file1_hash: str,
         file2_hash: str,
-        get_fingerprints,  # Unused, kept for API compatibility
-        get_ast_hashes,  # Callable[[str], List[int] | None]
-        cache_fingerprints,  # Unused, kept for API compatibility
+        get_ast_hashes: Callable[[str], list[int] | None],
         language: str = "python",
     ) -> tuple[float, list[dict[str, Any]], dict[str, Any]]:
         """
@@ -152,9 +147,7 @@ class Analyzer:
         Args:
             file1_path, file2_path: File paths
             file1_hash, file2_hash: File content hashes
-            get_fingerprints: Unused (kept for API compat)
             get_ast_hashes: Function to get AST hashes from cache
-            cache_fingerprints: Unused (kept for API compat)
             language: Programming language
 
         Returns:

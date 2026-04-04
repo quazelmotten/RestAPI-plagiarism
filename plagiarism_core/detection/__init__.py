@@ -1,70 +1,55 @@
-"""
-Multi-level plagiarism detector.
+"""Detection module — split from monolithic plagiarism_detector.py."""
 
-Runs a cascade of matching strategies, each progressively more abstract:
-  Level 1 – Exact line matching           → Type 1 (exact copy)
-  Level 2 – Identifier-normalized lines   → Type 2 (renamed)
-  Level 3 – Function structural matching  → Type 3 (reordered) / Type 2
-  Level 4 – Semantic canonicalization     → Type 4 (semantic equivalent)
-
-Each match carries a plagiarism_type, similarity score, and optional details
-(renames detected, transformations applied, etc.).
-
-This module re-exports all symbols from the detection subpackage for
-backward compatibility.
-"""
-
-from .detection import (
+from .ast_helpers import (
     _CLASS_NODE_TYPES,
     _FUNCTION_NODE_TYPES,
-    _LANGUAGE_KEYWORDS,
-    _covered_lines,
+    _extract_functions,
+    _extract_main_block,
+    _extract_name,
+    _FilteredNode,
+    _hash_ast_subtree,
+    _hash_ast_subtree_semantic,
+    _is_main_block,
+    _strip_self_from_params,
+)
+from .body_signatures import (
     _extract_body_signature,
     _extract_comprehension_parts,
     _extract_comprehension_pattern,
     _extract_conditional_assign_signature,
     _extract_dict_pattern,
-    _extract_functions,
     _extract_lbyl_signature,
-    _extract_line_renames,
     _extract_loop_append_pattern,
-    _extract_main_block,
     _extract_map_lambda_parts,
-    _extract_name,
     _extract_nested_if_signature,
     _extract_return_chain_signature,
     _extract_return_value,
     _extract_ternary_signature,
     _extract_try_signature,
     _extract_tuple_return_signature,
-    _FilteredNode,
-    _function_level_matches,
-    _get_keywords_for_language,
-    _hash_ast_subtree,
-    _hash_ast_subtree_semantic,
-    _is_main_block,
-    _line_hash,
-    _line_level_matches,
-    _make_exact_lines,
-    _make_shadow_lines,
-    _merge_matches,
-    _semantic_function_matches,
-    _semantic_line_matches,
-    _strip_comments,
-    _strip_self_from_params,
-    detect_plagiarism,
-    detect_plagiarism_from_files,
 )
+from .function_matcher import _function_level_matches
+from .keywords import _LANGUAGE_KEYWORDS, _get_keywords_for_language
+from .line_helpers import _line_hash, _make_exact_lines, _make_shadow_lines, _strip_comments
+from .line_matcher import _extract_line_renames, _line_level_matches
+from .merge_helpers import _covered_lines, _merge_matches
+from .pipeline import detect_plagiarism, detect_plagiarism_from_files
+from .semantic_function_matcher import _semantic_function_matches
+from .semantic_line_matcher import _semantic_line_matches
 
 __all__ = [
+    # Pipeline
     "detect_plagiarism",
     "detect_plagiarism_from_files",
+    # Line helpers
     "_strip_comments",
     "_make_shadow_lines",
     "_make_exact_lines",
     "_line_hash",
+    # Line matcher
     "_line_level_matches",
     "_extract_line_renames",
+    # AST helpers
     "_FilteredNode",
     "_strip_self_from_params",
     "_hash_ast_subtree",
@@ -75,11 +60,16 @@ __all__ = [
     "_extract_functions",
     "_is_main_block",
     "_extract_main_block",
+    # Function matcher
     "_function_level_matches",
+    # Semantic line matcher
     "_semantic_line_matches",
+    # Semantic function matcher
     "_semantic_function_matches",
+    # Merge helpers
     "_merge_matches",
     "_covered_lines",
+    # Body signatures
     "_extract_comprehension_pattern",
     "_extract_comprehension_parts",
     "_extract_loop_append_pattern",
@@ -94,6 +84,7 @@ __all__ = [
     "_extract_dict_pattern",
     "_extract_try_signature",
     "_extract_lbyl_signature",
+    # Keywords
     "_LANGUAGE_KEYWORDS",
     "_get_keywords_for_language",
 ]
