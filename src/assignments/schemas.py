@@ -37,6 +37,7 @@ class AssignmentFullResponse(CustomBaseModel):
     files_count: int = 0
     tasks: list[TaskListResponse] = []
     files: list[FileInfo] = []
+    total_files: int = 0
     results: list[ResultItem] = []
     total_pairs: int = 0
     total_results: int = 0

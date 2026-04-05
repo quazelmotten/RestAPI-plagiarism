@@ -38,12 +38,16 @@ class AssignmentService:
         task_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        file_limit: int = 50,
+        file_offset: int = 0,
     ) -> AssignmentFullResponse | None:
         return await self.repo.get_assignment_full(
             assignment_id=assignment_id,
             task_id=task_id,
             limit=limit,
             offset=offset,
+            file_limit=file_limit,
+            file_offset=file_offset,
         )
 
     async def get_all_assignments(self, limit: int = 50, offset: int = 0) -> PaginatedResponse:

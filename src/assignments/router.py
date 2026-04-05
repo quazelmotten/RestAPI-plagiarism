@@ -114,6 +114,8 @@ async def get_assignment_full(
     task_id: str | None = Query(default=None, description="Filter results to a specific task"),
     limit: int = Query(default=50, ge=1, le=500, description="Number of results to return"),
     offset: int = Query(default=0, ge=0, description="Number of results to skip"),
+    file_limit: int = Query(default=50, ge=1, le=500, description="Number of files to return"),
+    file_offset: int = Query(default=0, ge=0, description="Number of files to skip"),
 ):
     """Get full assignment details with aggregated results across all tasks."""
     result = await assignment_service.get_assignment_full(
@@ -121,6 +123,8 @@ async def get_assignment_full(
         task_id=task_id,
         limit=limit,
         offset=offset,
+        file_limit=file_limit,
+        file_offset=file_offset,
     )
     if not result:
         raise NotFoundError("Assignment not found")

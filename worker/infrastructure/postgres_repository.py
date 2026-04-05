@@ -12,7 +12,6 @@ from typing import Any
 from shared.interfaces import TaskRepository
 from shared.models import File, PlagiarismTask, SimilarityResult
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError
 
 from worker.database import get_session
 
@@ -165,6 +164,8 @@ class PostgresRepository(TaskRepository):
                     page_size=5000,
                 )
                 session.commit()
+                self._update_file_max_similarity(cursor, results)
+                session.commit()
             except Exception:
                 session.rollback()
                 logger.debug(
@@ -196,6 +197,35 @@ class PostgresRepository(TaskRepository):
                             r["file_b_id"],
                         )
                 session.commit()
+                self._update_file_max_similarity(cursor, results)
+                session.commit()
+
+    def _update_file_max_similarity(self, cursor, results: list[dict[str, Any]]) -> None:
+        """Update cached max_similarity on files affected by the inserted results."""
+        file_ids = set()
+        for r in results:
+            file_ids.add(r["file_a_id"])
+            file_ids.add(r["file_b_id"])
+        if not file_ids:
+            return
+
+        file_ids_list = ",".join(f"'{fid}'" for fid in file_ids)
+        cursor.execute(f"""
+            UPDATE files
+            SET max_similarity = sub.max_sim
+            FROM (
+                SELECT f.id, GREATEST(
+                    COALESCE(f.max_similarity, 0),
+                    COALESCE(MAX(sr.ast_similarity), 0)
+                ) AS max_sim
+                FROM files f
+                LEFT JOIN similarity_results sr
+                    ON (sr.file_a_id = f.id OR sr.file_b_id = f.id)
+                WHERE f.id IN ({file_ids_list})
+                GROUP BY f.id
+            ) sub
+            WHERE files.id = sub.id
+        """)
 
     def get_max_similarity(self, task_id: str) -> float:
         """Get maximum similarity score for a task."""

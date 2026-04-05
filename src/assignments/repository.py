@@ -53,6 +53,8 @@ class AssignmentRepository:
         task_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        file_limit: int = 50,
+        file_offset: int = 0,
     ) -> AssignmentFullResponse | None:
         """Get full assignment details with all tasks, files, results, and stats."""
         assignment = await self.db.get(Assignment, assignment_id)
@@ -82,6 +84,8 @@ class AssignmentRepository:
             task_id=task_id,
             limit=limit,
             offset=offset,
+            file_limit=file_limit,
+            file_offset=file_offset,
         )
 
         if agg_data is None:
@@ -94,6 +98,7 @@ class AssignmentRepository:
                 files_count=files_count,
                 tasks=[],
                 files=[],
+                total_files=0,
                 results=[],
                 total_pairs=0,
                 total_results=0,
@@ -109,6 +114,7 @@ class AssignmentRepository:
             files_count=files_count,
             tasks=agg_data["tasks"],
             files=agg_data["files"],
+            total_files=agg_data["total_files"],
             results=agg_data["results"],
             total_pairs=agg_data["total_pairs"],
             total_results=agg_data["total_results"],

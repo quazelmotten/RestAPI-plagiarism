@@ -217,10 +217,12 @@ class ResultRepository:
         task_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        file_limit: int = 50,
+        file_offset: int = 0,
     ) -> dict:
         """Get similarity results for an assignment, optionally filtered by task_id.
 
-        Returns paginated results, all files, all tasks, total pairs, and stats.
+        Returns paginated results, paginated files, all tasks, total pairs, and stats.
         """
         assignment_uuid = uuid.UUID(assignment_id)
 
@@ -239,61 +241,36 @@ class ResultRepository:
         # Collect all task IDs for assignment (used for filtering similarity queries)
         all_task_ids = [t.id for t in all_tasks]
 
-        # Get all files across all tasks in the assignment (without max_sim)
-        all_files_query = (
-            select(File.id, File.filename, File.task_id)
+        # Count total files
+        total_files_result = await self.db.execute(
+            select(func.count()).select_from(File).where(File.task_id.in_(all_task_ids))
+        )
+        total_files = total_files_result.scalar_one() or 0
+
+        # Get per-task file counts (needed for task response, not affected by pagination)
+        task_file_counts_result = await self.db.execute(
+            select(File.task_id, func.count())
+            .where(File.task_id.in_(all_task_ids))
+            .group_by(File.task_id)
+        )
+        task_file_counts = {str(row.task_id): row.count for row in task_file_counts_result.all()}
+
+        # Build a full file_id -> filename map for results display (lightweight, no max_similarity)
+        all_files_map_result = await self.db.execute(
+            select(File.id, File.filename).where(File.task_id.in_(all_task_ids))
+        )
+        all_files_map = {str(row.id): row.filename for row in all_files_map_result.all()}
+
+        # Get paginated files with cached max_similarity (no expensive subqueries)
+        files_query = (
+            select(File.id, File.filename, File.task_id, File.max_similarity)
             .where(File.task_id.in_(all_task_ids))
             .order_by(File.filename)
+            .limit(file_limit)
+            .offset(file_offset)
         )
-        all_files_result = await self.db.execute(all_files_query)
-        all_files_rows = all_files_result.all()
-
-        # Build file map, file_ids list, and task_file_counts
-        file_map = {}
-        file_ids = []
-        task_file_counts = {}
-        for row in all_files_rows:
-            file_id_str = str(row.id)
-            file_map[file_id_str] = row.filename
-            file_ids.append(row.id)
-            task_id_str = str(row.task_id)
-            task_file_counts[task_id_str] = task_file_counts.get(task_id_str, 0) + 1
-
-        # Compute max similarity per file using two subqueries (as file_a and as file_b)
-        file_max_sim = {}
-        if file_ids:
-            max_sim_subq_a = (
-                select(
-                    SimilarityResult.file_a_id.label("fid"),
-                    func.max(SimilarityResult.ast_similarity).label("max_sim"),
-                )
-                .where(SimilarityResult.task_id.in_(all_task_ids))
-                .group_by(SimilarityResult.file_a_id)
-                .subquery()
-            )
-            max_sim_subq_b = (
-                select(
-                    SimilarityResult.file_b_id.label("fid"),
-                    func.max(SimilarityResult.ast_similarity).label("max_sim"),
-                )
-                .where(SimilarityResult.task_id.in_(all_task_ids))
-                .group_by(SimilarityResult.file_b_id)
-                .subquery()
-            )
-            max_sim_q = (
-                select(
-                    File.id,
-                    func.greatest(
-                        func.coalesce(max_sim_subq_a.c.max_sim, 0),
-                        func.coalesce(max_sim_subq_b.c.max_sim, 0),
-                    ).label("max_sim"),
-                )
-                .outerjoin(max_sim_subq_a, File.id == max_sim_subq_a.c.fid)
-                .outerjoin(max_sim_subq_b, File.id == max_sim_subq_b.c.fid)
-                .where(File.id.in_(file_ids))
-            )
-            max_sim_result = await self.db.execute(max_sim_q)
-            file_max_sim = {str(row.id): float(row.max_sim or 0) for row in max_sim_result.all()}
+        files_result = await self.db.execute(files_query)
+        files_rows = files_result.all()
 
         # Determine which task_ids to filter results by
         if task_id:
@@ -320,11 +297,11 @@ class ResultRepository:
             ResultItem(
                 file_a={
                     "id": str(r.file_a_id),
-                    "filename": file_map.get(str(r.file_a_id), "Unknown"),
+                    "filename": all_files_map.get(str(r.file_a_id), "Unknown"),
                 },
                 file_b={
                     "id": str(r.file_b_id),
-                    "filename": file_map.get(str(r.file_b_id), "Unknown"),
+                    "filename": all_files_map.get(str(r.file_b_id), "Unknown"),
                 },
                 ast_similarity=r.ast_similarity,
                 matches=r.matches or [],
@@ -420,7 +397,6 @@ class ResultRepository:
                 overall_high = sum(stats["high"] for stats in filtered_aggregates)
                 overall_medium = sum(stats["medium"] for stats in filtered_aggregates)
                 overall_low = sum(stats["low"] for stats in filtered_aggregates)
-                overall_null = sum(stats["null_count"] for stats in filtered_aggregates)
                 overall_stats = {
                     "avg_similarity": overall_avg,
                     "high": overall_high,
@@ -442,10 +418,11 @@ class ResultRepository:
                     id=str(row.id),
                     filename=row.filename,
                     task_id=str(row.task_id),
-                    max_similarity=file_max_sim.get(str(row.id), 0.0),
+                    max_similarity=float(row.max_similarity or 0.0),
                 )
-                for row in all_files_rows
+                for row in files_rows
             ],
+            "total_files": total_files,
             "results": formatted_results,
             "total_pairs": total_pairs_count,
             "total_results": total_results,

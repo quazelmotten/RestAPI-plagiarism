@@ -159,6 +159,7 @@ export interface AssignmentFullResponse {
   files_count: number;
   tasks: TaskListItem[];
   files: AssignmentFullFile[];
+  total_files: number;
   results: PlagiarismResult[];
   total_pairs: number;
   total_results: number;

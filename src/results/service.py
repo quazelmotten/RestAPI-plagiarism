@@ -35,6 +35,19 @@ class ResultService:
     async def get_file_pair(self, file_a_id: str, file_b_id: str) -> ResultItem | None:
         return await self.repo.get_file_pair(file_a_id, file_b_id)
 
+    async def _update_file_max_similarity(
+        self, file_a_id: str, file_b_id: str, new_similarity: float
+    ) -> None:
+        """Update cached max_similarity on both files after a new/updated result."""
+        for fid in (file_a_id, file_b_id):
+            file_result = await self.db.execute(select(FileModel).where(FileModel.id == fid))
+            file_model = file_result.scalar_one_or_none()
+            if file_model:
+                current_max = file_model.max_similarity or 0.0
+                if new_similarity > current_max:
+                    file_model.max_similarity = new_similarity
+        await self.db.commit()
+
     async def get_task_histogram(self, task_id: str, bins: int = 200) -> dict:
         return await self.repo.get_task_histogram(task_id, bins)
 
@@ -97,6 +110,8 @@ class ResultService:
 
         await self.db.commit()
         await self.db.refresh(sr)
+
+        await self._update_file_max_similarity(file_a_id, file_b_id, result["similarity_ratio"])
 
         now = datetime.now(UTC).isoformat()
         return ResultItem(

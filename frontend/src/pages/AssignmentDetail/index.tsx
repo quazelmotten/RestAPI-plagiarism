@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
@@ -33,11 +33,9 @@ import {
   ModalBody,
   ModalCloseButton,
   useDisclosure,
-  Input,
   InputGroup,
   InputLeftElement,
-  Skeleton,
-  SkeletonText,
+  Input,
 } from '@chakra-ui/react';
 import {
   FiChevronRight,
@@ -60,7 +58,7 @@ import {
 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../../services/api';
-import type { AssignmentFullResponse, PlagiarismResult } from '../../types';
+import type { AssignmentFullResponse, PlagiarismResult, AssignmentFullFile } from '../../types';
 import { getSimilarityColor, getStatusColorScheme } from '../../utils/statusColors';
 import TaskProgress from '../../components/Results/TaskProgress';
 import SimilarityDistribution from '../../components/Results/SimilarityDistribution';
@@ -129,8 +127,12 @@ const AssignmentDetail: React.FC = () => {
   const [resultsSearch, setResultsSearch] = useState('');
   const [similarityFilter, setSimilarityFilter] = useState<string>('all');
   const [pairsPage, setPairsPage] = useState(0);
+  const [pairsGoPage, setPairsGoPage] = useState('');
 
   // Files tab
+  const [filesPage, setFilesPage] = useState(0);
+  const [filesGoPage, setFilesGoPage] = useState('');
+  const FILES_PER_PAGE = 50;
   const [fileFilterName, setFileFilterName] = useState('');
   const [fileFilterTask, setFileFilterTask] = useState('');
   const [fileSortCol, setFileSortCol] = useState<'filename' | 'task_id' | 'max_similarity'>('filename');
@@ -154,19 +156,68 @@ const AssignmentDetail: React.FC = () => {
   const [fileContent, setFileContent] = useState<string>('');
   const [loadingFileContent, setLoadingFileContent] = useState(false);
 
-  // Fetch full assignment data (server-side paginated results)
+  // Fetch full assignment data (server-side paginated results and files)
   const { data: assignmentData, isLoading, refetch, isFetching } = useQuery<AssignmentFullResponse>({
-    queryKey: ['assignmentFull', assignmentId, selectedTaskId, pairsPage],
+    queryKey: ['assignmentFull', assignmentId, selectedTaskId, pairsPage, filesPage],
     queryFn: async () => {
       const params: Record<string, string> = {};
       if (selectedTaskId) params.task_id = selectedTaskId;
       params.limit = String(PAIRS_PER_PAGE);
       params.offset = String(pairsPage * PAIRS_PER_PAGE);
+      params.file_limit = String(FILES_PER_PAGE);
+      params.file_offset = String(filesPage * FILES_PER_PAGE);
       const res = await api.get<AssignmentFullResponse>(API_ENDPOINTS.ASSIGNMENT_FULL(assignmentId!), { params });
       return res.data;
     },
     enabled: !!assignmentId,
   });
+
+  // Files are server-paginated, with client-side filter/sort on the current page
+  const displayedFiles = useMemo((): AssignmentFullFile[] => {
+    const files = assignmentData?.files ?? [];
+    let result = [...files];
+    if (fileFilterName.trim()) {
+      const q = fileFilterName.toLowerCase();
+      result = result.filter(f => f.filename.toLowerCase().includes(q));
+    }
+    if (fileFilterTask) result = result.filter(f => f.task_id === fileFilterTask);
+    result.sort((a, b) => {
+      if (fileSortCol === 'max_similarity') {
+        const aVal = a.max_similarity ?? 0;
+        const bVal = b.max_similarity ?? 0;
+        return fileSortDir === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      const aVal = (a[fileSortCol] || '') as string;
+      const bVal = (b[fileSortCol] || '') as string;
+      const cmp = aVal.localeCompare(bVal);
+      return fileSortDir === 'asc' ? cmp : -cmp;
+    });
+    return result;
+  }, [assignmentData?.files, fileFilterName, fileFilterTask, fileSortCol, fileSortDir]);
+
+  const totalFiles = assignmentData?.total_files ?? 0;
+  const totalFilePages = Math.max(1, Math.ceil(totalFiles / FILES_PER_PAGE));
+
+  const handleFileSort = (col: 'filename' | 'task_id' | 'max_similarity') => {
+    if (fileSortCol === col) setFileSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setFileSortCol(col); setFileSortDir('asc'); }
+  };
+
+  const handlePairsGoToPage = () => {
+    const pageNum = parseInt(pairsGoPage, 10);
+    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
+      setPairsPage(pageNum - 1);
+      setPairsGoPage('');
+    }
+  };
+
+  const handleFilesGoToPage = () => {
+    const pageNum = parseInt(filesGoPage, 10);
+    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalFilePages) {
+      setFilesPage(pageNum - 1);
+      setFilesGoPage('');
+    }
+  };
 
   const activeTask = assignmentData?.tasks.find(t => ACTIVE_STATUSES.includes(t.status));
   const isProcessing = !!activeTask;
@@ -197,7 +248,7 @@ const AssignmentDetail: React.FC = () => {
   }, [resizingCol, resizeStartX, resizeStartW]);
 
   // Reset page when task changes
-  React.useEffect(() => { setPairsPage(0); }, [selectedTaskId]);
+  React.useEffect(() => { setPairsPage(0); setFilesPage(0); }, [selectedTaskId]);
 
   // Upload
   const onDrop = useCallback(
@@ -344,37 +395,10 @@ const AssignmentDetail: React.FC = () => {
     );
   }
 
-  const aggFilesCount = assignmentData.files.length;
+  const aggFilesCount = totalFiles;
   const aggHighCount = stats.high;
   const aggAvgSim = stats.avg;
   const selectedTask = selectedTaskId ? assignmentData.tasks.find(t => t.task_id === selectedTaskId) : null;
-
-  // Filtered files
-  const filteredFiles = (() => {
-    let result = [...assignmentData.files];
-    if (fileFilterName.trim()) {
-      const q = fileFilterName.toLowerCase();
-      result = result.filter(f => f.filename.toLowerCase().includes(q));
-    }
-    if (fileFilterTask) result = result.filter(f => f.task_id === fileFilterTask);
-    result.sort((a, b) => {
-      if (fileSortCol === 'max_similarity') {
-        const aVal = a.max_similarity ?? 0;
-        const bVal = b.max_similarity ?? 0;
-        return fileSortDir === 'asc' ? aVal - bVal : bVal - aVal;
-      }
-      const aVal = (a[fileSortCol] || '') as string;
-      const bVal = (b[fileSortCol] || '') as string;
-      const cmp = aVal.localeCompare(bVal);
-      return fileSortDir === 'asc' ? cmp : -cmp;
-    });
-    return result;
-  })();
-
-  const handleSort = (col: 'filename' | 'task_id' | 'max_similarity') => {
-    if (fileSortCol === col) setFileSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setFileSortCol(col); setFileSortDir('asc'); }
-  };
 
   const tabLabels = [
     t('results:resultsList.topSimilarities'),
@@ -637,7 +661,7 @@ const AssignmentDetail: React.FC = () => {
               <HStack spacing={1}>
                 <Icon as={FiFileText} boxSize={3} />
                 <Text>Files</Text>
-                <Badge size="sm" colorScheme="gray">{assignmentData.files.length}</Badge>
+                <Badge size="sm" colorScheme="gray">{totalFiles}</Badge>
               </HStack>
             </Button>
           </HStack>
@@ -741,6 +765,19 @@ const AssignmentDetail: React.FC = () => {
                     isDisabled={pairsPage >= totalPages - 1 || isFetching}
                     onClick={() => setPairsPage(totalPages - 1)}
                   />
+                  <HStack spacing={1} ml={2}>
+                    <Input
+                      size="xs"
+                      w="60px"
+                      placeholder="Go to..."
+                      value={pairsGoPage}
+                      onChange={(e) => setPairsGoPage(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handlePairsGoToPage(); }}
+                    />
+                    <Button size="xs" onClick={handlePairsGoToPage} isDisabled={!pairsGoPage || isFetching}>
+                      Go
+                    </Button>
+                  </HStack>
                 </HStack>
               </Box>
             )}
@@ -762,18 +799,18 @@ const AssignmentDetail: React.FC = () => {
             {/* Files */}
             {activeTab === 2 && (
               <Box flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
-                <HStack spacing={3} mb={3} flexShrink={0}>
+                <HStack spacing={3} mb={3} flexShrink={0} flexWrap="wrap">
                   <InputGroup size="sm" maxW="250px">
                     <InputLeftElement pointerEvents="none"><Icon as={FiSearch} color={mutedColor} /></InputLeftElement>
                     <Input placeholder="Filter by filename..." value={fileFilterName} onChange={(e) => setFileFilterName(e.target.value)} />
                   </InputGroup>
-                  <Select size="sm" w="180px" value={fileFilterTask} onChange={(e) => setFileFilterTask(e.target.value)}>
+                  <Select size="sm" w="180px" value={fileFilterTask} onChange={(e) => { setFileFilterTask(e.target.value); setFilesPage(0); }}>
                     <option value="">All tasks</option>
                     {assignmentData.tasks.map((task) => (
                       <option key={task.task_id} value={task.task_id}>{task.task_id.substring(0, 8)}...</option>
                     ))}
                   </Select>
-                  <Text fontSize="xs" color={mutedColor}>{filteredFiles.length} files</Text>
+                  <Text fontSize="xs" color={mutedColor}>{totalFiles} files</Text>
                 </HStack>
 
                 <Box flex={1} overflowY="auto">
@@ -787,21 +824,21 @@ const AssignmentDetail: React.FC = () => {
                       </colgroup>
                       <Thead position="sticky" top={0} bg={cardBg} zIndex={1}>
                         <Tr>
-                          <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleSort('filename')} pr="20px">
+                          <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('filename')} pr="20px">
                             <HStack spacing={1}>
                               <Text as="span">Filename</Text>
                               {fileSortCol === 'filename' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
                             </HStack>
                             {renderResizeHandle('filename')}
                           </Th>
-                          <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleSort('task_id')} pr="20px">
+                          <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('task_id')} pr="20px">
                             <HStack spacing={1}>
                               <Text as="span">Task</Text>
                               {fileSortCol === 'task_id' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
                             </HStack>
                             {renderResizeHandle('task')}
                           </Th>
-                          <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleSort('max_similarity')} pr="20px">
+                          <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('max_similarity')} pr="20px">
                             <HStack spacing={1}>
                               <Text as="span">Max Sim</Text>
                               {fileSortCol === 'max_similarity' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
@@ -812,7 +849,7 @@ const AssignmentDetail: React.FC = () => {
                         </Tr>
                       </Thead>
                       <Tbody>
-                        {filteredFiles.map((file) => (
+                        {displayedFiles.map((file) => (
                           <Tr key={file.id} _hover={{ bg: hoverBg }}>
                             <Td fontSize="sm" fontWeight="medium" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{file.filename}</Td>
                             <Td fontSize="xs" fontFamily="monospace" color={mutedColor}>
@@ -831,10 +868,37 @@ const AssignmentDetail: React.FC = () => {
                       </Tbody>
                     </Table>
                   </TableContainer>
-                  {filteredFiles.length === 0 && (
+                  {displayedFiles.length === 0 && (
                     <Box textAlign="center" py={8} color={mutedColor}><Text>No files in this assignment</Text></Box>
                   )}
                 </Box>
+
+                {totalFilePages > 1 && (
+                  <HStack spacing={2} mt={3} flexShrink={0} justifyContent="center">
+                    <Button size="xs" leftIcon={<FiChevronLeft />} onClick={() => setFilesPage(p => Math.max(0, p - 1))} isDisabled={filesPage === 0}>
+                      Previous
+                    </Button>
+                    <Text fontSize="xs" color={mutedColor}>
+                      Page {filesPage + 1} of {totalFilePages}
+                    </Text>
+                    <Button size="xs" rightIcon={<FiChevronRight />} onClick={() => setFilesPage(p => Math.min(totalFilePages - 1, p + 1))} isDisabled={filesPage >= totalFilePages - 1}>
+                      Next
+                    </Button>
+                    <HStack spacing={1} ml={2}>
+                      <Input
+                        size="xs"
+                        w="60px"
+                        placeholder="Go to..."
+                        value={filesGoPage}
+                        onChange={(e) => setFilesGoPage(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleFilesGoToPage(); }}
+                      />
+                      <Button size="xs" onClick={handleFilesGoToPage} isDisabled={!filesGoPage}>
+                        Go
+                      </Button>
+                    </HStack>
+                  </HStack>
+                )}
               </Box>
             )}
           </Box>
