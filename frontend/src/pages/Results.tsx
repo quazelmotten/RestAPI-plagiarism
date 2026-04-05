@@ -52,32 +52,37 @@ const getStatusIcon = (status: string) => {
     case 'finding_cross_pairs':
       return <FiLayers color="#805ad5" />;
     default:
-      return <FiLayers color="#a0aec0" />;
+       return <FiLayers color="#a0aec0" />;
   }
 };
+
+const ACTIVE_STATUSES = ['pending', 'queued', 'indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'];
 
 const Results: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation(['results', 'common', 'status']);
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [isTaskPickerOpen, setIsTaskPickerOpen] = useState(false);
+  const userSelectedRef = React.useRef(false);
 
 
-  const { data: tasksData, isLoading: loadingTasks, refetch: refetchTasks } = useTasksList();
+  const { data: tasksData, isLoading: loadingTasks, isFetching: isRefetchingTasks, refetch: refetchTasks } = useTasksList();
   const tasks = tasksData?.items ?? [];
 
-  const { data: selectedTaskDetails, isLoading: loadingTaskDetails } = useTaskDetails(selectedTaskId || undefined);
+  const { data: selectedTaskDetails, isLoading: loadingTaskDetails, isFetching: isRefetchingDetails } = useTaskDetails(selectedTaskId || undefined);
 
   useEffect(() => {
     if (tasks.length > 0) {
       const currentExists = tasks.find(t => t.task_id === selectedTaskId);
       if (!selectedTaskId || !currentExists) {
-        setSelectedTaskId(tasks[0].task_id);
+        userSelectedRef.current = false;
+        const activeTask = tasks.find(t => ACTIVE_STATUSES.includes(t.status));
+        setSelectedTaskId(activeTask ? activeTask.task_id : tasks[0].task_id);
       }
     } else {
       setSelectedTaskId('');
     }
-  }, [tasks, selectedTaskId]);
+  }, [tasks]);
 
   const selectedTaskListItem = tasks.find(t => t.task_id === selectedTaskId);
   const selectedTask = selectedTaskDetails;
@@ -185,14 +190,14 @@ const Results: React.FC = () => {
                     {selectedTaskListItem && ['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(selectedTaskListItem.status) && (
                        <Spinner size="sm" color="orange.500" speed="0.8s" />
                     )}
-                    <Button
-                      size="sm"
-                      leftIcon={<FiRefreshCw />}
-                      onClick={handleRefresh}
-                      isLoading={loadingTasks}
-                    >
-                      {t('common:refresh')}
-                    </Button>
+                     <Button
+                       size="sm"
+                       leftIcon={<FiRefreshCw />}
+                       onClick={handleRefresh}
+                       isLoading={isRefetchingTasks}
+                     >
+                       {t('common:refresh')}
+                     </Button>
                  </HStack>
 
 

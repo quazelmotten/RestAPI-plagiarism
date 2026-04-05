@@ -55,6 +55,7 @@ import {
   FiChevronDown,
   FiChevronUp,
   FiChevronLeft,
+  FiList,
 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../../services/api';

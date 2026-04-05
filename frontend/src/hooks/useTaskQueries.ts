@@ -6,6 +6,8 @@ interface TasksListResponse {
   items: TaskListItem[];
 }
 
+const ACTIVE_STATUSES = ['pending', 'queued', 'indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'];
+
 export function useTasksList() {
   return useQuery<TasksListResponse>({
     queryKey: ['tasks', 'list'],
@@ -22,8 +24,13 @@ export function useTasksList() {
       });
       return { items: taskList };
     },
-    staleTime: 30_000,
+    staleTime: 10_000,
     gcTime: 5 * 60_000,
+    refetchInterval: (query) => {
+      const tasks = query.state.data?.items ?? [];
+      const hasActiveTask = tasks.some(t => ACTIVE_STATUSES.includes(t.status));
+      return hasActiveTask ? 3000 : false;
+    },
   });
 }
 
@@ -51,7 +58,11 @@ export function useTaskDetails(taskId: string | undefined) {
       };
     },
     enabled: !!taskId,
-    staleTime: 30_000,
+    staleTime: 10_000,
     gcTime: 5 * 60_000,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status && ACTIVE_STATUSES.includes(status) ? 3000 : false;
+    },
   });
 }

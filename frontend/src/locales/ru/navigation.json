@@ -13,5 +13,7 @@
   "noAssignments": "Заданий пока нет",
   "newAssignment": "Новое задание",
   "modeAssignments": "По заданиям",
-  "modeClassic": "Классический вид"
+  "modeClassic": "Классический вид",
+  "uncategorized": "Без категории",
+  "viewAllAssignments": "Все задания"
 }

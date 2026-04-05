@@ -13,5 +13,7 @@
   "noAssignments": "No assignments yet",
   "newAssignment": "New Assignment",
   "modeAssignments": "By Assignment",
-  "modeClassic": "Classic View"
+  "modeClassic": "Classic View",
+  "uncategorized": "Uncategorized",
+  "viewAllAssignments": "View All Assignments"
 }

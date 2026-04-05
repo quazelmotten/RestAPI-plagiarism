@@ -7,15 +7,41 @@ from schemas.base import CustomBaseModel
 from tasks.schemas import TaskListResponse
 
 
+class SubjectCreate(CustomBaseModel):
+    name: str
+    description: str | None = None
+
+
+class SubjectResponse(CustomBaseModel):
+    id: str
+    name: str
+    description: str | None = None
+    created_at: str | None = None
+    assignments_count: int = 0
+
+
+class SubjectUpdate(CustomBaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+class SubjectWithAssignments(SubjectResponse):
+    """Subject with nested assignments list."""
+
+    assignments: list["AssignmentResponse"] = []
+
+
 class AssignmentCreate(CustomBaseModel):
     name: str
     description: str | None = None
+    subject_id: str | None = None
 
 
 class AssignmentResponse(CustomBaseModel):
     id: str
     name: str
     description: str | None = None
+    subject_id: str | None = None
     created_at: str | None = None
     tasks_count: int = 0
     files_count: int = 0
@@ -24,6 +50,7 @@ class AssignmentResponse(CustomBaseModel):
 class AssignmentUpdate(CustomBaseModel):
     name: str | None = None
     description: str | None = None
+    subject_id: str | None = None
 
 
 class AssignmentFullResponse(CustomBaseModel):
@@ -32,6 +59,7 @@ class AssignmentFullResponse(CustomBaseModel):
     id: str
     name: str
     description: str | None = None
+    subject_id: str | None = None
     created_at: str | None = None
     tasks_count: int = 0
     files_count: int = 0
@@ -42,3 +70,6 @@ class AssignmentFullResponse(CustomBaseModel):
     total_pairs: int = 0
     total_results: int = 0
     overall_stats: dict | None = None
+
+
+SubjectWithAssignments.model_rebuild()

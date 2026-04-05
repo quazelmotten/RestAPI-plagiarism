@@ -23,6 +23,11 @@ export const API_ENDPOINTS = {
   ASSIGNMENT_HISTOGRAM: (id: string, bins: number, taskId?: string) =>
     `/plagiarism/assignments/${id}/histogram?bins=${bins}${taskId ? `&task_id=${taskId}` : ''}`,
 
+  // Subjects
+  SUBJECTS: '/plagiarism/subjects',
+  SUBJECT_WITH_ASSIGNMENTS: (id: string) => `/plagiarism/subjects/${id}/assignments`,
+  UNCATEGORIZED_ASSIGNMENTS: '/plagiarism/subjects/uncategorized',
+
   // Health & version
   HEALTH: '/health',
   VERSION: '/version',

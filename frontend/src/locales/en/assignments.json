@@ -1,18 +1,28 @@
 {
   "title": "Assignments",
   "newAssignment": "New Assignment",
+  "newSubject": "New Subject",
   "search": "Search assignments...",
   "noAssignments": "No assignments yet",
+  "noAssignmentsInSubject": "No assignments in this subject",
   "createAssignmentPrompt": "Create an assignment to scope your plagiarism checks",
+  "uncategorized": "Uncategorized",
   "modal": {
     "edit": "Edit Assignment",
-    "new": "New Assignment"
+    "new": "New Assignment",
+    "editSubject": "Edit Subject",
+    "newSubject": "New Subject"
   },
   "form": {
     "name": "Name",
     "description": "Description",
+    "subject": "Subject",
+    "subjectName": "Subject Name",
     "namePlaceholder": "e.g., CS101 Homework 3",
-    "descriptionPlaceholder": "Optional description"
+    "descriptionPlaceholder": "Optional description",
+    "selectSubject": "Select a subject",
+    "subjectNamePlaceholder": "e.g., Computer Science",
+    "subjectDescriptionPlaceholder": "Optional subject description"
   },
   "table": {
     "name": "Name",
@@ -33,7 +43,12 @@
     "title": "Delete Assignment",
     "message": "Are you sure you want to delete \"{{name}}\"? Tasks associated with this assignment will not be deleted."
   },
+  "deleteSubjectConfirm": {
+    "title": "Delete Subject",
+    "message": "Are you sure you want to delete \"{{name}}\"? Assignments will remain but become uncategorized."
+  },
   "validation": {
     "nameRequired": "Name is required"
-  }
+  },
+  "viewAllAssignments": "View All Assignments"
 }

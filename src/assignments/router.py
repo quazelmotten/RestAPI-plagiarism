@@ -6,19 +6,29 @@ import logging
 
 from fastapi import APIRouter, Depends, Query, status
 
-from assignments.dependencies import get_assignment_service, valid_assignment_id
+from assignments.dependencies import (
+    get_assignment_service,
+    get_subject_service,
+    valid_assignment_id,
+    valid_subject_id,
+)
 from assignments.schemas import (
     AssignmentCreate,
     AssignmentFullResponse,
     AssignmentResponse,
     AssignmentUpdate,
+    SubjectCreate,
+    SubjectResponse,
+    SubjectUpdate,
+    SubjectWithAssignments,
 )
-from assignments.service import AssignmentService
+from assignments.service import AssignmentService, SubjectService
 from database import get_async_session
 from exceptions.exceptions import NotFoundError
 from schemas.common import PaginatedResponse
 
 router = APIRouter(prefix="/plagiarism/assignments", tags=["Assignments"])
+subject_router = APIRouter(prefix="/plagiarism/subjects", tags=["Subjects"])
 logger = logging.getLogger(__name__)
 
 
@@ -242,3 +252,164 @@ async def delete_assignment(
 ):
     """Delete an assignment."""
     await assignment_service.delete_assignment(assignment.id)
+
+
+@subject_router.post(
+    "",
+    response_model=SubjectResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new subject",
+    description="Create a new subject folder for grouping assignments.",
+    responses={
+        status.HTTP_201_CREATED: {
+            "model": SubjectResponse,
+            "description": "Subject created successfully",
+        },
+    },
+)
+async def create_subject(
+    data: SubjectCreate,
+    subject_service: SubjectService = Depends(get_subject_service),
+):
+    """Create a new subject."""
+    return await subject_service.create_subject(data)
+
+
+@subject_router.get(
+    "",
+    summary="List all subjects with nested assignments",
+    description="Retrieve all subjects with their assignments grouped.",
+)
+async def get_subjects_with_assignments(
+    subject_service: SubjectService = Depends(get_subject_service),
+    limit: int = Query(default=50, ge=1, le=500, description="Number of subjects to return"),
+    offset: int = Query(default=0, ge=0, description="Number of subjects to skip"),
+    assignment_limit: int = Query(default=100, ge=1, le=500, description="Assignments per subject"),
+):
+    """Get all subjects with their nested assignments."""
+    subjects = await subject_service.get_all_subjects_with_assignments(
+        limit=limit,
+        offset=offset,
+        assignment_limit=assignment_limit,
+    )
+    return subjects
+
+
+@subject_router.get(
+    "/uncategorized",
+    response_model=list[AssignmentResponse],
+    summary="Get uncategorized assignments",
+    description="Retrieve assignments without a subject.",
+)
+async def get_uncategorized_assignments(
+    subject_service: SubjectService = Depends(get_subject_service),
+    limit: int = Query(default=100, ge=1, le=500, description="Number of assignments to return"),
+    offset: int = Query(default=0, ge=0, description="Number of assignments to skip"),
+):
+    """Get assignments without a subject."""
+    return await subject_service.get_uncategorized_assignments(limit=limit, offset=offset)
+
+
+@subject_router.get(
+    "/{subject_id}",
+    response_model=SubjectResponse,
+    summary="Get subject details",
+    description="Retrieve detailed information about a specific subject.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": SubjectResponse,
+            "description": "Subject found and returned",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Subject with the specified ID does not exist",
+        },
+    },
+)
+async def get_subject(
+    subject: SubjectResponse = Depends(valid_subject_id),
+):
+    """Get subject by ID."""
+    return subject
+
+
+@subject_router.get(
+    "/{subject_id}/assignments",
+    response_model=SubjectWithAssignments,
+    summary="Get subject with assignments",
+    description="Retrieve subject details with its assignments.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": SubjectWithAssignments,
+            "description": "Subject with assignments returned",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Subject not found",
+        },
+    },
+)
+async def get_subject_with_assignments(
+    subject_id: str,
+    subject_service: SubjectService = Depends(get_subject_service),
+    limit: int = Query(default=50, ge=1, le=500, description="Number of assignments to return"),
+    offset: int = Query(default=0, ge=0, description="Number of assignments to skip"),
+):
+    """Get subject with its assignments."""
+    result = await subject_service.get_subject_with_assignments(
+        subject_id=subject_id,
+        limit=limit,
+        offset=offset,
+    )
+    if not result:
+        raise NotFoundError("Subject not found")
+    return result
+
+
+@subject_router.patch(
+    "/{subject_id}",
+    response_model=SubjectResponse,
+    summary="Update a subject",
+    description="Update the name or description of an existing subject.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": SubjectResponse,
+            "description": "Subject updated successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Subject with the specified ID does not exist",
+        },
+    },
+)
+async def update_subject(
+    data: SubjectUpdate,
+    subject: SubjectResponse = Depends(valid_subject_id),
+    subject_service: SubjectService = Depends(get_subject_service),
+):
+    """Update an existing subject."""
+    result = await subject_service.update_subject(subject.id, data)
+    return result
+
+
+@subject_router.delete(
+    "/{subject_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a subject",
+    description="Delete a subject. Assignments will remain but become uncategorized.",
+    responses={
+        status.HTTP_204_NO_CONTENT: {
+            "description": "Subject deleted successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Subject with the specified ID does not exist",
+        },
+    },
+)
+async def delete_subject(
+    subject: SubjectResponse = Depends(valid_subject_id),
+    subject_service: SubjectService = Depends(get_subject_service),
+):
+    """Delete a subject."""
+    await subject_service.delete_subject(subject.id)

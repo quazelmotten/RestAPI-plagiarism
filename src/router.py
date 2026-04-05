@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 # Import and include domain routers
-from assignments.router import router as assignments_router  # noqa: E402
+from assignments.router import router as assignments_router, subject_router  # noqa: E402
 from files.router import router as files_router  # noqa: E402
 from results.router import router as results_router  # noqa: E402
 from tasks.router import router as tasks_router  # noqa: E402
@@ -25,6 +25,7 @@ router.include_router(tasks_router)
 router.include_router(files_router)
 router.include_router(results_router)
 router.include_router(assignments_router)
+router.include_router(subject_router)
 
 
 # WebSocket endpoint lives at the global level since it crosses domains

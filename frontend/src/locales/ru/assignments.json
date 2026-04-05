@@ -1,18 +1,28 @@
 {
   "title": "Задания",
   "newAssignment": "Новое задание",
+  "newSubject": "Новая тема",
   "search": "Поиск заданий...",
   "noAssignments": "Заданий пока нет",
+  "noAssignmentsInSubject": "В этой теме нет заданий",
   "createAssignmentPrompt": "Создайте задание (к примеру, лабораторную работу) для проверки на плагиат",
+  "uncategorized": "Без темы",
   "modal": {
     "edit": "Редактировать задание",
-    "new": "Новое задание"
+    "new": "Новое задание",
+    "editSubject": "Редактировать тему",
+    "newSubject": "Новая тема"
   },
   "form": {
     "name": "Название",
     "description": "Описание",
+    "subject": "Тема",
+    "subjectName": "Название темы",
     "namePlaceholder": "напр., Лаба-3 по Программированию на Python",
-    "descriptionPlaceholder": "Необязательное описание"
+    "descriptionPlaceholder": "Необязательное описание",
+    "selectSubject": "Выберите тему",
+    "subjectNamePlaceholder": "напр., Информатика",
+    "subjectDescriptionPlaceholder": "Необязательное описание темы"
   },
   "table": {
     "name": "Название",
@@ -33,7 +43,12 @@
     "title": "Удалить задание",
     "message": "Вы уверены, что хотите удалить «{{name}}»? Задачи, связанные с этим заданием, не будут удалены."
   },
+  "deleteSubjectConfirm": {
+    "title": "Удалить тему",
+    "message": "Вы уверены, что хотите удалить «{{name}}»? Задания останутся, но станут без темы."
+  },
   "validation": {
     "nameRequired": "Необходимо указать название"
-  }
+  },
+  "viewAllAssignments": "Просмотр всех заданий"
 }

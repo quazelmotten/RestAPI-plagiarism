@@ -186,3 +186,25 @@ export interface HeatmapData {
   threshold: number;
   total_files_in_task: number;
 }
+
+export interface Subject {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string | null;
+  assignments_count: number;
+}
+
+export interface SubjectWithAssignments extends Subject {
+  assignments: Assignment[];
+}
+
+export interface Assignment {
+  id: string;
+  name: string;
+  description: string | null;
+  subject_id: string | null;
+  created_at: string | null;
+  tasks_count: number;
+  files_count: number;
+}

@@ -31,13 +31,31 @@ class SharedBase(DeclarativeBase):
     metadata = metadata
 
 
+class Subject(SharedBase):
+    __tablename__ = "subjects"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationship to assignments
+    assignments: Mapped[list["Assignment"]] = relationship("Assignment", back_populates="subject")
+
+
 class Assignment(SharedBase):
     __tablename__ = "assignments"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    subject_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("subjects.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationship to subject
+    subject: Mapped["Subject | None"] = relationship("Subject", back_populates="assignments")
 
     # Relationship to tasks
     tasks: Mapped[list["PlagiarismTask"]] = relationship(
