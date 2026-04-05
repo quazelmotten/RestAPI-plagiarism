@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   HStack,
   Button,
@@ -25,12 +25,12 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
 }) => {
   const { t } = useTranslation(['submissions', 'common']);
   const { offset, limit, total, totalPages, showingStart, showingEnd } = pagination;
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const currentPage = totalPages > 0 ? Math.floor(offset / limit) + 1 : 0;
 
   const handleGoToPage = () => {
-    const input = document.getElementById('goto-page') as HTMLInputElement;
-    const pageNum = parseInt(input.value, 10);
+    const pageNum = parseInt(inputRef.current?.value || '', 10);
     if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
       const newOffset = (pageNum - 1) * limit;
       onPageChange(newOffset);
@@ -99,7 +99,7 @@ export const PaginationControls: React.FC<PaginationControlsProps> = ({
         </Text>
         <InputGroup size="sm" w="80px">
           <Input
-            id="goto-page"
+            ref={inputRef}
             type="number"
             min={1}
             max={totalPages}

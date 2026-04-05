@@ -28,6 +28,7 @@ import {
 } from 'react-icons/fi';
 import api, { API_ENDPOINTS } from '../services/api';
 import { useViewMode } from '../contexts/ViewModeContext';
+import { SIDEBAR_WIDTH_PX } from '../constants/layout';
 
 const blink = keyframes`
   0%, 50% { opacity: 1; }
@@ -89,7 +90,7 @@ const Sidebar: React.FC = () => {
       pos="fixed"
       left="0"
       h="full"
-      w="250px"
+      w={SIDEBAR_WIDTH_PX}
       bg={bgColor}
       borderRight="1px"
       borderColor={borderColor}

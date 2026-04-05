@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Flex,
@@ -9,42 +9,41 @@ import {
   useColorMode,
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
-import { useMatch, useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { FiMoon, FiSun } from 'react-icons/fi';
 import LanguageSwitcher from './LanguageSwitcher';
 import { useViewMode } from '../contexts/ViewModeContext';
+import { SIDEBAR_WIDTH_PX } from '../constants/layout';
+
+const ROUTE_TITLES: Record<string, string> = {
+  '/dashboard': 'overview',
+  '/dashboard/': 'overview',
+  '/dashboard/assignments': 'assignments',
+  '/dashboard/submissions': 'submissions',
+  '/dashboard/graph': 'plagiarismGraph',
+  '/dashboard/upload': 'uploadFiles',
+  '/dashboard/results': 'results',
+  '/dashboard/pair-comparison': 'pairComparison',
+};
 
 const Header: React.FC = () => {
   const { colorMode, toggleColorMode } = useColorMode();
   const { t } = useTranslation('navigation');
   const { mode, setMode } = useViewMode();
   const navigate = useNavigate();
+  const location = useLocation();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
-  // All hooks called unconditionally in same order
-  const matchOverview = useMatch('/dashboard');
-  const matchOverviewSlash = useMatch('/dashboard/');
-  const matchAssignmentDetail = useMatch('/dashboard/assignments/:assignmentId');
-  const matchAssignments = useMatch('/dashboard/assignments');
-  const matchAssignmentsSlash = useMatch('/dashboard/assignments/');
-  const matchSubmissions = useMatch('/dashboard/submissions');
-  const matchGraph = useMatch('/dashboard/graph');
-  const matchUpload = useMatch('/dashboard/upload');
-  const matchResults = useMatch('/dashboard/results');
-  const matchPairComparison = useMatch('/dashboard/pair-comparison');
-
-  const getPageTitle = () => {
-    if (matchOverview || matchOverviewSlash) return t('overview');
-    if (matchAssignmentDetail) return t('assignments');
-    if (matchAssignments || matchAssignmentsSlash) return t('assignments');
-    if (matchSubmissions) return t('submissions');
-    if (matchGraph) return t('plagiarismGraph');
-    if (matchUpload) return t('uploadFiles');
-    if (matchResults) return t('results');
-    if (matchPairComparison) return t('pairComparison');
+  const pageTitle = useMemo(() => {
+    const path = location.pathname;
+    for (const [route, titleKey] of Object.entries(ROUTE_TITLES)) {
+      if (path === route || path.startsWith(`${route}/`)) {
+        return t(titleKey);
+      }
+    }
     return t('overview');
-  };
+  }, [location.pathname, t]);
 
   const handleModeSwitch = (newMode: 'assignments' | 'classic') => {
     setMode(newMode);
@@ -60,7 +59,7 @@ const Header: React.FC = () => {
       as="header"
       pos="fixed"
       top="0"
-      left="250px"
+      left={SIDEBAR_WIDTH_PX}
       right="0"
       h="16"
       bg={bgColor}
@@ -71,7 +70,7 @@ const Header: React.FC = () => {
     >
       <Flex h="full" align="center" justify="space-between">
         <Text fontSize="lg" fontWeight="semibold">
-          {getPageTitle()}
+          {pageTitle}
         </Text>
 
         <Flex align="center" gap={4}>

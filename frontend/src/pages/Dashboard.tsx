@@ -9,6 +9,7 @@ import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import { ViewModeContext } from '../contexts/ViewModeContext';
 import type { ViewMode } from '../contexts/ViewModeContext';
+import { SIDEBAR_WIDTH_PX } from '../constants/layout';
 import Overview from './Overview';
 import Assignments from './Assignments';
 import AssignmentDetail from './AssignmentDetail';
@@ -25,9 +26,9 @@ const Dashboard: React.FC = () => {
     <ViewModeContext.Provider value={{ mode: viewMode, setMode: setViewMode }}>
       <Flex h="100vh" bg={useColorModeValue('gray.100', 'gray.900')}>
         <Sidebar />
-        <Box flex="1" ml="250px" display="flex" flexDirection="column" overflow="hidden">
+        <Box flex="1" ml={SIDEBAR_WIDTH_PX} display="flex" flexDirection="column" overflow="hidden">
           <Header />
-          <Box as="main" p={8} pt={24} flex="1" overflow="hidden" minH="0" display="flex" flexDirection="column">
+          <Box as="main" p={8} pt={24} flex="1" overflow="hidden" minH={0} display="flex" flexDirection="column">
             <Routes>
               <Route path="/" element={<Overview />} />
               <Route path="assignments" element={<Assignments />} />

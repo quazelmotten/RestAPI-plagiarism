@@ -2,9 +2,8 @@
   "selectTask": "Выбрать задачу:",
   "refresh": "Обновить",
   "view": "Вид:",
-  "cards": "Карточки",
-  "heatmap": "Тепловая карта",
-  "noChecks": "Проверки на плагиат не найдены. Загрузите файлы чтобы начать!",
+   "cards": "Карточки",
+   "noChecks": "Проверки на плагиат не найдены. Загрузите файлы чтобы начать!",
   "selectTaskPrompt": "Выберите задачу",
   "failedToFetchTasks": "Не удалось загрузить задачи",
   "failedToFetchDetails": "Не удалось загрузить детали задачи",
@@ -45,15 +44,7 @@
     "highLabel": "Высокое (>50%)",
     "totalLabel": "Всего пар"
   },
-  "heatmap": {
-    "title": "Тепловая карта сходства",
-    "tooltip": "{{fileA}} vs {{fileB}}: {{percentage}}% сходства",
-    "legend": {
-      "high": "Высокое (≥80%)",
-      "medium": "Среднее (60-79%)",
-      "low": "Низкое (<60%)"
-    }
-  },
+
   "taskProgress": {
     "stageBadge": "Этап {{current}}/{{total}}",
     "percentComplete": "{{percent}}% завершено",

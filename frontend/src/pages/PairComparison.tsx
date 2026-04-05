@@ -12,6 +12,7 @@ import {
   Badge,
   Collapse,
   Button,
+  Skeleton,
 } from '@chakra-ui/react';
 import { FiEye, FiEyeOff, FiChevronUp, FiChevronDown, FiLink, FiLink2, FiBarChart2 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
@@ -100,7 +101,6 @@ const PairComparison: React.FC = () => {
     return currentPairMemo.file_a.id === (selectedFileA ? selectedFileA.id : undefined);
   }, [currentPairMemo, selectedFileA]);
 
-  // Match statistics
   const matchStats = useMemo(() => {
     const matches = currentPairMemo?.matches || [];
     const stats: Record<number, { count: number; linesA: number; linesB: number }> = {};
@@ -132,7 +132,6 @@ const PairComparison: React.FC = () => {
     };
   }, [currentPairMemo, fileAContent, fileBContent]);
 
-  // Minimap data
   const minimapData = useMemo(() => {
     const matches = currentPairMemo?.matches || [];
     const fileALines = (fileAContent?.content || '').split('\n').length;
@@ -155,7 +154,6 @@ const PairComparison: React.FC = () => {
     };
   }, [currentPairMemo, fileAContent, fileBContent]);
 
-  // Synchronized scrolling
   const handleScrollA = useCallback(() => {
     if (!syncScroll || scrollSyncing.current) return;
     const src = fileAContainerRef.current;
@@ -191,12 +189,12 @@ const PairComparison: React.FC = () => {
     };
   }, [handleScrollA, handleScrollB]);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (!e.ctrlKey && !e.metaKey) return;
 
-      switch (e.key) {
+      switch (e.key.toLowerCase()) {
         case 'n': {
           e.preventDefault();
           const matches = currentPairMemo?.matches || [];
@@ -233,7 +231,6 @@ const PairComparison: React.FC = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [currentPairMemo, hoveredMatchIndex]);
 
-  // Load file IDs from URL query params on mount
   useEffect(() => {
     const fileAId = searchParams.get('file_a');
     const fileBId = searchParams.get('file_b');
@@ -253,75 +250,70 @@ const PairComparison: React.FC = () => {
     }
   }, [searchParams, selectedFileA, selectedFileB]);
 
-  const fetchFilePair = useCallback(async () => {
+  const fetchAllData = useCallback(async () => {
     if (!selectedFileA || !selectedFileB) return;
-    try {
-      const response = await api.get<ApiPlagiarismResult>(API_ENDPOINTS.FILE_PAIR, {
-        params: { file_a: selectedFileA.id, file_b: selectedFileB.id }
-      });
-      const pairData = response.data;
 
-      setAnalyzingMatches(true);
-      try {
-        const analyzeResponse = await api.post<{ matches: ApiPlagiarismMatch[]; ast_similarity: number }>(API_ENDPOINTS.FILE_PAIR_ANALYZE, null, {
-          params: { file_a: selectedFileA.id, file_b: selectedFileB.id }
-        });
-        pairData.matches = transformMatches(analyzeResponse.data.matches as unknown as BackendMatch[]);
-        pairData.ast_similarity = analyzeResponse.data.ast_similarity;
-      } catch (analyzeErr: unknown) {
-        console.error('On-demand analysis failed:', analyzeErr);
-        pairData.matches = transformMatches(pairData.matches as unknown as BackendMatch[]);
-      } finally {
-        setAnalyzingMatches(false);
-      }
-
-      setCurrentPair(pairData);
-    } catch (err: unknown) {
-      const error = err as ApiError;
-      if (error.response?.status !== 404) {
-        console.error('Error fetching file pair:', err);
-      }
-      setCurrentPair(null);
-    }
-  }, [selectedFileA, selectedFileB]);
-
-  useEffect(() => {
-    if (selectedFileA && selectedFileB) {
-      fetchFilePair();
-    } else {
-      setCurrentPair(null);
-    }
-  }, [selectedFileA, selectedFileB, fetchFilePair]);
-
-  const loadFileContent = useCallback(async () => {
-    if (!selectedFileA || !selectedFileB) return;
     setLoadingContent(true);
-    setFileAContent(null);
-    setFileBContent(null);
     setContentError(null);
     fileALineRefs.current.clear();
     fileBLineRefs.current.clear();
 
+    const pairPromise = api.get<ApiPlagiarismResult>(API_ENDPOINTS.FILE_PAIR, {
+      params: { file_a: selectedFileA.id, file_b: selectedFileB.id },
+    });
+
+    const analyzePromise = api.post<{ matches: ApiPlagiarismMatch[]; ast_similarity: number }>(
+      API_ENDPOINTS.FILE_PAIR_ANALYZE, null,
+      { params: { file_a: selectedFileA.id, file_b: selectedFileB.id } },
+    ).catch(() => null);
+
+    const contentPromise = Promise.all([
+      api.get<FileContent>(API_ENDPOINTS.FILE_CONTENT(selectedFileA.id)),
+      api.get<FileContent>(API_ENDPOINTS.FILE_CONTENT(selectedFileB.id)),
+    ]);
+
     try {
-      const [fileAResponse, fileBResponse] = await Promise.all([
-        api.get<FileContent>(API_ENDPOINTS.FILE_CONTENT(selectedFileA.id)),
-        api.get<FileContent>(API_ENDPOINTS.FILE_CONTENT(selectedFileB.id))
+      const [pairResponse, analyzeResponse, contentResponses] = await Promise.all([
+        pairPromise,
+        analyzePromise,
+        contentPromise,
       ]);
-      setFileAContent(fileAResponse.data);
-      setFileBContent(fileBResponse.data);
+
+      const pairData = pairResponse.data;
+
+      if (analyzeResponse) {
+        pairData.matches = transformMatches(analyzeResponse.data.matches as unknown as BackendMatch[]);
+        pairData.ast_similarity = analyzeResponse.data.ast_similarity;
+      } else {
+        pairData.matches = transformMatches(pairData.matches as unknown as BackendMatch[]);
+      }
+
+      setCurrentPair(pairData);
+      setFileAContent(contentResponses[0].data);
+      setFileBContent(contentResponses[1].data);
     } catch (error) {
-      console.error('Error fetching file contents:', error);
-      setContentError(error instanceof Error ? error.message : 'Failed to load file contents');
+      const apiError = error as ApiError;
+      if (apiError.response?.status !== 404) {
+        console.error('Error fetching comparison data:', error);
+      }
+      setContentError(error instanceof Error ? error.message : 'Failed to load comparison');
+      setCurrentPair(null);
     } finally {
       setLoadingContent(false);
+      setAnalyzingMatches(false);
     }
   }, [selectedFileA, selectedFileB]);
 
   useEffect(() => {
     if (selectedFileA && selectedFileB) {
-      loadFileContent();
+      setAnalyzingMatches(true);
+      fetchAllData();
+    } else {
+      setCurrentPair(null);
+      setFileAContent(null);
+      setFileBContent(null);
     }
-  }, [selectedFileA, selectedFileB, loadFileContent]);
+  }, [selectedFileA, selectedFileB, fetchAllData]);
 
   const getLineRef = useCallback((fileA: boolean) => (lineIndex: number, el: HTMLDivElement | null) => {
     if (el) {
@@ -371,203 +363,213 @@ const PairComparison: React.FC = () => {
     targetContainer.scrollTo({ top: newScrollTop, behavior: 'smooth' });
   }, [currentPairMemo]);
 
+  const isLoadingInitial = loadingContent && !currentPair && !fileAContent;
+
   return (
     <Box h="100vh" display="flex" flexDir="column" overflow="hidden">
-      {headerVisible ? (
-        <ComparisonHeader
-          selectedFileA={selectedFileA}
-          selectedFileB={selectedFileB}
-          currentPair={currentPair}
-          getSimilarityGradient={getSimilarityGradient}
-          onOpenPicker={() => setIsPickerOpen(true)}
-          analyzingMatches={analyzingMatches}
-          contentError={contentError}
-          bgColor={bgColor}
-        />
+      {isLoadingInitial ? (
+        <Box flex={1} display="flex" alignItems="center" justifyContent="center" py={8} minH={0}>
+          <VStack spacing={4}>
+            <Skeleton height="40px" width="300px" />
+            <Skeleton height="200px" width="80%" />
+          </VStack>
+        </Box>
       ) : (
-        <HStack px={2} py={1} flexShrink={0}>
-          <Tooltip label={t('page.showHeader')} placement="bottom">
-            <IconButton
-              aria-label={t('page.showHeader')}
-              icon={<FiChevronDown />}
-              size="sm"
-              variant="ghost"
-              onClick={() => setHeaderVisible(true)}
+        <>
+          {headerVisible ? (
+            <ComparisonHeader
+              selectedFileA={selectedFileA}
+              selectedFileB={selectedFileB}
+              currentPair={currentPair}
+              getSimilarityGradient={getSimilarityGradient}
+              onOpenPicker={() => setIsPickerOpen(true)}
+              analyzingMatches={analyzingMatches}
+              contentError={contentError}
+              bgColor={bgColor}
             />
-          </Tooltip>
-          {currentPair && (
-            <Text fontSize="sm" fontWeight="bold" ml={2}>
-              {t('page.similarity', { percent: ((currentPair.ast_similarity || 0) * 100).toFixed(1) })}
-            </Text>
+          ) : (
+            <HStack px={2} py={1} flexShrink={0}>
+              <Tooltip label={t('page.showHeader')} placement="bottom">
+                <IconButton
+                  aria-label={t('page.showHeader')}
+                  icon={<FiChevronDown />}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setHeaderVisible(true)}
+                />
+              </Tooltip>
+              {currentPair && (
+                <Text fontSize="sm" fontWeight="bold" ml={2}>
+                  {t('page.similarity', { percent: ((currentPair.ast_similarity || 0) * 100).toFixed(1) })}
+                </Text>
+              )}
+            </HStack>
           )}
-        </HStack>
+
+          <HStack px={2} py={1} flexShrink={0} spacing={1}>
+            <Tooltip label={filterComments ? t('page.tooltip.showComments') : t('page.tooltip.hideComments')} placement="bottom">
+              <IconButton
+                aria-label={filterComments ? t('page.aria.showComments') : t('page.aria.hideComments')}
+                icon={filterComments ? <FiEye /> : <FiEyeOff />}
+                size="sm"
+                variant={filterComments ? 'solid' : 'ghost'}
+                colorScheme={filterComments ? 'orange' : 'gray'}
+                onClick={() => setFilterComments(!filterComments)}
+              />
+            </Tooltip>
+             <Tooltip label={syncScroll ? t('page.tooltip.unlockScrollSync') : t('page.tooltip.lockScrollSync')} placement="bottom">
+               <IconButton
+                 aria-label={syncScroll ? t('page.aria.unlockScrollSync') : t('page.aria.lockScrollSync')}
+                 icon={syncScroll ? <FiLink /> : <FiLink2 />}
+                 size="sm"
+                 variant={syncScroll ? 'solid' : 'ghost'}
+                 colorScheme={syncScroll ? 'blue' : 'gray'}
+                 onClick={() => setSyncScroll(!syncScroll)}
+               />
+             </Tooltip>
+             <Tooltip label={t('page.tooltip.matchStatistics')} placement="bottom">
+               <IconButton
+                 aria-label={t('page.aria.matchStatistics')}
+                 icon={<FiBarChart2 />}
+                 size="sm"
+                 variant={statsOpen ? 'solid' : 'ghost'}
+                 colorScheme={statsOpen ? 'purple' : 'gray'}
+                 onClick={() => setStatsOpen(!statsOpen)}
+               />
+             </Tooltip>
+            {headerVisible && (
+              <Tooltip label={t('page.hideHeader')} placement="bottom">
+                <IconButton
+                  aria-label={t('page.hideHeader')}
+                  icon={<FiChevronUp />}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setHeaderVisible(false)}
+                />
+              </Tooltip>
+            )}
+          </HStack>
+
+          <Collapse in={statsOpen} animateOpacity>
+            <Box px={4} py={2} borderBottomWidth={1} borderColor={useColorModeValue('gray.200', 'gray.600')}>
+               <HStack spacing={6} wrap="wrap">
+                 <VStack spacing={0} align="start">
+                   <Text fontSize="xs" color="gray.500">{t('page.stats.totalMatches')}</Text>
+                   <Text fontWeight="bold">{matchStats.totalMatches}</Text>
+                 </VStack>
+                 <VStack spacing={0} align="start">
+                   <Text fontSize="xs" color="gray.500">{t('page.stats.coverageA')}</Text>
+                   <Text fontWeight="bold">{matchStats.coverageA.toFixed(1)}%</Text>
+                 </VStack>
+                 <VStack spacing={0} align="start">
+                   <Text fontSize="xs" color="gray.500">{t('page.stats.coverageB')}</Text>
+                   <Text fontWeight="bold">{matchStats.coverageB.toFixed(1)}%</Text>
+                 </VStack>
+                 {Object.entries(matchStats.byType).map(([type, s]) => (
+                   <HStack key={type} spacing={1}>
+                     <Badge colorScheme={
+                       Number(type) === 1 ? 'green' :
+                       Number(type) === 2 ? 'yellow' :
+                       Number(type) === 3 ? 'blue' : 'red'
+                     }>
+                       T{type}
+                     </Badge>
+                     <Text fontSize="sm">{t('page.stats.matchLineInfo', { count: s.count, linesA: s.linesA, linesB: s.linesB })}</Text>
+                   </HStack>
+                 ))}
+              </HStack>
+            </Box>
+          </Collapse>
+
+          {contentError && !loadingContent ? (
+            <Box flex={1} display="flex" alignItems="center" justifyContent="center" py={8} minH={0}>
+              <Text color="red.500">{contentError}</Text>
+            </Box>
+          ) : (
+            <ErrorBoundary>
+              <Flex flex={1} gap={0} align="stretch" minH={0} overflow="hidden">
+                <Box w="16px" bg={minimapBg} position="relative" flexShrink={0}>
+                  {minimapData.a.map(block => (
+                    <Box
+                      key={block.idx}
+                      position="absolute"
+                      left="2px"
+                      right="2px"
+                      top={`${block.top}%`}
+                      h={`${block.height}%`}
+                      bg={block.color}
+                      borderRadius="1px"
+                      minH="2px"
+                    />
+                  ))}
+                </Box>
+
+                <Flex flex={1} gap={4} align="stretch" py={4} px={2} minH={0} overflow="hidden">
+                   <FileViewer
+                     content={fileAContent?.content || ''}
+                     fileName={fileAContent?.filename || t('filePicker.fileA')}
+                     language={fileAContent?.language || 'unknown'}
+                     matches={currentPair?.matches || []}
+                     isFileA={isFileAInPair}
+                     filterComments={filterComments}
+                     hoveredMatchIndex={hoveredMatchIndex}
+                     onHoverMatch={setHoveredMatchIndex}
+                     onJumpToMatch={handleJumpToMatch}
+                     scrollContainerRef={fileAContainerRef}
+                     getLineRef={getLineRef(true)}
+                   />
+
+                   <FileViewer
+                     content={fileBContent?.content || ''}
+                     fileName={fileBContent?.filename || t('filePicker.fileB')}
+                     language={fileBContent?.language || 'unknown'}
+                     matches={currentPair?.matches || []}
+                     isFileA={!isFileAInPair}
+                     filterComments={filterComments}
+                     hoveredMatchIndex={hoveredMatchIndex}
+                     onHoverMatch={setHoveredMatchIndex}
+                     onJumpToMatch={handleJumpToMatch}
+                     scrollContainerRef={fileBContainerRef}
+                     getLineRef={getLineRef(false)}
+                   />
+                </Flex>
+
+                <Box w="16px" bg={minimapBg} position="relative" flexShrink={0}>
+                  {minimapData.b.map(block => (
+                    <Box
+                      key={block.idx}
+                      position="absolute"
+                      left="2px"
+                      right="2px"
+                      top={`${block.top}%`}
+                      h={`${block.height}%`}
+                      bg={block.color}
+                      borderRadius="1px"
+                      minH="2px"
+                    />
+                  ))}
+                </Box>
+              </Flex>
+            </ErrorBoundary>
+          )}
+        </>
       )}
 
-      <HStack px={2} py={1} flexShrink={0} spacing={1}>
-        <Tooltip label={filterComments ? t('page.tooltip.showComments') : t('page.tooltip.hideComments')} placement="bottom">
-          <IconButton
-            aria-label={filterComments ? t('page.aria.showComments') : t('page.aria.hideComments')}
-            icon={filterComments ? <FiEye /> : <FiEyeOff />}
-            size="sm"
-            variant={filterComments ? 'solid' : 'ghost'}
-            colorScheme={filterComments ? 'orange' : 'gray'}
-            onClick={() => setFilterComments(!filterComments)}
-          />
-        </Tooltip>
-         <Tooltip label={syncScroll ? t('page.tooltip.unlockScrollSync') : t('page.tooltip.lockScrollSync')} placement="bottom">
-           <IconButton
-             aria-label={syncScroll ? t('page.aria.unlockScrollSync') : t('page.aria.lockScrollSync')}
-             icon={syncScroll ? <FiLink /> : <FiLink2 />}
-             size="sm"
-             variant={syncScroll ? 'solid' : 'ghost'}
-             colorScheme={syncScroll ? 'blue' : 'gray'}
-             onClick={() => setSyncScroll(!syncScroll)}
-           />
-         </Tooltip>
-         <Tooltip label={t('page.tooltip.matchStatistics')} placement="bottom">
-           <IconButton
-             aria-label={t('page.aria.matchStatistics')}
-             icon={<FiBarChart2 />}
-             size="sm"
-             variant={statsOpen ? 'solid' : 'ghost'}
-             colorScheme={statsOpen ? 'purple' : 'gray'}
-             onClick={() => setStatsOpen(!statsOpen)}
-           />
-         </Tooltip>
-        {headerVisible && (
-          <Tooltip label={t('page.hideHeader')} placement="bottom">
-            <IconButton
-              aria-label={t('page.hideHeader')}
-              icon={<FiChevronUp />}
-              size="sm"
-              variant="ghost"
-              onClick={() => setHeaderVisible(false)}
-            />
-          </Tooltip>
-        )}
-      </HStack>
-
-      <Collapse in={statsOpen} animateOpacity>
-        <Box px={4} py={2} borderBottomWidth={1} borderColor={useColorModeValue('gray.200', 'gray.600')}>
-           <HStack spacing={6} wrap="wrap">
-             <VStack spacing={0} align="start">
-               <Text fontSize="xs" color="gray.500">{t('page.stats.totalMatches')}</Text>
-               <Text fontWeight="bold">{matchStats.totalMatches}</Text>
-             </VStack>
-             <VStack spacing={0} align="start">
-               <Text fontSize="xs" color="gray.500">{t('page.stats.coverageA')}</Text>
-               <Text fontWeight="bold">{matchStats.coverageA.toFixed(1)}%</Text>
-             </VStack>
-             <VStack spacing={0} align="start">
-               <Text fontSize="xs" color="gray.500">{t('page.stats.coverageB')}</Text>
-               <Text fontWeight="bold">{matchStats.coverageB.toFixed(1)}%</Text>
-             </VStack>
-             {Object.entries(matchStats.byType).map(([type, s]) => (
-               <HStack key={type} spacing={1}>
-                 <Badge colorScheme={
-                   Number(type) === 1 ? 'green' :
-                   Number(type) === 2 ? 'yellow' :
-                   Number(type) === 3 ? 'blue' : 'red'
-                 }>
-                   T{type}
-                 </Badge>
-                 <Text fontSize="sm">{t('page.stats.matchLineInfo', { count: s.count, linesA: s.linesA, linesB: s.linesB })}</Text>
-               </HStack>
-             ))}
-          </HStack>
-        </Box>
-      </Collapse>
-
-       {loadingContent ? (
-         <Box flex={1} display="flex" alignItems="center" justifyContent="center" py={8} minH={0}>
-           <Spinner size="lg" />
-           <Text mt={2}>{t('page.loading')}</Text>
-         </Box>
-        ) : (
-         <ErrorBoundary>
-           <Flex flex={1} gap={0} align="stretch" minH={0} overflow="hidden">
-             {/* Left minimap */}
-             <Box w="16px" bg={minimapBg} position="relative" flexShrink={0}>
-               {minimapData.a.map(block => (
-                 <Box
-                   key={block.idx}
-                   position="absolute"
-                   left="2px"
-                   right="2px"
-                   top={`${block.top}%`}
-                   h={`${block.height}%`}
-                   bg={block.color}
-                   borderRadius="1px"
-                   minH="2px"
-                 />
-               ))}
-             </Box>
-
-             <Flex flex={1} gap={4} align="stretch" py={4} px={2} minH={0} overflow="hidden">
-                <FileViewer
-                  content={fileAContent?.content || ''}
-                  fileName={fileAContent?.filename || t('filePicker.fileA')}
-                  language={fileAContent?.language || 'unknown'}
-                  matches={currentPair?.matches || []}
-                  isFileA={isFileAInPair}
-                  filterComments={filterComments}
-                  hoveredMatchIndex={hoveredMatchIndex}
-                  onHoverMatch={setHoveredMatchIndex}
-                  onJumpToMatch={handleJumpToMatch}
-                  scrollContainerRef={fileAContainerRef}
-                  getLineRef={getLineRef(true)}
-                />
-
-                <FileViewer
-                  content={fileBContent?.content || ''}
-                  fileName={fileBContent?.filename || t('filePicker.fileB')}
-                  language={fileBContent?.language || 'unknown'}
-                  matches={currentPair?.matches || []}
-                  isFileA={!isFileAInPair}
-                  filterComments={filterComments}
-                  hoveredMatchIndex={hoveredMatchIndex}
-                  onHoverMatch={setHoveredMatchIndex}
-                  onJumpToMatch={handleJumpToMatch}
-                  scrollContainerRef={fileBContainerRef}
-                  getLineRef={getLineRef(false)}
-                />
-             </Flex>
-
-             {/* Right minimap */}
-             <Box w="16px" bg={minimapBg} position="relative" flexShrink={0}>
-               {minimapData.b.map(block => (
-                 <Box
-                   key={block.idx}
-                   position="absolute"
-                   left="2px"
-                   right="2px"
-                   top={`${block.top}%`}
-                   h={`${block.height}%`}
-                   bg={block.color}
-                   borderRadius="1px"
-                   minH="2px"
-                 />
-               ))}
-             </Box>
-           </Flex>
-         </ErrorBoundary>
-        )}
-
-       <FilePickerModal
-         isOpen={isPickerOpen}
-         onClose={() => setIsPickerOpen(false)}
-         onSelect={(fileA, fileB) => {
-           setSelectedFileA(fileA);
-           setSelectedFileB(fileB);
-           setHoveredMatchIndex(null);
-           fileALineRefs.current.clear();
-           fileBLineRefs.current.clear();
-         }}
-         initialFileAId={selectedFileA?.id}
-         initialFileBId={selectedFileB?.id}
-        />
-      </Box>
-    );
-  };
+      <FilePickerModal
+        isOpen={isPickerOpen}
+        onClose={() => setIsPickerOpen(false)}
+        onSelect={(fileA, fileB) => {
+          setSelectedFileA(fileA);
+          setSelectedFileB(fileB);
+          setHoveredMatchIndex(null);
+          fileALineRefs.current.clear();
+          fileBLineRefs.current.clear();
+        }}
+        initialFileAId={selectedFileA?.id}
+        initialFileBId={selectedFileB?.id}
+       />
+    </Box>
+  );
+};
 
 export default PairComparison;

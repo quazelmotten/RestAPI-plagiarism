@@ -236,17 +236,64 @@ class ResultRepository:
         if not all_tasks:
             return None
 
-        # Get all files across all tasks in the assignment
+        # Collect all task IDs for assignment (used for filtering similarity queries)
+        all_task_ids = [t.id for t in all_tasks]
+
+        # Get all files across all tasks in the assignment (without max_sim)
         all_files_query = (
             select(File.id, File.filename, File.task_id)
-            .where(File.task_id.in_([t.id for t in all_tasks]))
+            .where(File.task_id.in_(all_task_ids))
             .order_by(File.filename)
         )
         all_files_result = await self.db.execute(all_files_query)
         all_files_rows = all_files_result.all()
 
-        # Build file map for filename lookups
-        file_map = {str(row.id): row.filename for row in all_files_rows}
+        # Build file map, file_ids list, and task_file_counts
+        file_map = {}
+        file_ids = []
+        task_file_counts = {}
+        for row in all_files_rows:
+            file_id_str = str(row.id)
+            file_map[file_id_str] = row.filename
+            file_ids.append(row.id)
+            task_id_str = str(row.task_id)
+            task_file_counts[task_id_str] = task_file_counts.get(task_id_str, 0) + 1
+
+        # Compute max similarity per file using two subqueries (as file_a and as file_b)
+        file_max_sim = {}
+        if file_ids:
+            max_sim_subq_a = (
+                select(
+                    SimilarityResult.file_a_id.label("fid"),
+                    func.max(SimilarityResult.ast_similarity).label("max_sim"),
+                )
+                .where(SimilarityResult.task_id.in_(all_task_ids))
+                .group_by(SimilarityResult.file_a_id)
+                .subquery()
+            )
+            max_sim_subq_b = (
+                select(
+                    SimilarityResult.file_b_id.label("fid"),
+                    func.max(SimilarityResult.ast_similarity).label("max_sim"),
+                )
+                .where(SimilarityResult.task_id.in_(all_task_ids))
+                .group_by(SimilarityResult.file_b_id)
+                .subquery()
+            )
+            max_sim_q = (
+                select(
+                    File.id,
+                    func.greatest(
+                        func.coalesce(max_sim_subq_a.c.max_sim, 0),
+                        func.coalesce(max_sim_subq_b.c.max_sim, 0),
+                    ).label("max_sim"),
+                )
+                .outerjoin(max_sim_subq_a, File.id == max_sim_subq_a.c.fid)
+                .outerjoin(max_sim_subq_b, File.id == max_sim_subq_b.c.fid)
+                .where(File.id.in_(file_ids))
+            )
+            max_sim_result = await self.db.execute(max_sim_q)
+            file_max_sim = {str(row.id): float(row.max_sim or 0) for row in max_sim_result.all()}
 
         # Determine which task_ids to filter results by
         if task_id:
@@ -257,15 +304,6 @@ class ResultRepository:
         else:
             filter_task_ids = [t.id for t in all_tasks]
             total_pairs_count = sum(t.total_pairs or 0 for t in all_tasks)
-
-        # Count total results for pagination
-        count_query = (
-            select(func.count())
-            .select_from(SimilarityResult)
-            .where(SimilarityResult.task_id.in_(filter_task_ids))
-        )
-        count_result = await self.db.execute(count_query)
-        total_results = count_result.scalar_one()
 
         # Query paginated results
         results_query = (
@@ -295,62 +333,56 @@ class ResultRepository:
             for r in results
         ]
 
-        # Compute aggregated stats
-        agg_query = (
-            select(
-                func.count().label("total"),
-                func.coalesce(func.avg(SimilarityResult.ast_similarity), 0).label("avg_similarity"),
-                func.sum(case((SimilarityResult.ast_similarity >= 0.5, 1), else_=0)).label(
-                    "high_count"
-                ),
-                func.sum(case((SimilarityResult.ast_similarity >= 0.25, 1), else_=0)).label(
-                    "medium_or_high"
-                ),
-                func.sum(case((SimilarityResult.ast_similarity.is_(None), 1), else_=0)).label(
-                    "null_count"
-                ),
-            )
-            .select_from(SimilarityResult)
-            .where(SimilarityResult.task_id.in_(filter_task_ids))
-        )
-        agg_result = await self.db.execute(agg_query)
-        agg_row = agg_result.first()
-
-        overall_stats = None
-        if agg_row:
-            total_count = agg_row.total or 0
-            avg_sim = float(agg_row.avg_similarity or 0)
-            high_count = int(agg_row.high_count or 0)
-            medium_or_high = int(agg_row.medium_or_high or 0)
-            null_count = int(agg_row.null_count or 0)
-            medium_count = medium_or_high - high_count
-            low_count = total_count - high_count - medium_count - null_count
-
-            overall_stats = {
-                "avg_similarity": avg_sim,
-                "high": high_count,
-                "medium": medium_count,
-                "low": low_count,
-                "total_results": total_count,
-            }
-
-        # Compute per-task stats
+        # Compute per-task stats in a single query (including metrics needed for overall)
         from tasks.schemas import TaskListResponse
+
+        if all_tasks:
+            task_ids = [t.id for t in all_tasks]
+            task_agg_q = (
+                select(
+                    SimilarityResult.task_id,
+                    func.count().label("total"),
+                    func.coalesce(func.avg(SimilarityResult.ast_similarity), 0).label("avg_sim"),
+                    func.sum(case((SimilarityResult.ast_similarity >= 0.5, 1), else_=0)).label(
+                        "high"
+                    ),
+                    func.sum(case((SimilarityResult.ast_similarity >= 0.25, 1), else_=0)).label(
+                        "medium_or_high"
+                    ),
+                    func.sum(case((SimilarityResult.ast_similarity.is_(None), 1), else_=0)).label(
+                        "null_count"
+                    ),
+                )
+                .where(SimilarityResult.task_id.in_(task_ids))
+                .group_by(SimilarityResult.task_id)
+            )
+            task_agg_result = await self.db.execute(task_agg_q)
+            task_agg_map = {}
+            for row in task_agg_result.all():
+                task_id_str = str(row.task_id)
+                total = int(row.total or 0)
+                avg_sim = float(row.avg_sim or 0)
+                high = int(row.high or 0)
+                medium_or_high = int(row.medium_or_high or 0)
+                medium = medium_or_high - high
+                null_count = int(row.null_count or 0)
+                low = total - high - medium - null_count
+                task_agg_map[task_id_str] = {
+                    "total": total,
+                    "avg_sim": avg_sim,
+                    "high": high,
+                    "medium": medium,
+                    "low": low,
+                    "null_count": null_count,
+                }
+        else:
+            task_agg_map = {}
 
         task_items = []
         for t in all_tasks:
             task_uuid = str(t.id)
-            # Files count for this task
-            task_files_count = sum(1 for row in all_files_rows if str(row.task_id) == task_uuid)
-
-            # Per-task result stats
-            task_agg_q = select(
-                func.count().label("total"),
-                func.coalesce(func.avg(SimilarityResult.ast_similarity), 0).label("avg_sim"),
-                func.sum(case((SimilarityResult.ast_similarity >= 0.5, 1), else_=0)).label("high"),
-            ).where(SimilarityResult.task_id == t.id)
-            task_agg = await self.db.execute(task_agg_q)
-            trow = task_agg.first()
+            task_files_count = task_file_counts.get(task_uuid, 0)
+            task_stats = task_agg_map.get(task_uuid, {"total": 0, "avg_sim": 0.0, "high": 0})
 
             task_items.append(
                 TaskListResponse(
@@ -367,44 +399,41 @@ class ResultRepository:
                         display=f"{t.processed_pairs or 0}/{t.total_pairs or 0}",
                     ),
                     files_count=task_files_count,
-                    high_similarity_count=int(trow.high or 0) if trow else 0,
+                    high_similarity_count=task_stats["high"],
                     total_pairs=t.total_pairs or 0,
-                    avg_similarity=float(trow.avg_sim or 0) if trow else 0.0,
+                    avg_similarity=task_stats["avg_sim"],
                 )
             )
 
-        # Compute max similarity per file with a single query
-        max_sim_subq_a = (
-            select(
-                SimilarityResult.file_a_id.label("fid"),
-                func.max(SimilarityResult.ast_similarity).label("max_sim"),
-            )
-            .group_by(SimilarityResult.file_a_id)
-            .subquery()
-        )
-        max_sim_subq_b = (
-            select(
-                SimilarityResult.file_b_id.label("fid"),
-                func.max(SimilarityResult.ast_similarity).label("max_sim"),
-            )
-            .group_by(SimilarityResult.file_b_id)
-            .subquery()
-        )
-        file_ids_list = [row.id for row in all_files_rows]
-        max_sim_q = (
-            select(
-                File.id,
-                func.greatest(
-                    func.coalesce(max_sim_subq_a.c.max_sim, 0),
-                    func.coalesce(max_sim_subq_b.c.max_sim, 0),
-                ).label("max_sim"),
-            )
-            .outerjoin(max_sim_subq_a, File.id == max_sim_subq_a.c.fid)
-            .outerjoin(max_sim_subq_b, File.id == max_sim_subq_b.c.fid)
-            .where(File.id.in_(file_ids_list))
-        )
-        max_sim_result = await self.db.execute(max_sim_q)
-        file_max_sim = {str(row.id): float(row.max_sim or 0) for row in max_sim_result.all()}
+        # Compute total_results and overall stats from per-task aggregates for the filtered tasks only
+        if task_agg_map:
+            filter_task_id_strs = {str(tid) for tid in filter_task_ids}
+            filtered_aggregates = [
+                stats for tid, stats in task_agg_map.items() if tid in filter_task_id_strs
+            ]
+            total_results = sum(stats["total"] for stats in filtered_aggregates)
+            if total_results > 0:
+                weighted_sum = sum(
+                    stats["avg_sim"] * stats["total"] for stats in filtered_aggregates
+                )
+                overall_avg = weighted_sum / total_results
+                overall_high = sum(stats["high"] for stats in filtered_aggregates)
+                overall_medium = sum(stats["medium"] for stats in filtered_aggregates)
+                overall_low = sum(stats["low"] for stats in filtered_aggregates)
+                overall_null = sum(stats["null_count"] for stats in filtered_aggregates)
+                overall_stats = {
+                    "avg_similarity": overall_avg,
+                    "high": overall_high,
+                    "medium": overall_medium,
+                    "low": overall_low,
+                    "total_results": total_results,
+                }
+            else:
+                overall_stats = None
+                total_results = 0
+        else:
+            overall_stats = None
+            total_results = 0
 
         return {
             "tasks": task_items,

@@ -166,3 +166,22 @@ export interface AssignmentFullResponse {
 }
 
 export type { PlagiarismMatch as Match };
+
+export interface HeatmapFile {
+  id: string;
+  filename: string;
+  max_similarity: number;
+}
+
+export interface HeatmapPair {
+  file_a_id: string;
+  file_b_id: string;
+  ast_similarity: number;
+}
+
+export interface HeatmapData {
+  files: HeatmapFile[];
+  pairs: HeatmapPair[];
+  threshold: number;
+  total_files_in_task: number;
+}

@@ -2,9 +2,8 @@
   "selectTask": "Select Task:",
   "refresh": "Refresh",
   "view": "View:",
-  "cards": "Cards",
-  "heatmap": "Heatmap",
-  "noChecks": "No plagiarism checks found. Upload files to get started!",
+   "cards": "Cards",
+   "noChecks": "No plagiarism checks found. Upload files to get started!",
   "selectTaskPrompt": "Select a task",
   "failedToFetchTasks": "Failed to fetch plagiarism tasks",
   "failedToFetchDetails": "Failed to fetch task details",
@@ -29,7 +28,7 @@
   "resultsList": {
     "topSimilarities": "Top Similar Pairs",
     "showing": "Showing {{count}} of {{total}}",
-    "fullListNote": "Showing top 50 of {{total}} total pairs. Use heatmap view for complete results."
+    "fullListNote": "Showing top 50 of {{total}} total pairs."
   },
   "distribution": {
     "title": "Similarity Distribution",
@@ -45,15 +44,7 @@
     "highLabel": "High (>50%)",
     "totalLabel": "Total Pairs"
   },
-  "heatmap": {
-    "title": "Similarity Heatmap",
-    "tooltip": "{{fileA}} vs {{fileB}}: {{percentage}}% similarity",
-    "legend": {
-      "high": "High (≥80%)",
-      "medium": "Medium (60-79%)",
-      "low": "Low (<60%)"
-    }
-  },
+
   "taskProgress": {
     "stageBadge": "Stage {{current}}/{{total}}",
     "percentComplete": "{{percent}}% complete",

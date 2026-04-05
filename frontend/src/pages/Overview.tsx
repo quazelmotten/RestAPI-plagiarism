@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   SimpleGrid,
@@ -10,7 +10,8 @@ import {
   Heading,
   Text,
   Badge,
-  Spinner,
+  Skeleton,
+  SkeletonText,
   VStack,
   HStack,
   Divider,
@@ -18,25 +19,7 @@ import {
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
 import { FiFileText, FiClock, FiAlertCircle, FiActivity, FiLayers } from 'react-icons/fi';
-import api, { API_ENDPOINTS } from '../services/api';
-
-interface Task {
-  task_id: string;
-  status: 'pending' | 'indexing' | 'finding_pairs' | 'processing' | 'completed' | 'failed';
-  total_pairs: number;
-  files: { id: string; filename: string }[];
-  results: Array<{
-    ast_similarity: number;
-  }>;
-  created_at?: string;
-  updated_at?: string;
-  progress?: {
-    completed: number;
-    total: number;
-  };
-  files_count?: number;
-  high_similarity_count?: number;
-}
+import { useTasks, type Task } from '../hooks/useTasks';
 
 interface ActivityItem {
   id: string;
@@ -89,35 +72,12 @@ const formatTimeAgo = (date: Date, t: (key: string, options?: { count: number })
 
 const Overview: React.FC = () => {
   const { t } = useTranslation(['overview', 'common']);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading } = useTasks();
+  const tasks = data?.items ?? [];
 
   const cardBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
-
-  useEffect(() => {
-    fetchTasks();
-  }, []);
-
-  const fetchTasks = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get(API_ENDPOINTS.TASKS);
-
-      if (!Array.isArray(response.data.items)) {
-        console.error('Expected array from /plagiarism/tasks, got:', typeof response.data.items);
-        setTasks([]);
-        return;
-      }
-
-      setTasks(response.data.items);
-    } catch (err) {
-      console.error('Failed to fetch tasks:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const totalSubmissions = tasks.length;
   const activeStatuses = ['pending', 'indexing', 'finding_pairs', 'processing'];
@@ -125,11 +85,11 @@ const Overview: React.FC = () => {
   const highSimilarity = tasks.reduce((sum, task) => sum + (task.high_similarity_count || 0), 0);
   const totalFiles = tasks.reduce((sum, task) => sum + (task.files_count || 0), 0);
 
-  const getRecentActivity = (): ActivityItem[] => {
+  const recentActivity = useMemo(() => {
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-    const activity = tasks
+    return tasks
       .filter(task => task.created_at)
       .map(task => ({
         id: task.task_id,
@@ -141,16 +101,26 @@ const Overview: React.FC = () => {
       .filter(item => item.timestamp >= oneWeekAgo)
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, 25);
+  }, [tasks]);
 
-    return activity;
-  };
-
-  const recentActivity = getRecentActivity();
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" h="400px">
-        <Spinner size="xl" color="blue.500" />
+      <Box display="flex" flexDirection="column" flex={1} minH={0} overflow="hidden">
+        <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={6} mb={8} flexShrink={0}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} bg={cardBg}>
+              <CardBody>
+                <SkeletonText noOfLines={3} spacing={3} />
+              </CardBody>
+            </Card>
+          ))}
+        </SimpleGrid>
+        <Card bg={cardBg} flex={1} minH={0}>
+          <CardBody>
+            <Skeleton height="30px" mb={4} />
+            <SkeletonText noOfLines={8} spacing={4} />
+          </CardBody>
+        </Card>
       </Box>
     );
   }

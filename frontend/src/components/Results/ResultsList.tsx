@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, memo } from 'react';
 import { Card, CardBody, HStack, Text, Badge, VStack, Box, useColorModeValue } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
 import type { PlagiarismResult } from '../../types';
@@ -15,6 +15,62 @@ interface ResultsListProps {
   cardBg?: string;
 }
 
+const ResultRow = memo<{
+  result: PlagiarismResult;
+  borderColor: string;
+  hoverBg: string;
+  getSimilarityColor: (similarity: number) => string;
+  handleCompare: (result: PlagiarismResult) => void;
+  t: (key: string, options?: { count?: number; total?: number }) => string;
+}>(({ result, borderColor, hoverBg, getSimilarityColor, handleCompare, t }) => (
+  <HStack
+    p={3}
+    borderWidth={1}
+    borderColor={borderColor}
+    borderRadius="md"
+    cursor="pointer"
+    _hover={{ bg: hoverBg }}
+    onClick={() => handleCompare(result)}
+    justify="space-between"
+    align="center"
+  >
+    <HStack flex={1} spacing={2} align="center">
+      <VStack align="start" spacing={0}>
+        <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="200px">
+          {result.file_a.filename}
+        </Text>
+        {result.file_a.task_id && (
+          <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="120px">
+            ({result.file_a.task_id.substring(0, 8)}...)
+          </Text>
+        )}
+      </VStack>
+      <Text fontSize="sm" color="gray.500" fontWeight="medium">{t('common:vs')}</Text>
+      <VStack align="start" spacing={0}>
+        <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="200px">
+          {result.file_b.filename}
+        </Text>
+        {result.file_b.task_id && (
+          <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="120px">
+            ({result.file_b.task_id.substring(0, 8)}...)
+          </Text>
+        )}
+      </VStack>
+    </HStack>
+    <Badge
+      colorScheme={getSimilarityColor(result.ast_similarity || 0)}
+      fontSize="md"
+      px={3}
+      py={1}
+      ml={4}
+    >
+      {((result.ast_similarity || 0) * 100).toFixed(1)}%
+    </Badge>
+  </HStack>
+));
+
+ResultRow.displayName = 'ResultRow';
+
 const ResultsList: React.FC<ResultsListProps> = ({
   results,
   totalPairs,
@@ -27,7 +83,6 @@ const ResultsList: React.FC<ResultsListProps> = ({
   const { t } = useTranslation(['results', 'common']);
   const listNoticeBg = useColorModeValue('gray.50', 'gray.700');
   const listNoticeColor = useColorModeValue('gray.600', 'gray.400');
-  // Cap at 50 results for Top Similarities view
   const displayResults = useMemo(() => results.slice(0, 50), [results]);
   const showingCount = displayResults.length;
 
@@ -44,53 +99,17 @@ const ResultsList: React.FC<ResultsListProps> = ({
         </HStack>
 
         <VStack align="stretch" spacing={2}>
-          {displayResults.map((result, idx) => (
-              <HStack
-                key={idx}
-                p={3}
-                borderWidth={1}
-                borderColor={borderColor}
-                borderRadius="md"
-                cursor="pointer"
-                _hover={{ bg: hoverBg }}
-                onClick={() => handleCompare(result)}
-                justify="space-between"
-                align="center"
-              >
-                <HStack flex={1} spacing={2} align="center">
-                  <VStack align="start" spacing={0}>
-                    <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="200px">
-                      {result.file_a.filename}
-                    </Text>
-                    {result.file_a.task_id && (
-                      <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="120px">
-                        ({result.file_a.task_id.substring(0, 8)}...)
-                      </Text>
-                    )}
-                  </VStack>
-                  <Text fontSize="sm" color="gray.500" fontWeight="medium">{t('common:vs')}</Text>
-                  <VStack align="start" spacing={0}>
-                    <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="200px">
-                      {result.file_b.filename}
-                    </Text>
-                    {result.file_b.task_id && (
-                      <Text fontSize="xs" color="gray.500" noOfLines={1} maxW="120px">
-                        ({result.file_b.task_id.substring(0, 8)}...)
-                      </Text>
-                    )}
-                  </VStack>
-                </HStack>
-                <Badge
-                  colorScheme={getSimilarityColor(result.ast_similarity || 0)}
-                  fontSize="md"
-                  px={3}
-                  py={1}
-                  ml={4}
-                >
-                  {((result.ast_similarity || 0) * 100).toFixed(1)}%
-                </Badge>
-              </HStack>
-            ))}
+          {displayResults.map((result) => (
+            <ResultRow
+              key={`${result.file_a.id}-${result.file_b.id}`}
+              result={result}
+              borderColor={borderColor}
+              hoverBg={hoverBg}
+              getSimilarityColor={getSimilarityColor}
+              handleCompare={handleCompare}
+              t={t}
+            />
+          ))}
         </VStack>
 
         {totalPairs > 50 && (

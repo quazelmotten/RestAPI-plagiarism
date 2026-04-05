@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Modal,
   ModalOverlay,
@@ -24,9 +24,10 @@ import {
 } from '@chakra-ui/react';
 import { FiSearch, FiRefreshCw } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
-// Using simple scrollable list; results limited to 100
+import { useVirtualizer } from '@tanstack/react-virtual';
 import api, { API_ENDPOINTS } from '../services/api';
 import type { FileInfo, ApiError } from '../types';
+import { useDebounce } from '../pages/Submissions/hooks/useDebounce';
 
 interface FileResponse extends FileInfo {
   created_at?: string;
@@ -304,20 +305,94 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
     };
   }, [fileBSearch, fileBResults, loadingB, selectedFileB, errors.b, selectedFileA, similaritiesMap]);
 
-  interface ColumnConfig {
-    title: string;
-    colorScheme: 'blue' | 'green';
-    search: string;
-    onSearchChange: (value: string) => void;
-    results: FileInfo[];
-    loading: boolean;
-    selected: FileInfo | null;
-    onSelect: (file: FileInfo) => void;
-    error: string | undefined;
-    columnKey: 'A' | 'B';
-  }
+interface VirtualFileListProps {
+  results: FileInfo[];
+  selectedA: FileInfo | null;
+  selectedB: FileInfo | null;
+  onSelectA: (file: FileInfo) => void;
+  onSelectB: (file: FileInfo) => void;
+  columnKey: 'A' | 'B';
+  listBg: string;
+  listBorderColor: string;
+}
 
-  const renderColumn = (col: ColumnConfig) => (
+const VirtualFileList: React.FC<VirtualFileListProps> = ({
+  results,
+  selectedA,
+  selectedB,
+  onSelectA,
+  onSelectB,
+  columnKey,
+  listBg,
+  listBorderColor,
+}) => {
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: results.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 72,
+    overscan: 5,
+  });
+
+  return (
+    <Box
+      ref={parentRef}
+      h={`${LIST_HEIGHT}px`}
+      overflowY="auto"
+      bg={listBg}
+      border="1px solid"
+      borderColor={listBorderColor}
+      borderRadius="md"
+    >
+      <Box
+        position="relative"
+        width="100%"
+        height={`${virtualizer.getTotalSize()}px`}
+      >
+        {virtualizer.getVirtualItems().map((virtualRow) => {
+          const file = results[virtualRow.index] as FileResponse;
+          return (
+            <Box
+              key={file.id}
+              position="absolute"
+              top={0}
+              left={0}
+              width="100%"
+              transform={`translateY(${virtualRow.start}px)`}
+            >
+              <FileItem
+                file={file}
+                isSelectedA={selectedA?.id === file.id}
+                isSelectedB={selectedB?.id === file.id}
+                onSelectA={onSelectA}
+                onSelectB={onSelectB}
+                column={columnKey}
+              />
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
+  );
+};
+
+VirtualFileList.displayName = 'VirtualFileList';
+
+interface ColumnConfig {
+  title: string;
+  colorScheme: 'blue' | 'green';
+  search: string;
+  onSearchChange: (value: string) => void;
+  results: FileInfo[];
+  loading: boolean;
+  selected: FileInfo | null;
+  onSelect: (file: FileInfo) => void;
+  error: string | undefined;
+  columnKey: 'A' | 'B';
+}
+
+const renderColumn = (col: ColumnConfig, listBg: string, listBorderColor: string, columnBg: string, t: (key: string) => string, otherSelected: FileInfo | null, handleSelectA: (file: FileResponse) => void, handleSelectB: (file: FileResponse) => void) => (
     <VStack flex={1} spacing={3} align="stretch">
       <Box>
         <Text fontWeight="bold" color={`${col.colorScheme}.500`} mb={2}>
@@ -353,29 +428,17 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
            </Text>
         </Box>
        ) : (
-         <VStack
-           spacing={0}
-           align="stretch"
-           maxH={LIST_HEIGHT}
-           overflowY="auto"
-           bg={listBg}
-           border="1px solid"
-           borderColor={listBorderColor}
-           borderRadius="md"
-         >
-          {col.results.map((file: FileResponse) => (
-            <FileItem
-              key={file.id}
-              file={file}
-              isSelectedA={columnA.selected?.id === file.id}
-              isSelectedB={columnB.selected?.id === file.id}
-              onSelectA={handleSelectA}
-              onSelectB={handleSelectB}
-              column={col.columnKey as 'A' | 'B'}
-            />
-          ))}
-        </VStack>
-      )}
+         <VirtualFileList
+           results={col.results}
+           selectedA={col.columnKey === 'A' ? col.selected : otherSelected}
+           selectedB={col.columnKey === 'B' ? col.selected : otherSelected}
+           onSelectA={handleSelectA}
+           onSelectB={handleSelectB}
+           columnKey={col.columnKey}
+           listBg={listBg}
+           listBorderColor={listBorderColor}
+         />
+       )}
 
       {col.selected && (
         <Box p={2} bg={columnBg} borderRadius="md" borderWidth="1px" borderColor={listBorderColor}>
@@ -399,13 +462,13 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
 
         <ModalBody flex={1} overflowY="auto" px={6} py={4}>
           <HStack spacing={4} align="stretch">
-            {renderColumn(columnA)}
+            {renderColumn(columnA, listBg, listBorderColor, columnBg, t, columnB.selected, handleSelectA, handleSelectB)}
             <Box w={8} display="flex" alignItems="center" justifyContent="center">
                <Text fontSize="2xl" fontWeight="bold" color="gray.400" whiteSpace="nowrap">
                  {t('filePicker.vs')}
                </Text>
             </Box>
-            {renderColumn(columnB)}
+            {renderColumn(columnB, listBg, listBorderColor, columnBg, t, columnA.selected, handleSelectA, handleSelectB)}
           </HStack>
         </ModalBody>
 
@@ -436,17 +499,5 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
     </Modal>
   );
 };
-
-// Simple debounce hook
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(handler);
-  }, [value, delay]);
-
-  return debounced;
-}
 
 export default FilePickerModal;

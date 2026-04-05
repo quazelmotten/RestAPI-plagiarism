@@ -491,7 +491,7 @@ const Upload: React.FC = () => {
                   transform={isDragActive ? 'translateY(-4px)' : 'none'}
                 />
                 <Text fontSize="lg" fontWeight="medium">
-                  {isDragActive ? t('dragAndDrop') : t('dragAndDrop')}
+                  {isDragActive ? t('dropFilesHere') : t('dragAndDrop')}
                 </Text>
                 <Text color={mutedColor}>{t('orClickToSelect')}</Text>
                 <HStack spacing={1} flexWrap="wrap" justify="center">

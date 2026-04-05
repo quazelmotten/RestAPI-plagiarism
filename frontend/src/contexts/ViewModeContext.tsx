@@ -7,9 +7,12 @@ interface ViewModeContextValue {
   setMode: (mode: ViewMode) => void;
 }
 
-export const ViewModeContext = createContext<ViewModeContextValue>({
-  mode: 'assignments',
-  setMode: () => {},
-});
+export const ViewModeContext = createContext<ViewModeContextValue | null>(null);
 
-export const useViewMode = () => useContext(ViewModeContext);
+export const useViewMode = (): ViewModeContextValue => {
+  const context = useContext(ViewModeContext);
+  if (!context) {
+    throw new Error('useViewMode must be used within a ViewModeContext.Provider');
+  }
+  return context;
+};

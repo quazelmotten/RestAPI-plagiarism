@@ -20,10 +20,12 @@ import {
   Tooltip,
   Spinner,
   useColorModeValue,
+  Icon,
 } from '@chakra-ui/react';
-import { FiSearch, FiCheck, FiAlertCircle, FiActivity, FiLayers, FiClock, FiCheckCircle } from 'react-icons/fi';
+import { FiSearch, FiCheck, FiAlertCircle, FiActivity, FiLayers, FiClock, FiCheckCircle, FiFolder, FiAlertTriangle } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import type { TaskListItem } from '../../types';
+import { getStatusColorScheme } from '../../utils/statusColors';
 
 interface TaskPickerModalProps {
   isOpen: boolean;
@@ -100,23 +102,6 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
         return 'purple.500';
       default:
         return 'gray.500';
-    }
-  };
-
-  const getStatusColorScheme = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'green';
-      case 'failed':
-        return 'red';
-      case 'processing':
-        return 'orange';
-      case 'indexing':
-        return 'blue';
-      case 'finding_pairs':
-        return 'purple';
-      default:
-        return 'gray';
     }
   };
 
@@ -208,14 +193,20 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
 
                           <HStack spacing={3} justify="flex-end" wrap="wrap">
                             <Badge size="sm" colorScheme="gray" variant="subtle">
-                              📁 {t('taskPicker.fileCount', { count: task.files_count || 0 })}
+                              <HStack spacing={1}>
+                                <Icon as={FiFolder} boxSize={3} />
+                                <Text>{t('taskPicker.fileCount', { count: task.files_count || 0 })}</Text>
+                              </HStack>
                             </Badge>
                             <Badge size="sm" colorScheme="blue" variant="subtle">
                               {t('taskPicker.pairCount', { count: task.total_pairs })}
                             </Badge>
                             {(task.high_similarity_count || 0) > 0 && (
                               <Badge size="sm" colorScheme="red" variant="subtle">
-                                ⚠️ {t('taskPicker.highWarning', { count: task.high_similarity_count })}
+                                <HStack spacing={1}>
+                                  <Icon as={FiAlertTriangle} boxSize={3} />
+                                  <Text>{t('taskPicker.highWarning', { count: task.high_similarity_count })}</Text>
+                                </HStack>
                               </Badge>
                             )}
                             {['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(task.status) && task.progress && (

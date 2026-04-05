@@ -1,3 +1,5 @@
+import { getStatusColorScheme as _getStatusColorScheme } from '../../../utils/statusColors';
+
 export function formatDate(dateString: string): string {
   if (!dateString) return '-';
   try {
@@ -19,22 +21,7 @@ export function formatSimilarity(similarity: number | null): string {
 }
 
 export function getStatusColor(status: string): 'green' | 'yellow' | 'blue' | 'orange' | 'purple' | 'gray' | 'red' {
-  switch (status) {
-    case 'completed':
-      return 'green';
-    case 'processing':
-      return 'orange';
-    case 'indexing':
-      return 'blue';
-    case 'finding_pairs':
-      return 'purple';
-    case 'queued':
-      return 'gray';
-    case 'failed':
-      return 'red';
-    default:
-      return 'gray';
-  }
+  return _getStatusColorScheme(status) as 'green' | 'yellow' | 'blue' | 'orange' | 'purple' | 'gray' | 'red';
 }
 
 const ALL_STATUSES = ['queued', 'indexing', 'finding_pairs', 'processing', 'completed', 'failed'];

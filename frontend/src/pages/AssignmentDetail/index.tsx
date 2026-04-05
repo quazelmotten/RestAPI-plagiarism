@@ -36,6 +36,8 @@ import {
   Input,
   InputGroup,
   InputLeftElement,
+  Skeleton,
+  SkeletonText,
 } from '@chakra-ui/react';
 import {
   FiChevronRight,
@@ -59,9 +61,9 @@ import {
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../../services/api';
 import type { AssignmentFullResponse, PlagiarismResult } from '../../types';
+import { getSimilarityColor, getStatusColorScheme } from '../../utils/statusColors';
 import TaskProgress from '../../components/Results/TaskProgress';
 import SimilarityDistribution from '../../components/Results/SimilarityDistribution';
-import HeatmapView from '../../components/Results/HeatmapView';
 import PairComparisonModal from '../../components/PairComparisonModal';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024;
@@ -92,13 +94,6 @@ const languageOptions = [
   { value: 'rust', key: 'rust' },
 ];
 
-const getSimilarityColor = (similarity: number) => {
-  if (similarity >= 0.8) return 'red';
-  if (similarity >= 0.5) return 'orange';
-  if (similarity >= 0.3) return 'yellow';
-  return 'green';
-};
-
 const getStatusIcon = (status: string) => {
   switch (status) {
     case 'completed': return <FiCheckCircle color="#48bb78" />;
@@ -107,17 +102,6 @@ const getStatusIcon = (status: string) => {
     case 'indexing': return <FiLayers color="#4299e1" />;
     case 'finding_intra_pairs': case 'finding_cross_pairs': return <FiLayers color="#805ad5" />;
     default: return <FiClock color="#a0aec0" />;
-  }
-};
-
-const getStatusColorScheme = (status: string) => {
-  switch (status) {
-    case 'completed': return 'green';
-    case 'failed': return 'red';
-    case 'storing_results': return 'orange';
-    case 'indexing': return 'blue';
-    case 'finding_intra_pairs': case 'finding_cross_pairs': return 'purple';
-    default: return 'gray';
   }
 };
 
@@ -395,7 +379,6 @@ const AssignmentDetail: React.FC = () => {
   const tabLabels = [
     t('results:resultsList.topSimilarities'),
     t('results:distribution.title'),
-    t('results:heatmap.title'),
   ];
 
   const renderResizeHandle = (col: string) => (
@@ -650,7 +633,7 @@ const AssignmentDetail: React.FC = () => {
                 {label}
               </Button>
             ))}
-            <Button size="sm" variant={activeTab === 3 ? 'solid' : 'ghost'} colorScheme={activeTab === 3 ? 'brand' : 'gray'} onClick={() => setActiveTab(3)} fontSize="xs">
+            <Button size="sm" variant={activeTab === 2 ? 'solid' : 'ghost'} colorScheme={activeTab === 2 ? 'brand' : 'gray'} onClick={() => setActiveTab(2)} fontSize="xs">
               <HStack spacing={1}>
                 <Icon as={FiFileText} boxSize={3} />
                 <Text>Files</Text>
@@ -776,26 +759,8 @@ const AssignmentDetail: React.FC = () => {
               </Box>
             )}
 
-            {/* Heatmap */}
-            {activeTab === 2 && (
-              <Box flex={1} display="flex" flexDirection="column" minH={0} overflowY="auto">
-                <HeatmapView
-                  selectedTask={{
-                    task_id: selectedTaskId || assignmentData.id,
-                    status: 'completed',
-                    total_pairs: assignmentData.total_pairs,
-                    files: assignmentData.files.map(f => ({ id: f.id, filename: f.filename, task_id: f.task_id || undefined })),
-                    results: assignmentData.results,
-                    overall_stats: assignmentData.overall_stats || undefined,
-                  }}
-                  handleCompare={handleCompare}
-                  cardBg={cardBg}
-                />
-              </Box>
-            )}
-
             {/* Files */}
-            {activeTab === 3 && (
+            {activeTab === 2 && (
               <Box flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
                 <HStack spacing={3} mb={3} flexShrink={0}>
                   <InputGroup size="sm" maxW="250px">

@@ -18,10 +18,11 @@ import {
   Spinner,
   Alert,
   AlertIcon,
+  Skeleton,
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
-import api, { API_ENDPOINTS } from '../services/api';
-import type { TaskListItem, TaskDetails } from '../types';
+import type { TaskListItem, TaskDetails, PlagiarismResult } from '../types';
+import { useGraphTasks, useGraphTaskDetails } from '../hooks/useGraphQueries';
 type Task = TaskDetails;
 
 cytoscape.use(coseBilkent);
@@ -31,83 +32,32 @@ const PlagiarismGraph: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [similarityThreshold, setSimilarityThreshold] = useState(0.75);
   const [, setCy] = useState<cytoscape.Core | null>(null);
-  const [tasks, setTasks] = useState<TaskListItem[]>([]);
-  const [selectedTaskId, setSelectedTaskId] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [loadingDetails, setLoadingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTaskDetails, setSelectedTaskDetails] = useState<Task | null>(null);
-  const [hasSetInitialTask, setHasSetInitialTask] = useState(false);
 
-  // Fetch tasks list only (no results)
-  const fetchTasks = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await api.get<{ items: TaskListItem[] }>(API_ENDPOINTS.TASKS);
-      if (!Array.isArray(response.data.items)) {
-        console.error('Expected array from /plagiarism/tasks, got:', typeof response.data.items, response.data);
-        setError(t('errors.invalidDataFormat'));
-        setTasks([]);
-        return;
-      }
-      const taskList = response.data.items;
-      setTasks(taskList);
-      // Select the first completed task with results by default (only once)
-      if (!hasSetInitialTask) {
-        const completedTask = taskList.find((t) => t.status === 'completed' && t.total_pairs > 0);
-        if (completedTask) {
-          setSelectedTaskId(completedTask.task_id);
-        } else if (taskList.length > 0) {
-          setSelectedTaskId(taskList[0].task_id);
-        }
-        setHasSetInitialTask(true);
-      }
-      } catch (err) {
-        setError(t('errors.fetchFailed'));
-        console.error(err);
-      } finally {
-      setLoading(false);
-    }
-  }, [hasSetInitialTask]);
+  const { data: tasksData, isLoading: loadingTasks } = useGraphTasks();
+  const tasks = tasksData?.items ?? [];
+
+  const [selectedTaskId, setSelectedTaskId] = useState<string>(() => {
+    const completedTask = tasks.find((t: TaskListItem) => t.status === 'completed' && t.total_pairs > 0);
+    return completedTask?.task_id || tasks[0]?.task_id || '';
+  });
+
+  const { data: selectedTaskDetails, isLoading: loadingDetails } = useGraphTaskDetails(selectedTaskId || undefined, 500);
 
   useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    if (tasks.length > 0 && !selectedTaskId) {
+      const completedTask = tasks.find((t: TaskListItem) => t.status === 'completed' && t.total_pairs > 0);
+      setSelectedTaskId(completedTask?.task_id || tasks[0].task_id);
+    }
+  }, [tasks, selectedTaskId]);
 
-   // Fetch details for selected task
-   useEffect(() => {
-     if (!selectedTaskId) {
-       setSelectedTaskDetails(null);
-       return;
-     }
-
-     const fetchTaskDetails = async () => {
-       try {
-         setLoadingDetails(true);
-         const response = await api.get<TaskDetails>(API_ENDPOINTS.TASK_DETAILS(selectedTaskId), {
-           params: { limit: 500 } // load up to 500 highest similarity results for graph
-         });
-         setSelectedTaskDetails(response.data);
-       } catch (err) {
-         console.error('Failed to fetch task details:', err);
-         setSelectedTaskDetails(null);
-       } finally {
-         setLoadingDetails(false);
-       }
-     };
-
-     fetchTaskDetails();
-   }, [selectedTaskId]);
-
-  // Get selected task data
   const selectedTask = selectedTaskDetails;
 
   useEffect(() => {
     if (!containerRef.current) return;
     if (!selectedTask || !selectedTask.files) return;
 
-    // Build nodes from files
-    const nodes: cytoscape.ElementDefinition[] = selectedTask.files.map((file) => ({
+    const nodes: cytoscape.ElementDefinition[] = selectedTask.files.map((file: { id: string; filename: string; task_id?: string }) => ({
       data: {
         id: file.id,
         label: file.filename,
@@ -115,18 +65,16 @@ const PlagiarismGraph: React.FC = () => {
       },
     }));
 
-    // Get set of valid file IDs
-    const validFileIds = new Set(selectedTask.files.map((file) => file.id));
+    const validFileIds = new Set(selectedTask.files.map((file: { id: string; filename: string; task_id?: string }) => file.id));
 
-    // Build edges from similarity results, filtering out edges with non-existent targets
     const edges: cytoscape.ElementDefinition[] = selectedTask.results
-      .filter((result) => {
+      .filter((result: PlagiarismResult) => {
         const sourceExists = validFileIds.has(result.file_a.id);
         const targetExists = validFileIds.has(result.file_b.id);
         const meetsThreshold = (result.ast_similarity || 0) >= similarityThreshold;
         return sourceExists && targetExists && meetsThreshold;
       })
-      .map((result) => ({
+      .map((result: PlagiarismResult) => ({
         data: {
           source: result.file_a.id,
           target: result.file_b.id,
@@ -219,15 +167,23 @@ const PlagiarismGraph: React.FC = () => {
     };
   }, [similarityThreshold, selectedTaskId, selectedTask]);
 
-  // Filter out duplicate edges for display
   const filteredEdgesCount = selectedTask?.results.filter(
-    (r) => (r.ast_similarity || 0) >= similarityThreshold
+    (r: PlagiarismResult) => (r.ast_similarity || 0) >= similarityThreshold
   ).length || 0;
 
-  if (loading) {
+  if (loadingTasks) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" h="400px">
-        <Spinner size="xl" color="blue.500" />
+      <Box>
+        <Card mb={6}>
+          <CardBody>
+            <Skeleton height="40px" />
+          </CardBody>
+        </Card>
+        <Card>
+          <CardBody>
+            <Skeleton height="600px" />
+          </CardBody>
+        </Card>
       </Box>
     );
   }
@@ -264,7 +220,7 @@ const PlagiarismGraph: React.FC = () => {
                       onChange={(e) => setSelectedTaskId(e.target.value)}
                       w="300px"
                     >
-                      {tasks.map((task) => {
+                      {tasks.map((task: TaskListItem) => {
                         const shortId = task.task_id.substring(0, 8);
                         return (
                           <option key={task.task_id} value={task.task_id}>
@@ -321,20 +277,7 @@ const PlagiarismGraph: React.FC = () => {
                   </Box>
                 )}
 
-                 <HStack spacing={4} fontSize="sm">
-                   <HStack>
-                     <Box w="3" h="3" bg="red.500" borderRadius="full" />
-                      <Text>{t('results:heatmap.legend.high')}</Text>
-                   </HStack>
-                   <HStack>
-                     <Box w="3" h="3" bg="yellow.400" borderRadius="full" />
-                      <Text>{t('results:heatmap.legend.medium')}</Text>
-                   </HStack>
-                   <HStack>
-                     <Box w="3" h="3" bg="green.400" borderRadius="full" />
-                      <Text>{t('results:heatmap.legend.low')}</Text>
-                   </HStack>
-                 </HStack>
+
               </VStack>
             </CardBody>
           </Card>
