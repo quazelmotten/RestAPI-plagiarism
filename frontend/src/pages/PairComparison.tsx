@@ -13,8 +13,14 @@ import {
   Collapse,
   Button,
   Skeleton,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
 } from '@chakra-ui/react';
-import { FiEye, FiEyeOff, FiChevronUp, FiChevronDown, FiLink, FiLink2, FiBarChart2 } from 'react-icons/fi';
+import { FiEye, FiEyeOff, FiChevronUp, FiChevronDown, FiLink, FiLink2, FiBarChart2, FiHelpCircle, FiFilter } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../services/api';
 import FilePickerModal from '../components/FilePickerModal';
@@ -56,6 +62,33 @@ type PairResult = ApiPlagiarismResult & {
   task_id?: string;
 };
 
+const isCommentLine = (line: string, language: string): boolean => {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+
+  if (['python', 'ruby', 'perl', 'bash', 'shell'].includes(language)) {
+    return trimmed.startsWith('#');
+  }
+
+  if (['javascript', 'typescript', 'tsx', 'c', 'cpp', 'java', 'go', 'rust', 'kotlin', 'swift', 'csharp'].includes(language)) {
+    return trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/');
+  }
+
+  if (['sql', 'lua'].includes(language)) {
+    return trimmed.startsWith('--');
+  }
+
+  if (language === 'html' || language === 'xml') {
+    return trimmed.startsWith('<!--') || trimmed.endsWith('-->');
+  }
+
+  if (['css', 'scss', 'less'].includes(language)) {
+    return trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/');
+  }
+
+  return false;
+};
+
 import FileViewer from '../components/PairComparison/FileViewer';
 import ComparisonHeader from '../components/PairComparison/ComparisonHeader';
 
@@ -79,9 +112,11 @@ const PairComparison: React.FC = () => {
   const [hoveredMatchIndex, setHoveredMatchIndex] = useState<number | null>(null);
   const [analyzingMatches, setAnalyzingMatches] = useState(false);
   const [filterComments, setFilterComments] = useState(false);
+  const [filterEmpty, setFilterEmpty] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
   const [syncScroll, setSyncScroll] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const scrollSyncing = useRef(false);
 
   const [searchParams] = useSearchParams();
@@ -103,6 +138,30 @@ const PairComparison: React.FC = () => {
 
   const matchStats = useMemo(() => {
     const matches = currentPairMemo?.matches || [];
+
+    // Compute effective line sets (non-blank, non-comment)
+    const computeEffectiveLines = (content: string, lang: string): Set<number> => {
+      const lines = content.split('\n');
+      const set = new Set<number>();
+      lines.forEach((line, idx) => {
+        const trimmed = line.trim();
+        if (trimmed === '') return;
+        if (isCommentLine(line, lang)) return;
+        set.add(idx);
+      });
+      return set;
+    };
+
+    const contentA = fileAContent?.content || '';
+    const langA = fileAContent?.language || '';
+    const effectiveA = contentA ? computeEffectiveLines(contentA, langA) : new Set<number>();
+    const totalEffectiveA = effectiveA.size;
+
+    const contentB = fileBContent?.content || '';
+    const langB = fileBContent?.language || '';
+    const effectiveB = contentB ? computeEffectiveLines(contentB, langB) : new Set<number>();
+    const totalEffectiveB = effectiveB.size;
+
     const stats: Record<number, { count: number; linesA: number; linesB: number }> = {};
     let totalLinesA = 0;
     let totalLinesB = 0;
@@ -111,24 +170,31 @@ const PairComparison: React.FC = () => {
       const type = m.plagiarism_type ?? 1;
       if (!stats[type]) stats[type] = { count: 0, linesA: 0, linesB: 0 };
       stats[type].count++;
-      const la = m.file_a_end_line - m.file_a_start_line + 1;
-      const lb = m.file_b_end_line - m.file_b_start_line + 1;
-      stats[type].linesA += la;
-      stats[type].linesB += lb;
-      totalLinesA += la;
-      totalLinesB += lb;
-    }
 
-    const fileALines = (fileAContent?.content || '').split('\n').length;
-    const fileBLines = (fileBContent?.content || '').split('\n').length;
+      // Count effective lines in the range for A
+      let countA = 0;
+      for (let i = m.file_a_start_line - 1; i <= m.file_a_end_line - 1; i++) {
+        if (effectiveA.has(i)) countA++;
+      }
+      // For B
+      let countB = 0;
+      for (let i = m.file_b_start_line - 1; i <= m.file_b_end_line - 1; i++) {
+        if (effectiveB.has(i)) countB++;
+      }
+
+      stats[type].linesA += countA;
+      stats[type].linesB += countB;
+      totalLinesA += countA;
+      totalLinesB += countB;
+    }
 
     return {
       byType: stats,
       totalMatches: matches.length,
       totalLinesA,
       totalLinesB,
-      coverageA: fileALines > 0 ? (totalLinesA / fileALines) * 100 : 0,
-      coverageB: fileBLines > 0 ? (totalLinesB / fileBLines) * 100 : 0,
+      coverageA: totalEffectiveA > 0 ? (totalLinesA / totalEffectiveA) * 100 : 0,
+      coverageB: totalEffectiveB > 0 ? (totalLinesB / totalEffectiveB) * 100 : 0,
     };
   }, [currentPairMemo, fileAContent, fileBContent]);
 
@@ -417,6 +483,16 @@ const PairComparison: React.FC = () => {
                 onClick={() => setFilterComments(!filterComments)}
               />
             </Tooltip>
+            <Tooltip label={filterEmpty ? t('page.tooltip.showEmptyLines') : t('page.tooltip.hideEmptyLines')} placement="bottom">
+              <IconButton
+                aria-label={filterEmpty ? 'Show empty lines' : 'Hide empty lines'}
+                icon={filterEmpty ? <FiEye /> : <FiFilter />}
+                size="sm"
+                variant={filterEmpty ? 'solid' : 'ghost'}
+                colorScheme={filterEmpty ? 'green' : 'gray'}
+                onClick={() => setFilterEmpty(!filterEmpty)}
+              />
+            </Tooltip>
              <Tooltip label={syncScroll ? t('page.tooltip.unlockScrollSync') : t('page.tooltip.lockScrollSync')} placement="bottom">
                <IconButton
                  aria-label={syncScroll ? t('page.aria.unlockScrollSync') : t('page.aria.lockScrollSync')}
@@ -427,16 +503,26 @@ const PairComparison: React.FC = () => {
                  onClick={() => setSyncScroll(!syncScroll)}
                />
              </Tooltip>
-             <Tooltip label={t('page.tooltip.matchStatistics')} placement="bottom">
-               <IconButton
-                 aria-label={t('page.aria.matchStatistics')}
-                 icon={<FiBarChart2 />}
-                 size="sm"
-                 variant={statsOpen ? 'solid' : 'ghost'}
-                 colorScheme={statsOpen ? 'purple' : 'gray'}
-                 onClick={() => setStatsOpen(!statsOpen)}
-               />
-             </Tooltip>
+              <Tooltip label={t('page.tooltip.matchStatistics')} placement="bottom">
+                <IconButton
+                  aria-label={t('page.aria.matchStatistics')}
+                  icon={<FiBarChart2 />}
+                  size="sm"
+                  variant={statsOpen ? 'solid' : 'ghost'}
+                  colorScheme={statsOpen ? 'purple' : 'gray'}
+                  onClick={() => setStatsOpen(!statsOpen)}
+                />
+              </Tooltip>
+               <Tooltip label="Keyboard shortcuts" placement="bottom">
+                 <IconButton
+                   aria-label="Keyboard shortcuts"
+                   icon={<FiHelpCircle />}
+                   size="sm"
+                   variant={shortcutsOpen ? 'solid' : 'ghost'}
+                   colorScheme={shortcutsOpen ? 'teal' : 'gray'}
+                   onClick={() => setShortcutsOpen(!shortcutsOpen)}
+                 />
+               </Tooltip>
             {headerVisible && (
               <Tooltip label={t('page.hideHeader')} placement="bottom">
                 <IconButton
@@ -479,9 +565,47 @@ const PairComparison: React.FC = () => {
                  ))}
               </HStack>
             </Box>
-          </Collapse>
+           </Collapse>
 
-          {contentError && !loadingContent ? (
+           {/* Keyboard shortcuts modal */}
+            <Modal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} size="md">
+              <ModalOverlay />
+              <ModalContent>
+                <ModalHeader>
+                  <HStack>
+                    <FiHelpCircle />
+                    <Text>Keyboard Shortcuts</Text>
+                  </HStack>
+                </ModalHeader>
+                <ModalCloseButton />
+                <ModalBody>
+                  <VStack align="stretch" spacing={3}>
+                    <HStack justify="space-between">
+                      <Text fontWeight="medium">Ctrl/Cmd + N</Text>
+                      <Text color="gray.500">Next match</Text>
+                    </HStack>
+                    <HStack justify="space-between">
+                      <Text fontWeight="medium">Ctrl/Cmd + P</Text>
+                      <Text color="gray.500">Previous match</Text>
+                    </HStack>
+                    <HStack justify="space-between">
+                      <Text fontWeight="medium">Ctrl/Cmd + C</Text>
+                      <Text color="gray.500">Toggle comments</Text>
+                    </HStack>
+                    <HStack justify="space-between">
+                      <Text fontWeight="medium">Ctrl/Cmd + S</Text>
+                      <Text color="gray.500">Toggle scroll sync</Text>
+                    </HStack>
+                    <HStack justify="space-between">
+                      <Text fontWeight="medium">Escape</Text>
+                      <Text color="gray.500">Close modal (or file picker)</Text>
+                    </HStack>
+                  </VStack>
+                </ModalBody>
+              </ModalContent>
+            </Modal>
+
+           {contentError && !loadingContent ? (
             <Box flex={1} display="flex" alignItems="center" justifyContent="center" py={8} minH={0}>
               <Text color="red.500">{contentError}</Text>
             </Box>
@@ -505,33 +629,35 @@ const PairComparison: React.FC = () => {
                 </Box>
 
                 <Flex flex={1} gap={4} align="stretch" py={4} px={2} minH={0} overflow="hidden">
-                   <FileViewer
-                     content={fileAContent?.content || ''}
-                     fileName={fileAContent?.filename || t('filePicker.fileA')}
-                     language={fileAContent?.language || 'unknown'}
-                     matches={currentPair?.matches || []}
-                     isFileA={isFileAInPair}
-                     filterComments={filterComments}
-                     hoveredMatchIndex={hoveredMatchIndex}
-                     onHoverMatch={setHoveredMatchIndex}
-                     onJumpToMatch={handleJumpToMatch}
-                     scrollContainerRef={fileAContainerRef}
-                     getLineRef={getLineRef(true)}
-                   />
+                    <FileViewer
+                      content={fileAContent?.content || ''}
+                      fileName={fileAContent?.filename || t('filePicker.fileA')}
+                      language={fileAContent?.language || 'unknown'}
+                      matches={currentPair?.matches || []}
+                      isFileA={isFileAInPair}
+                      filterComments={filterComments}
+                      filterEmpty={filterEmpty}
+                      hoveredMatchIndex={hoveredMatchIndex}
+                      onHoverMatch={setHoveredMatchIndex}
+                      onJumpToMatch={handleJumpToMatch}
+                      scrollContainerRef={fileAContainerRef}
+                      getLineRef={getLineRef(true)}
+                    />
 
-                   <FileViewer
-                     content={fileBContent?.content || ''}
-                     fileName={fileBContent?.filename || t('filePicker.fileB')}
-                     language={fileBContent?.language || 'unknown'}
-                     matches={currentPair?.matches || []}
-                     isFileA={!isFileAInPair}
-                     filterComments={filterComments}
-                     hoveredMatchIndex={hoveredMatchIndex}
-                     onHoverMatch={setHoveredMatchIndex}
-                     onJumpToMatch={handleJumpToMatch}
-                     scrollContainerRef={fileBContainerRef}
-                     getLineRef={getLineRef(false)}
-                   />
+                    <FileViewer
+                      content={fileBContent?.content || ''}
+                      fileName={fileBContent?.filename || t('filePicker.fileB')}
+                      language={fileBContent?.language || 'unknown'}
+                      matches={currentPair?.matches || []}
+                      isFileA={!isFileAInPair}
+                      filterComments={filterComments}
+                      filterEmpty={filterEmpty}
+                      hoveredMatchIndex={hoveredMatchIndex}
+                      onHoverMatch={setHoveredMatchIndex}
+                      onJumpToMatch={handleJumpToMatch}
+                      scrollContainerRef={fileBContainerRef}
+                      getLineRef={getLineRef(false)}
+                    />
                 </Flex>
 
                 <Box w="16px" bg={minimapBg} position="relative" flexShrink={0}>

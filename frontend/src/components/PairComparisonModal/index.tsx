@@ -23,6 +23,7 @@ import {
   FiLink2,
   FiBarChart2,
   FiFolder,
+  FiFilter,
 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../../services/api';
@@ -39,6 +40,33 @@ import { PLAGIARISM_TYPE_COLORS } from '../../types';
 import ErrorBoundary from '../ErrorBoundary';
 
 type PlagiarismMatch = ApiPlagiarismMatch;
+
+const isCommentLine = (line: string, language: string): boolean => {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+
+  if (['python', 'ruby', 'perl', 'bash', 'shell'].includes(language)) {
+    return trimmed.startsWith('#');
+  }
+
+  if (['javascript', 'typescript', 'tsx', 'c', 'cpp', 'java', 'go', 'rust', 'kotlin', 'swift', 'csharp'].includes(language)) {
+    return trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/');
+  }
+
+  if (['sql', 'lua'].includes(language)) {
+    return trimmed.startsWith('--');
+  }
+
+  if (language === 'html' || language === 'xml') {
+    return trimmed.startsWith('<!--') || trimmed.endsWith('-->');
+  }
+
+  if (['css', 'scss', 'less'].includes(language)) {
+    return trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/');
+  }
+
+  return false;
+};
 
 interface BackendMatch {
   file1?: { start_line: number; end_line: number };
@@ -115,6 +143,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
   const [hoveredMatchIndex, setHoveredMatchIndex] = useState<number | null>(null);
   const [analyzingMatches, setAnalyzingMatches] = useState(false);
   const [filterComments, setFilterComments] = useState(false);
+  const [filterEmpty, setFilterEmpty] = useState(false);
   const [syncScroll, setSyncScroll] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -162,9 +191,33 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
     }
   }, [isOpen, initialFileA, initialFileB]);
 
-  // Match statistics
+  // Match statistics (ignore blank lines and comments)
   const matchStats = useMemo(() => {
     const matches = currentPair?.matches || [];
+
+    // Compute effective line sets (non-blank, non-comment)
+    const computeEffectiveLines = (content: string, lang: string): Set<number> => {
+      const lines = content.split('\n');
+      const set = new Set<number>();
+      lines.forEach((line, idx) => {
+        const trimmed = line.trim();
+        if (trimmed === '') return;
+        if (isCommentLine(line, lang)) return;
+        set.add(idx);
+      });
+      return set;
+    };
+
+    const contentA = fileAContent?.content || '';
+    const langA = fileAContent?.language || '';
+    const effectiveA = contentA ? computeEffectiveLines(contentA, langA) : new Set<number>();
+    const totalEffectiveA = effectiveA.size;
+
+    const contentB = fileBContent?.content || '';
+    const langB = fileBContent?.language || '';
+    const effectiveB = contentB ? computeEffectiveLines(contentB, langB) : new Set<number>();
+    const totalEffectiveB = effectiveB.size;
+
     const stats: Record<number, { count: number; linesA: number; linesB: number }> = {};
     let totalLinesA = 0;
     let totalLinesB = 0;
@@ -173,24 +226,31 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
       const type = m.plagiarism_type ?? 1;
       if (!stats[type]) stats[type] = { count: 0, linesA: 0, linesB: 0 };
       stats[type].count++;
-      const la = m.file_a_end_line - m.file_a_start_line + 1;
-      const lb = m.file_b_end_line - m.file_b_start_line + 1;
-      stats[type].linesA += la;
-      stats[type].linesB += lb;
-      totalLinesA += la;
-      totalLinesB += lb;
-    }
 
-    const fileALines = (fileAContent?.content || '').split('\n').length;
-    const fileBLines = (fileBContent?.content || '').split('\n').length;
+      // Count effective lines in the range for A
+      let countA = 0;
+      for (let i = m.file_a_start_line - 1; i <= m.file_a_end_line - 1; i++) {
+        if (effectiveA.has(i)) countA++;
+      }
+      // For B
+      let countB = 0;
+      for (let i = m.file_b_start_line - 1; i <= m.file_b_end_line - 1; i++) {
+        if (effectiveB.has(i)) countB++;
+      }
+
+      stats[type].linesA += countA;
+      stats[type].linesB += countB;
+      totalLinesA += countA;
+      totalLinesB += countB;
+    }
 
     return {
       byType: stats,
       totalMatches: matches.length,
       totalLinesA,
       totalLinesB,
-      coverageA: fileALines > 0 ? (totalLinesA / fileALines) * 100 : 0,
-      coverageB: fileBLines > 0 ? (totalLinesB / fileBLines) * 100 : 0,
+      coverageA: totalEffectiveA > 0 ? (totalLinesA / totalEffectiveA) * 100 : 0,
+      coverageB: totalEffectiveB > 0 ? (totalLinesB / totalEffectiveB) * 100 : 0,
     };
   }, [currentPair, fileAContent, fileBContent]);
 
@@ -504,6 +564,16 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
               onClick={() => setFilterComments(!filterComments)}
             />
           </Tooltip>
+          <Tooltip label={filterEmpty ? t('page.tooltip.showEmptyLines') : t('page.tooltip.hideEmptyLines')} placement="bottom">
+            <IconButton
+              aria-label="Toggle empty lines"
+              icon={filterEmpty ? <FiEye /> : <FiFilter />}
+              size="sm"
+              variant={filterEmpty ? 'solid' : 'ghost'}
+              colorScheme={filterEmpty ? 'green' : 'gray'}
+              onClick={() => setFilterEmpty(!filterEmpty)}
+            />
+          </Tooltip>
           <Tooltip label={syncScroll ? t('page.tooltip.unlockScrollSync') : t('page.tooltip.lockScrollSync')} placement="bottom">
             <IconButton
               aria-label="Toggle scroll sync"
@@ -608,6 +678,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
                 matches={currentPair?.matches || []}
                 isFileA={true}
                 filterComments={filterComments}
+                filterEmpty={filterEmpty}
                 hoveredMatchIndex={hoveredMatchIndex}
                 onHoverMatch={setHoveredMatchIndex}
                 onJumpToMatch={handleJumpToMatch}
@@ -621,6 +692,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
                 matches={currentPair?.matches || []}
                 isFileA={false}
                 filterComments={filterComments}
+                filterEmpty={filterEmpty}
                 hoveredMatchIndex={hoveredMatchIndex}
                 onHoverMatch={setHoveredMatchIndex}
                 onJumpToMatch={handleJumpToMatch}

@@ -12,6 +12,11 @@ import {
   Divider,
   Spinner,
   Badge,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  Button,
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
@@ -40,6 +45,7 @@ import {
   FiChevronRight,
   FiFolder,
   FiList,
+  FiGlobe,
 } from 'react-icons/fi';
 import { MdDragIndicator } from 'react-icons/md';
 import api, { API_ENDPOINTS } from '../services/api';
@@ -383,26 +389,26 @@ const Sidebar: React.FC = () => {
                 <Text fontWeight="medium" fontSize="sm">{t('overview')}</Text>
               </Flex>
             </NavLink>
+
+            <NavLink to="/dashboard/assignments" style={{ textDecoration: 'none' }}>
+              <Flex
+                align="center"
+                px={4}
+                py={2.5}
+                borderRadius="md"
+                bg={isActive('/dashboard/assignments') ? 'brand.500' : 'transparent'}
+                color={isActive('/dashboard/assignments') ? 'white' : 'inherit'}
+                _hover={{ bg: isActive('/dashboard/assignments') ? 'brand.600' : hoverBg }}
+                transition="all 0.2s"
+                gap={2}
+              >
+                <Icon as={FiList} boxSize={4.5} mr={1} />
+                <Text fontWeight="medium" fontSize="sm">{t('viewAllAssignments')}</Text>
+              </Flex>
+            </NavLink>
           </VStack>
 
           <Divider my={4} />
-
-          <NavLink to="/dashboard/assignments" style={{ textDecoration: 'none' }}>
-            <Flex
-              align="center"
-              px={4}
-              py={2.5}
-              borderRadius="md"
-              bg={isActive('/dashboard/assignments') ? 'brand.500' : 'transparent'}
-              color={isActive('/dashboard/assignments') ? 'white' : 'inherit'}
-              _hover={{ bg: isActive('/dashboard/assignments') ? 'brand.600' : hoverBg }}
-              transition="all 0.2s"
-              gap={2}
-            >
-              <Icon as={FiList} boxSize={4.5} mr={1} />
-              <Text fontWeight="medium" fontSize="sm">{t('viewAllAssignments')}</Text>
-            </Flex>
-          </NavLink>
 
           <Flex
             align="center"
@@ -509,22 +515,7 @@ const Sidebar: React.FC = () => {
                 })
               )}
 
-              <NavLink to="/dashboard/assignments" style={{ textDecoration: 'none' }}>
-                <Flex
-                  align="center"
-                  px={4}
-                  py={2}
-                  borderRadius="md"
-                  color={mutedColor}
-                  _hover={{ bg: hoverBg, color: 'inherit' }}
-                  transition="all 0.2s"
-                  gap={2}
-                  mt={1}
-                >
-                  <Icon as={FiPlus} boxSize={4} />
-                  <Text fontSize="sm">{t('newAssignment')}</Text>
-                </Flex>
-              </NavLink>
+
             </VStack>
           )}
 
@@ -553,11 +544,70 @@ const Sidebar: React.FC = () => {
                 );
               })()
             ) : null}
-          </DragOverlay>
-        </DndContext>
-      )}
-    </Box>
-  );
-};
+           </DragOverlay>
+         </DndContext>
+       )}
+
+      {/* Footer with language switcher */}
+      <Box mt="auto" pt={4} borderTopWidth="1px" borderColor={borderColor} px={4}>
+        <LanguageSwitcherFooter />
+      </Box>
+     </Box>
+   );
+ };
+
+ const LanguageSwitcherFooter: React.FC = () => {
+   const { t } = useTranslation();
+   const { i18n } = useTranslation();
+
+   const languages = [
+     { code: 'en', name: 'English', flag: '🇺🇸' },
+     { code: 'ru', name: 'Русский', flag: '🇷🇺' },
+   ];
+
+   const currentLanguage = languages.find(lang => lang.code === i18n.language) || languages[0];
+
+   const changeLanguage = (lng: string) => {
+     i18n.changeLanguage(lng, (err) => {
+       if (err) return console.error('Failed to change language:', err);
+       try {
+         localStorage.setItem('language', lng);
+       } catch { /* ignore */ }
+     });
+   };
+
+   return (
+     <Menu>
+       <MenuButton
+         as={Button}
+         variant="ghost"
+         size="sm"
+         w="full"
+         justifyContent="flex-start"
+         leftIcon={<FiGlobe />}
+       >
+         <HStack spacing={2}>
+           <Text fontSize="lg">{currentLanguage.flag}</Text>
+           <Text fontSize="sm" isTruncated>{currentLanguage.name}</Text>
+         </HStack>
+       </MenuButton>
+       <MenuList>
+         {languages.map((lang) => (
+           <MenuItem
+             key={lang.code}
+             onClick={() => changeLanguage(lang.code)}
+             bg={i18n.language === lang.code ? 'brand.50' : 'transparent'}
+             _hover={{ bg: i18n.language === lang.code ? 'brand.100' : 'gray.100' }}
+           >
+             <HStack spacing={2}>
+               <Text fontSize="lg">{lang.flag}</Text>
+               <Text>{lang.name}</Text>
+             </HStack>
+           </MenuItem>
+         ))}
+       </MenuList>
+     </Menu>
+   );
+ };
 
 export default Sidebar;

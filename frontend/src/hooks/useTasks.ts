@@ -17,6 +17,10 @@ interface Task {
   };
   files_count?: number;
   high_similarity_count?: number;
+  assignment_id?: string | null;
+  assignment_name?: string | null;
+  subject_id?: string | null;
+  subject_name?: string | null;
 }
 
 interface TasksResponse {

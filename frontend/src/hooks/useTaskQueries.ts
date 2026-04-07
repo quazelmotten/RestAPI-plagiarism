@@ -8,9 +8,9 @@ interface TasksListResponse {
 
 const ACTIVE_STATUSES = ['pending', 'queued', 'indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'];
 
-export function useTasksList() {
+export function useTasksList(options?: { selectedTaskId?: string }) {
   return useQuery<TasksListResponse>({
-    queryKey: ['tasks', 'list'],
+    queryKey: ['tasks', 'list', options?.selectedTaskId],
     queryFn: async () => {
       const response = await api.get<{ items: TaskListItem[] }>(API_ENDPOINTS.TASKS);
       const taskList = response.data.items;
@@ -26,11 +26,7 @@ export function useTasksList() {
     },
     staleTime: 10_000,
     gcTime: 5 * 60_000,
-    refetchInterval: (query) => {
-      const tasks = query.state.data?.items ?? [];
-      const hasActiveTask = tasks.some(t => ACTIVE_STATUSES.includes(t.status));
-      return hasActiveTask ? 3000 : false;
-    },
+    refetchInterval: 5000,
   });
 }
 

@@ -38,6 +38,10 @@ class TaskListResponse(CustomBaseModel):
     high_similarity_count: int = 0
     total_pairs: int = 0
     avg_similarity: float = 0.0
+    assignment_id: str | None = None
+    assignment_name: str | None = None
+    subject_id: str | None = None
+    subject_name: str | None = None
 
 
 class TaskCreateResponse(CustomBaseModel):

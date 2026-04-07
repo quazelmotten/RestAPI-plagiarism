@@ -13,6 +13,10 @@ class FileResponse(CustomBaseModel):
     task_id: str
     status: str
     similarity: float | None = None
+    assignment_id: str | None = None
+    assignment_name: str | None = None
+    subject_id: str | None = None
+    subject_name: str | None = None
 
 
 class FileContentResponse(CustomBaseModel):
@@ -36,9 +40,13 @@ class FilesListResponse(CustomBaseModel):
 
 
 class FileInfoListItem(CustomBaseModel):
-    """Minimal file info for dropdowns/lists."""
+    """Minimal file info for dropdowns."""
 
     id: str
     filename: str
     language: str
     task_id: str
+    assignment_id: str | None = None
+    assignment_name: str | None = None
+    subject_id: str | None = None
+    subject_name: str | None = None

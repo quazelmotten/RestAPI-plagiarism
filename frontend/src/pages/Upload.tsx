@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation, UNSAFE_NavigationContext as NavigationContext } from 'react-router';
 import {
   Box,
   Text,
@@ -130,9 +130,15 @@ const Upload: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(0);
-  const toast = useToast();
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const { isOpen: isClearOpen, onOpen: onClearOpen, onClose: onClearClose } = useDisclosure();
+   const toast = useToast();
+   const cancelRef = useRef<HTMLButtonElement>(null);
+   const { isOpen: isClearOpen, onOpen: onClearOpen, onClose: onClearClose } = useDisclosure();
+   const [isNavigationBlocked, setIsNavigationBlocked] = useState(false);
+   const [targetPath, setTargetPath] = useState<string | null>(null);
+   const blockerRef = useRef<number | null>(null);
+   const navContext = React.useContext(NavigationContext);
+   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   const navigator = (navContext?.navigator as any)?.block ? (navContext?.navigator as any) : null;
 
   const { data: assignmentsData } = useQuery({
     queryKey: ['assignments'],
@@ -149,15 +155,46 @@ const Upload: React.FC = () => {
   const mutedColor = useColorModeValue('gray.500', 'gray.400');
   const dropzoneHoverBg = useColorModeValue('brand.50', 'gray.600');
 
-  // Warn before leaving with unsaved files
-  useEffect(() => {
-    if (files.length === 0 || isUploading) return;
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [files.length, isUploading]);
+    // Warn before leaving with unsaved files
+    useEffect(() => {
+      if (files.length === 0 || isUploading) return;
+      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+        e.preventDefault();
+        e.returnValue = '';
+      };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [files.length, isUploading]);
+
+    // Set up navigation blocker
+    useEffect(() => {
+      if (!navigator) return;
+      if (files.length === 0 || isUploading) {
+        const current = blockerRef.current;
+        if (current !== null) {
+          navigator.unblock(current);
+          blockerRef.current = null;
+        }
+        return;
+      }
+
+      const block = (tx: any) => {
+        const location = tx.location;
+        const path = location.pathname + location.search;
+        setTargetPath(path);
+        setIsNavigationBlocked(true);
+      };
+
+      const blockerId = navigator.block(block);
+      blockerRef.current = blockerId;
+
+      return () => {
+        if (blockerRef.current !== null) {
+          navigator.unblock(blockerRef.current);
+          blockerRef.current = null;
+        }
+      };
+    }, [files.length, isUploading, navigator]);
 
   // Dropzone
   const onDrop = useCallback(
@@ -732,33 +769,68 @@ const Upload: React.FC = () => {
         </Box>
       </Flex>
 
-      {/* Clear All confirmation */}
-      <AlertDialog
-        isOpen={isClearOpen}
-        leastDestructiveRef={cancelRef as React.RefObject<HTMLButtonElement>}
-        onClose={onClearClose}
-      >
-        <AlertDialogOverlay>
-          <AlertDialogContent>
-            <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              {t('common:clearAllFiles')}
-            </AlertDialogHeader>
-            <AlertDialogBody>
-              {t('common:areYouSure')} {files.length} {t('common:clearAllFiles')}.
-            </AlertDialogBody>
+       {/* Clear All confirmation */}
+       <AlertDialog
+         isOpen={isClearOpen}
+         leastDestructiveRef={cancelRef as React.RefObject<HTMLButtonElement>}
+         onClose={onClearClose}
+       >
+         <AlertDialogOverlay>
+           <AlertDialogContent>
+             <AlertDialogHeader fontSize="lg" fontWeight="bold">
+               {t('common:clearAllFiles')}
+             </AlertDialogHeader>
+             <AlertDialogBody>
+               {t('common:areYouSure')} {files.length} {t('common:clearAllFiles')}.
+             </AlertDialogBody>
+              <AlertDialogFooter>
+                <Button ref={cancelRef} onClick={onClearClose}>
+                  {t('common:cancel')}
+                </Button>
+                <Button colorScheme="red" onClick={clearAll} ml={3}>
+                  {t('common:clearAll')}
+                </Button>
+              </AlertDialogFooter>
+           </AlertDialogContent>
+         </AlertDialogOverlay>
+       </AlertDialog>
+
+       {/* Navigation confirmation dialog */}
+       <AlertDialog
+         isOpen={isNavigationBlocked}
+         leastDestructiveRef={cancelRef as React.RefObject<HTMLButtonElement>}
+         onClose={() => setIsNavigationBlocked(false)}
+       >
+         <AlertDialogOverlay>
+           <AlertDialogContent>
+             <AlertDialogHeader fontSize="lg" fontWeight="bold">
+               {t('common:areYouSure')}
+             </AlertDialogHeader>
+             <AlertDialogBody>
+               You have {files.length} file(s) pending upload. Are you sure you want to leave this page? Your files will be lost.
+             </AlertDialogBody>
              <AlertDialogFooter>
-               <Button ref={cancelRef} onClick={onClearClose}>
+               <Button ref={cancelRef} onClick={() => setIsNavigationBlocked(false)}>
                  {t('common:cancel')}
                </Button>
-               <Button colorScheme="red" onClick={clearAll} ml={3}>
-                 {t('common:clearAll')}
+               <Button
+                 colorScheme="red"
+                 onClick={() => {
+                   setIsNavigationBlocked(false);
+                   if (targetPath) {
+                     window.location.href = targetPath;
+                   }
+                 }}
+                 ml={3}
+               >
+                 Leave Page
                </Button>
              </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialogOverlay>
-      </AlertDialog>
-    </Box>
-  );
-};
+           </AlertDialogContent>
+         </AlertDialogOverlay>
+       </AlertDialog>
+     </Box>
+   );
+ };
 
 export default Upload;

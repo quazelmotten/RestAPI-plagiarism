@@ -51,6 +51,7 @@ import {
   FiFolder,
   FiChevronDown,
   FiChevronRight,
+  FiInbox,
 } from 'react-icons/fi';
 import { MdDragIndicator } from 'react-icons/md';
 import {
@@ -115,77 +116,69 @@ interface DraggableAssignmentRowProps {
   onDelete: (a: Assignment) => void;
 }
 
-const DraggableAssignmentRow: React.FC<DraggableAssignmentRowProps> = ({
-  assignment, hoverBg, mutedColor, t, isDragging, onEdit, onDelete,
-}) => {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
-    id: assignment.id,
-    data: { assignmentId: assignment.id, currentSubjectId: assignment.subject_id },
-  });
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.4 : 1,
+  const DraggableAssignmentRow: React.FC<DraggableAssignmentRowProps> = ({
+    assignment, hoverBg, mutedColor, t, isDragging, onEdit, onDelete,
+  }) => {
+    const { attributes, listeners, setNodeRef, transform } = useDraggable({
+      id: assignment.id,
+      data: { assignmentId: assignment.id, currentSubjectId: assignment.subject_id },
+    });
+    const style = {
+      transform: CSS.Translate.toString(transform),
+      opacity: isDragging ? 0.4 : 1,
+    };
+
+    return (
+      <Tr ref={setNodeRef} style={style} _hover={{ bg: hoverBg }}>
+        <Td {...attributes} {...listeners} cursor="grab">
+          <Icon
+            as={MdDragIndicator}
+            boxSize={4}
+            color="gray.400"
+            _hover={{ color: 'brand.500' }}
+          />
+        </Td>
+        <Td fontWeight="medium">{assignment.name}</Td>
+        <Td maxW="300px" isTruncated>{assignment.description || '—'}</Td>
+        <Td isNumeric>
+          <Badge colorScheme="blue">{assignment.tasks_count}</Badge>
+        </Td>
+        <Td isNumeric>
+          <Badge colorScheme="green">{assignment.files_count}</Badge>
+        </Td>
+        <Td fontSize="sm" color={mutedColor}>
+          {assignment.created_at ? new Date(assignment.created_at).toLocaleDateString() : '—'}
+        </Td>
+        <Td>
+          <HStack spacing={1}>
+            <IconButton
+              aria-label="Edit assignment"
+              icon={<FiEdit2 />}
+              size="xs"
+              variant="ghost"
+              onClick={() => onEdit(assignment)}
+            />
+            <IconButton
+              aria-label="Delete assignment"
+              icon={<FiTrash2 />}
+              size="xs"
+              variant="ghost"
+              colorScheme="red"
+              onClick={() => onDelete(assignment)}
+            />
+          </HStack>
+        </Td>
+      </Tr>
+    );
   };
 
-  return (
-    <Tr ref={setNodeRef} style={style} _hover={{ bg: hoverBg }}>
-      <Td>
-        <Icon
-          as={MdDragIndicator}
-          boxSize={4}
-          cursor="grab"
-          color="gray.400"
-          _hover={{ color: 'brand.500' }}
-          {...attributes}
-          {...listeners}
-        />
-      </Td>
-      <Td fontWeight="medium">{assignment.name}</Td>
-      <Td maxW="300px" isTruncated>{assignment.description || '—'}</Td>
-      <Td isNumeric>
-        <Badge colorScheme="blue">{assignment.tasks_count}</Badge>
-      </Td>
-      <Td isNumeric>
-        <Badge colorScheme="green">{assignment.files_count}</Badge>
-      </Td>
-      <Td fontSize="sm" color={mutedColor}>
-        {assignment.created_at ? new Date(assignment.created_at).toLocaleDateString() : '—'}
-      </Td>
-      <Td>
-        <HStack spacing={1}>
-          <IconButton
-            aria-label="Edit assignment"
-            icon={<FiEdit2 />}
-            size="xs"
-            variant="ghost"
-            onClick={() => onEdit(assignment)}
-          />
-          <IconButton
-            aria-label="Delete assignment"
-            icon={<FiTrash2 />}
-            size="xs"
-            variant="ghost"
-            colorScheme="red"
-            onClick={() => onDelete(assignment)}
-          />
-        </HStack>
-      </Td>
-    </Tr>
-  );
-};
-
-const DroppableSubjectHeader: React.FC<{
-  subjectId: string;
+const SubjectHeader: React.FC<{
+  isOver: boolean;
   isUncategorized?: boolean;
   children: React.ReactNode;
-}> = ({ subjectId, isUncategorized, children }) => {
-  const { setNodeRef, isOver } = useDroppable({
-    id: `subject-drop:${subjectId}`,
-  });
-
+}> = ({ isOver, isUncategorized, children }) => {
   return (
     <Flex
-      ref={setNodeRef}
       bg={isOver ? (isUncategorized ? 'gray.100' : 'purple.50') : undefined}
       borderColor={isOver ? (isUncategorized ? 'gray.400' : 'purple.400') : 'transparent'}
       borderWidth="2px"
@@ -202,6 +195,19 @@ const DroppableSubjectHeader: React.FC<{
       {children}
     </Flex>
   );
+};
+
+interface DroppableSubjectContainerProps {
+  subjectId: string;
+  children: (ctx: { isOver: boolean }) => React.ReactNode;
+}
+
+const DroppableSubjectContainer: React.FC<DroppableSubjectContainerProps> = ({ subjectId, children }) => {
+  const { isOver, setNodeRef } = useDroppable({
+    id: `subject-drop:${subjectId}`,
+  });
+
+  return <Box ref={setNodeRef}>{children({ isOver })}</Box>;
 };
 
 const Assignments: React.FC = () => {
@@ -296,13 +302,38 @@ const Assignments: React.FC = () => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await api.delete(`${API_ENDPOINTS.ASSIGNMENTS}/${id}`);
+    mutationFn: async (assignment: Assignment) => {
+      await api.delete(`${API_ENDPOINTS.ASSIGNMENTS}/${assignment.id}`);
     },
-    onSuccess: () => {
+    onSuccess: (_, assignment) => {
+      toast({
+        title: t('toasts.deleted'),
+        description: (
+          <HStack>
+            <Text>{t('toasts.deleted')}</Text>
+            <Button
+              size="xs"
+              colorScheme="blue"
+              variant="outline"
+              ml={2}
+              onClick={() => {
+                createMutation.mutate({
+                  name: assignment.name,
+                  description: assignment.description,
+                  subject_id: assignment.subject_id,
+                });
+              }}
+            >
+              {t('common:undo')}
+            </Button>
+          </HStack>
+        ),
+        status: 'info',
+        duration: 5000,
+        isClosable: true,
+      });
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
-      toast({ title: t('toasts.deleted'), status: 'success', duration: 3000 });
       setDeletingAssignment(null);
       onDeleteAssignmentClose();
     },
@@ -468,17 +499,48 @@ const Assignments: React.FC = () => {
 
   const handleDeleteAssignment = useCallback(() => {
     if (deletingAssignment) {
-      deleteMutation.mutate(deletingAssignment.id);
+      deleteMutation.mutate(deletingAssignment);
     }
   }, [deletingAssignment, deleteMutation]);
 
   const handleDeleteSubject = useCallback(() => {
-    if (deletingSubject) {
-      deleteSubjectMutation.mutate(deletingSubject.id);
-      setDeletingSubject(null);
-      onDeleteSubjectClose();
-    }
-  }, [deletingSubject, deleteSubjectMutation]);
+    if (!deletingSubject) return;
+
+    const subjectToUndo = deletingSubject;
+
+    deleteSubjectMutation.mutate(subjectToUndo.id, {
+      onSuccess: () => {
+        toast({
+          title: t('toasts.deleted'),
+          description: (
+            <HStack>
+              <Text>{t('toasts.deleted')}</Text>
+              <Button
+                size="xs"
+                colorScheme="blue"
+                variant="outline"
+                ml={2}
+                onClick={() => {
+                  createSubjectMutation.mutate({
+                    name: subjectToUndo.name,
+                    description: subjectToUndo.description,
+                  });
+                }}
+              >
+                {t('common:undo')}
+              </Button>
+            </HStack>
+          ),
+          status: 'info',
+          duration: 5000,
+          isClosable: true,
+        });
+      },
+    });
+
+    setDeletingSubject(null);
+    onDeleteSubjectClose();
+  }, [deletingSubject, deleteSubjectMutation, createSubjectMutation, t]);
 
   const filterAssignments = (assignments: Assignment[]) => {
     if (!searchQuery.trim()) return assignments;
@@ -544,89 +606,92 @@ const Assignments: React.FC = () => {
               const dropTargetId = `subject-drop:${subject.id}`;
 
               return (
-                <Box key={subject.id} data-drop-target={dropTargetId}>
-                  {/* Subject Header */}
-                  <DroppableSubjectHeader subjectId={subject.id}>
-                    <HStack spacing={3} flex={1} onClick={() => toggleSubject(subject.id)} cursor="pointer">
-                      <Icon
-                        as={isCollapsed ? FiChevronRight : FiChevronDown}
-                        boxSize={4}
-                        color={mutedColor}
-                      />
-                      <Icon as={FiFolder} boxSize={5} color="purple.500" />
-                      <Text fontWeight="semibold" fontSize="md">{subject.name}</Text>
-                      <Badge colorScheme="purple">{subjectAssignments.length}</Badge>
-                    </HStack>
-                    <HStack spacing={1} onClick={(e) => e.stopPropagation()}>
-                      <IconButton
-                        aria-label="Edit subject"
-                        icon={<FiEdit2 />}
-                        size="xs"
-                        variant="ghost"
-                        onClick={() => openEditSubject(subject)}
-                      />
-                      <IconButton
-                        aria-label="Delete subject"
-                        icon={<FiTrash2 />}
-                        size="xs"
-                        variant="ghost"
-                        colorScheme="red"
-                        onClick={() => {
-                          setDeletingSubject(subject);
-                          onDeleteSubjectOpen();
-                        }}
-                      />
-                    </HStack>
-                  </DroppableSubjectHeader>
+                <DroppableSubjectContainer key={subject.id} subjectId={subject.id}>
+                  {({ isOver }) => (
+                    <>
+                      <SubjectHeader isOver={isOver} isUncategorized={false}>
+                        <HStack spacing={3} flex={1} onClick={() => toggleSubject(subject.id)} cursor="pointer">
+                          <Icon
+                            as={isCollapsed ? FiChevronRight : FiChevronDown}
+                            boxSize={4}
+                            color={mutedColor}
+                          />
+                          <Icon as={FiFolder} boxSize={5} color="purple.500" />
+                          <Text fontWeight="semibold" fontSize="md">{subject.name}</Text>
+                          <Badge colorScheme="purple">{subjectAssignments.length}</Badge>
+                        </HStack>
+                        <HStack spacing={1} onClick={(e) => e.stopPropagation()}>
+                          <IconButton
+                            aria-label="Edit subject"
+                            icon={<FiEdit2 />}
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => openEditSubject(subject)}
+                          />
+                          <IconButton
+                            aria-label="Delete subject"
+                            icon={<FiTrash2 />}
+                            size="xs"
+                            variant="ghost"
+                            colorScheme="red"
+                            onClick={() => {
+                              setDeletingSubject(subject);
+                              onDeleteSubjectOpen();
+                            }}
+                          />
+                        </HStack>
+                      </SubjectHeader>
 
-                  {/* Subject Assignments */}
-                  <Collapse in={!isCollapsed} animateOpacity>
-                    <Box
-                      bg={cardBg}
-                      borderRadius="md"
-                      borderWidth="1px"
-                      borderColor={borderColor}
-                      mt={2}
-                      overflow="hidden"
-                    >
-                      {subjectAssignments.length === 0 ? (
-                        <Flex justify="center" py={6} color={mutedColor}>
-                          <Text fontSize="sm">{t('noAssignmentsInSubject')}</Text>
-                        </Flex>
-                      ) : (
-                        <TableContainer>
-                          <Table variant="simple" size="sm">
-                            <Thead>
-                              <Tr>
-                                <Th w="30px"></Th>
-                                <Th>{t('table.name')}</Th>
-                                <Th>{t('table.description')}</Th>
-                                <Th isNumeric>{t('table.tasks')}</Th>
-                                <Th isNumeric>{t('table.files')}</Th>
-                                <Th>{t('table.created')}</Th>
-                                <Th>{t('table.actions')}</Th>
-                              </Tr>
-                            </Thead>
-                            <Tbody>
-                              {subjectAssignments.map((a) => (
-                                <DraggableAssignmentRow
-                                  key={a.id}
-                                  assignment={a}
-                                  hoverBg={hoverBg}
-                                  mutedColor={mutedColor}
-                                  t={t}
-                                  isDragging={activeDragId === `assignment-move:${a.id}`}
-                                  onEdit={openEditAssignment}
-                                  onDelete={(a) => { setDeletingAssignment(a); onDeleteAssignmentOpen(); }}
-                                />
-                              ))}
-                            </Tbody>
-                          </Table>
-                        </TableContainer>
-                      )}
-                    </Box>
-                  </Collapse>
-                </Box>
+                      <Collapse in={!isCollapsed} animateOpacity>
+                        <Box
+                          bg={cardBg}
+                          borderRadius="md"
+                          borderWidth="1px"
+                          borderColor={borderColor}
+                          mt={2}
+                          overflow="hidden"
+                        >
+                          {subjectAssignments.length === 0 ? (
+                            <Flex direction="column" align="center" justify="center" py={12} color={mutedColor}>
+                              <Icon as={FiInbox} boxSize={10} mb={3} opacity={0.5} />
+                              <Text fontWeight="medium">{t('noAssignmentsInSubject')}</Text>
+                            </Flex>
+                          ) : (
+                            <TableContainer>
+                              <Table variant="simple" size="sm">
+                                <Thead>
+                                  <Tr>
+                                    <Th w="30px"></Th>
+                                    <Th>{t('table.name')}</Th>
+                                    <Th>{t('table.description')}</Th>
+                                    <Th isNumeric>{t('table.tasks')}</Th>
+                                    <Th isNumeric>{t('table.files')}</Th>
+                                    <Th>{t('table.created')}</Th>
+                                    <Th>{t('table.actions')}</Th>
+                                  </Tr>
+                                </Thead>
+                                <Tbody>
+                                  {subjectAssignments.map((a) => (
+                                    <DraggableAssignmentRow
+                                      key={a.id}
+                                      assignment={a}
+                                      hoverBg={hoverBg}
+                                      mutedColor={mutedColor}
+                                      t={t}
+                                      isDragging={activeDragId === `assignment-move:${a.id}`}
+                                      onEdit={openEditAssignment}
+                                      onDelete={(a) => { setDeletingAssignment(a); onDeleteAssignmentOpen(); }}
+                                    />
+                                  ))}
+                                </Tbody>
+                              </Table>
+                            </TableContainer>
+                          )}
+                        </Box>
+                      </Collapse>
+                    </>
+                  )}
+                </DroppableSubjectContainer>
               );
             })}
 
@@ -654,63 +719,67 @@ const Assignments: React.FC = () => {
 
               if (uncategorized.length === 0) return null;
 
-              return (
-                <Box key="__uncategorized__" data-drop-target="subject-drop:__uncategorized__">
-                  <DroppableSubjectHeader subjectId="__uncategorized__" isUncategorized>
-                    <HStack spacing={3} flex={1} onClick={() => toggleSubject('__uncategorized__')} cursor="pointer">
-                      <Icon
-                        as={isCollapsed ? FiChevronRight : FiChevronDown}
-                        boxSize={4}
-                        color={mutedColor}
-                      />
-                      <Icon as={FiFolder} boxSize={5} color="gray.500" />
-                      <Text fontWeight="semibold" fontSize="md">{t('uncategorized')}</Text>
-                      <Badge colorScheme="gray">{uncategorized.length}</Badge>
-                    </HStack>
-                  </DroppableSubjectHeader>
+               return (
+                <DroppableSubjectContainer key="__uncategorized__" subjectId="__uncategorized__">
+                    {({ isOver }) => (
+                      <>
+                        <SubjectHeader isOver={isOver} isUncategorized={true}>
+                         <HStack spacing={3} flex={1} onClick={() => toggleSubject('__uncategorized__')} cursor="pointer">
+                           <Icon
+                             as={isCollapsed ? FiChevronRight : FiChevronDown}
+                             boxSize={4}
+                             color={mutedColor}
+                           />
+                           <Icon as={FiFolder} boxSize={5} color="gray.500" />
+                           <Text fontWeight="semibold" fontSize="md">{t('uncategorized')}</Text>
+                           <Badge colorScheme="gray">{uncategorized.length}</Badge>
+                         </HStack>
+                       </SubjectHeader>
 
-                  <Collapse in={!isCollapsed} animateOpacity>
-                    <Box
-                      bg={cardBg}
-                      borderRadius="md"
-                      borderWidth="1px"
-                      borderColor={borderColor}
-                      mt={2}
-                      overflow="hidden"
-                    >
-                      <TableContainer>
-                        <Table variant="simple" size="sm">
-                          <Thead>
-                            <Tr>
-                              <Th w="30px"></Th>
-                              <Th>{t('table.name')}</Th>
-                              <Th>{t('table.description')}</Th>
-                              <Th isNumeric>{t('table.tasks')}</Th>
-                              <Th isNumeric>{t('table.files')}</Th>
-                              <Th>{t('table.created')}</Th>
-                              <Th>{t('table.actions')}</Th>
-                            </Tr>
-                          </Thead>
-                          <Tbody>
-                            {uncategorized.map((a) => (
-                              <DraggableAssignmentRow
-                                key={a.id}
-                                assignment={a}
-                                hoverBg={hoverBg}
-                                mutedColor={mutedColor}
-                                t={t}
-                                isDragging={activeDragId === a.id}
-                                onEdit={openEditAssignment}
-                                onDelete={(a) => { setDeletingAssignment(a); onDeleteAssignmentOpen(); }}
-                              />
-                            ))}
-                          </Tbody>
-                        </Table>
-                      </TableContainer>
-                    </Box>
-                  </Collapse>
-                </Box>
-              );
+                       <Collapse in={!isCollapsed} animateOpacity>
+                         <Box
+                           bg={cardBg}
+                           borderRadius="md"
+                           borderWidth="1px"
+                           borderColor={borderColor}
+                           mt={2}
+                           overflow="hidden"
+                         >
+                           <TableContainer>
+                             <Table variant="simple" size="sm">
+                               <Thead>
+                                 <Tr>
+                                   <Th w="30px"></Th>
+                                   <Th>{t('table.name')}</Th>
+                                   <Th>{t('table.description')}</Th>
+                                   <Th isNumeric>{t('table.tasks')}</Th>
+                                   <Th isNumeric>{t('table.files')}</Th>
+                                   <Th>{t('table.created')}</Th>
+                                   <Th>{t('table.actions')}</Th>
+                                 </Tr>
+                               </Thead>
+                               <Tbody>
+                                 {uncategorized.map((a) => (
+                                   <DraggableAssignmentRow
+                                     key={a.id}
+                                     assignment={a}
+                                     hoverBg={hoverBg}
+                                     mutedColor={mutedColor}
+                                     t={t}
+                                     isDragging={activeDragId === a.id}
+                                     onEdit={openEditAssignment}
+                                     onDelete={(a) => { setDeletingAssignment(a); onDeleteAssignmentOpen(); }}
+                                   />
+                                 ))}
+                               </Tbody>
+                             </Table>
+                           </TableContainer>
+                         </Box>
+                       </Collapse>
+                     </>
+                   )}
+                 </DroppableSubjectContainer>
+               );
             })()}
           </VStack>
         )}

@@ -39,7 +39,7 @@ const isCommentLine = (line: string, language: string): boolean => {
 
   // C-style languages — line comments and block comment delimiters
   if (['javascript', 'typescript', 'tsx', 'c', 'cpp', 'java', 'go', 'rust', 'kotlin', 'swift', 'csharp'].includes(language)) {
-    return trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed === '*' || trimmed.startsWith('*/');
+    return trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/');
   }
 
   // SQL / Lua
@@ -54,7 +54,7 @@ const isCommentLine = (line: string, language: string): boolean => {
 
   // CSS / SCSS
   if (['css', 'scss', 'less'].includes(language)) {
-    return trimmed.startsWith('/*') || trimmed === '*' || trimmed.startsWith('*/');
+    return trimmed.startsWith('/*') || trimmed.startsWith('*') || trimmed.startsWith('*/');
   }
 
   return false;
@@ -103,6 +103,7 @@ interface FileViewerProps {
   matches: PlagiarismMatch[];
   isFileA: boolean;
   filterComments: boolean;
+  filterEmpty: boolean;
   hoveredMatchIndex: number | null;
   onHoverMatch: (index: number | null) => void;
   onJumpToMatch: (clickedLine: number, clickedLineOffset: number, clickedIsFileA: boolean) => void;
@@ -117,6 +118,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
   matches,
   isFileA,
   filterComments,
+  filterEmpty,
   hoveredMatchIndex,
   onHoverMatch,
   onJumpToMatch,
@@ -148,12 +150,23 @@ const FileViewer: React.FC<FileViewerProps> = ({
 
   const displayedLines = useMemo(() => {
     const result: Array<{ originalIdx: number; originalLineNumber: number; line: string }> = [];
+    let lastLineWasEmpty = false;
     lines.forEach((line, idx) => {
+      // Filter comments if enabled
       if (filterComments && isCommentLine(line, language)) return;
+      const trimmed = line.trim();
+      const isEmpty = trimmed === '';
+      // Filter empty lines if enabled, collapsing consecutive empties into one
+      if (filterEmpty && isEmpty) {
+        if (lastLineWasEmpty) return;
+        lastLineWasEmpty = true;
+      } else {
+        lastLineWasEmpty = false;
+      }
       result.push({ originalIdx: idx, originalLineNumber: idx + 1, line });
     });
     return result;
-  }, [lines, filterComments, language]);
+  }, [lines, filterComments, filterEmpty, language]);
 
   const handleClick = useCallback((lineNumber: number, event: React.SyntheticEvent) => {
     const lineEl = event.currentTarget as HTMLDivElement;

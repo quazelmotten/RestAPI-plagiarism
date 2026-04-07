@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Box,
   Flex,
@@ -7,13 +7,23 @@ import {
   IconButton,
   useColorModeValue,
   useColorMode,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  Badge,
+  HStack,
+  VStack,
+  Tooltip,
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router';
-import { FiMoon, FiSun } from 'react-icons/fi';
-import LanguageSwitcher from './LanguageSwitcher';
+import { Link, useLocation, useNavigate } from 'react-router';
+import { FiMoon, FiSun, FiClock, FiChevronDown } from 'react-icons/fi';
+import { FiCheckCircle, FiAlertCircle, FiActivity, FiLayers } from 'react-icons/fi';
 import { useViewMode } from '../contexts/ViewModeContext';
 import { SIDEBAR_WIDTH_PX } from '../constants/layout';
+import { useTasksList } from '../hooks/useTaskQueries';
+import { getStatusColorScheme } from '../utils/statusColors';
 
 const ROUTE_TITLES: Record<string, string> = {
   '/dashboard': 'overview',
@@ -26,6 +36,28 @@ const ROUTE_TITLES: Record<string, string> = {
   '/dashboard/pair-comparison': 'pairComparison',
 };
 
+const BREADCRUMB_MAP: Record<string, { label: string; to?: string }[]> = {
+  '/dashboard': [{ label: 'Overview', to: '/dashboard' }],
+  '/dashboard/assignments': [{ label: 'Assignments', to: '/dashboard/assignments' }],
+  '/dashboard/submissions': [{ label: 'Submissions', to: '/dashboard/submissions' }],
+  '/dashboard/graph': [{ label: 'Plagiarism Graph', to: '/dashboard/graph' }],
+  '/dashboard/upload': [{ label: 'Upload Files', to: '/dashboard/upload' }],
+  '/dashboard/results': [{ label: 'Results', to: '/dashboard/results' }],
+  '/dashboard/pair-comparison': [{ label: 'Pair Comparison', to: '/dashboard/pair-comparison' }],
+};
+
+const getStatusIcon = (status: string) => {
+  switch (status) {
+    case 'completed': return <FiCheckCircle color="#48bb78" />;
+    case 'failed': return <FiAlertCircle color="#f56565" />;
+    case 'storing_results': return <FiActivity color="#ed8936" />;
+    case 'indexing': return <FiLayers color="#4299e1" />;
+    case 'finding_intra_pairs':
+    case 'finding_cross_pairs': return <FiLayers color="#805ad5" />;
+    default: return <FiClock color="#a0aec0" />;
+  }
+};
+
 const Header: React.FC = () => {
   const { colorMode, toggleColorMode } = useColorMode();
   const { t } = useTranslation('navigation');
@@ -34,6 +66,13 @@ const Header: React.FC = () => {
   const location = useLocation();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
+  const [breadcrumbsExpanded, setBreadcrumbsExpanded] = useState(false);
+
+  const { data: tasksData } = useTasksList();
+  const recentTasks = useMemo(() => {
+    const items = tasksData?.items ?? [];
+    return items.slice(0, 5);
+  }, [tasksData]);
 
   const pageTitle = useMemo(() => {
     const path = location.pathname;
@@ -44,6 +83,21 @@ const Header: React.FC = () => {
     }
     return t('overview');
   }, [location.pathname, t]);
+
+  const breadcrumbs = useMemo(() => {
+    const path = location.pathname;
+    const bc = BREADCRUMB_MAP[path];
+    if (!bc) return [{ label: pageTitle }];
+    if (path.startsWith('/dashboard/assignments/') && path !== '/dashboard/assignments') {
+      const parts = path.split('/');
+      const assignmentId = parts[parts.length - 1];
+      return [
+        { label: 'Assignments', to: '/dashboard/assignments' },
+        { label: assignmentId ? `${assignmentId.substring(0, 12)}...` : 'Detail' },
+      ];
+    }
+    return bc;
+  }, [location.pathname, pageTitle]);
 
   const handleModeSwitch = (newMode: 'assignments' | 'classic') => {
     setMode(newMode);
@@ -65,21 +119,84 @@ const Header: React.FC = () => {
       bg={bgColor}
       borderBottom="1px"
       borderColor={borderColor}
-      px={8}
+      px={{ base: 4, md: 8 }}
       zIndex="sticky"
     >
       <Flex h="full" align="center" justify="space-between">
-        <Text fontSize="lg" fontWeight="semibold">
-          {pageTitle}
-        </Text>
+        <Flex align="center" gap={3} minW={0} flex={1}>
+          <BreadcrumbNav items={breadcrumbs} />
+        </Flex>
 
-        <Flex align="center" gap={4}>
-          {/* View mode toggle */}
+        <Flex align="center" gap={{ base: 2, md: 4 }} flexShrink={0}>
+
+          {recentTasks.length > 0 && (
+            <Menu>
+              <MenuButton
+                as={Button}
+                size="xs"
+                variant="ghost"
+                rightIcon={<FiChevronDown />}
+                leftIcon={<FiClock />}
+                display={{ base: 'none', md: 'flex' }}
+              >
+                Recent
+              </MenuButton>
+               <MenuList maxH="400px" overflowY="auto" minW="340px" maxW="400px">
+                 {recentTasks.map(task => (
+                   <MenuItem
+                     key={task.task_id}
+                     onClick={() => navigate(`/dashboard/results?task=${task.task_id}`)}
+                     _hover={{ bg: 'gray.50' }}
+                   >
+                     <VStack align="start" spacing={1} w="100%" maxW="100%" overflow="hidden">
+                       <HStack justify="space-between" w="100%">
+                         <HStack spacing={2} minW={0}>
+                           {getStatusIcon(task.status)}
+                           <Text fontSize="sm" isTruncated fontFamily="monospace">
+                             {task.task_id.substring(0, 12)}...
+                           </Text>
+                         </HStack>
+                         <Badge size="sm" colorScheme={getStatusColorScheme(task.status)} flexShrink={0}>
+                           {task.status}
+                         </Badge>
+                       </HStack>
+                       {(task.subject_name || task.assignment_name) && (
+                         <HStack spacing={2} w="100%" overflow="hidden">
+                           {task.subject_name && (
+                             <Text fontSize="2xs" color="purple.600" bg="purple.50" px={1} borderRadius="sm" isTruncated maxW="100%">
+                               {task.subject_name}
+                             </Text>
+                           )}
+                           {task.assignment_name && (
+                             <Text fontSize="2xs" color="blue.600" bg="blue.50" px={1} borderRadius="sm" isTruncated maxW="100%">
+                               {task.assignment_name}
+                             </Text>
+                           )}
+                         </HStack>
+                       )}
+                       <HStack justify="space-between" w="100%">
+                         <Text fontSize="2xs" color="gray.500">
+                           Files: {task.files_count ?? 0}
+                         </Text>
+                         {task.progress && task.total_pairs > 0 && (
+                           <Text fontSize="2xs" color="gray.500">
+                             Pairs: {task.progress.display}
+                           </Text>
+                         )}
+                       </HStack>
+                     </VStack>
+                   </MenuItem>
+                 ))}
+               </MenuList>
+            </Menu>
+          )}
+
           <Flex
             bg={useColorModeValue('gray.100', 'gray.700')}
             borderRadius="md"
             p="2px"
             flexShrink={0}
+            display={{ base: 'none', lg: 'flex' }}
           >
             <Button
               size="xs"
@@ -103,17 +220,56 @@ const Header: React.FC = () => {
             </Button>
           </Flex>
 
-          <LanguageSwitcher />
           <IconButton
             aria-label="Toggle dark mode"
             icon={colorMode === 'light' ? <FiMoon /> : <FiSun />}
-            onClick={toggleColorMode}
+            onClick={() => {
+              toggleColorMode();
+              try {
+                localStorage.setItem('chakra-ui-color-mode', colorMode === 'light' ? 'dark' : 'light');
+              } catch { /* ignore */ }
+            }}
             variant="ghost"
             size="md"
           />
         </Flex>
       </Flex>
     </Box>
+  );
+};
+
+const BreadcrumbNav: React.FC<{ items: { label: string; to?: string }[] }> = ({ items }) => {
+  const mutedColor = useColorModeValue('gray.400', 'gray.500');
+  if (items.length <= 1) return null;
+
+  return (
+    <HStack spacing={1} fontSize="sm" color={mutedColor} display={{ base: 'none', md: 'flex' }}>
+      {items.map((item, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <Text>/</Text>}
+          {item.to ? (
+            <Link
+              to={item.to}
+              style={{ textDecoration: 'none' }}
+              onClick={() => window.location.hash = ''}
+            >
+              <Button
+                as="span"
+                variant="link"
+                size="xs"
+                color={mutedColor}
+              >
+                {item.label}
+              </Button>
+            </Link>
+          ) : (
+            <Text fontSize="xs" fontWeight="medium" isTruncated maxW="150px">
+              {item.label}
+            </Text>
+          )}
+        </React.Fragment>
+      ))}
+    </HStack>
   );
 };
 

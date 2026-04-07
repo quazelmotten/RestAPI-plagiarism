@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
-import { Box, Button, Heading, Text, VStack } from '@chakra-ui/react';
-import { withTranslation, type WithTranslation } from 'react-i18next';
+import { Box, Button, Heading, Text, VStack, useToast } from '@chakra-ui/react';
+import { withTranslation, type WithTranslation, useTranslation } from 'react-i18next';
 
 interface ErrorBoundaryProps extends WithTranslation {
   children: ReactNode;
@@ -14,7 +14,7 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class ErrorBoundaryClass extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false };
@@ -67,4 +67,33 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
-export default withTranslation('common')(ErrorBoundary);
+const ErrorBoundaryWithI18n = withTranslation('common')(ErrorBoundaryClass);
+
+const ErrorBoundaryWithToast: React.FC<{
+  children: ReactNode;
+  fallback?: ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+}> = ({ children, fallback, onError }) => {
+  const toast = useToast();
+  const { t } = useTranslation('common');
+
+  const handleError = (error: Error, errorInfo: ErrorInfo) => {
+    toast({
+      title: t('common:somethingWentWrong'),
+      description: error.message,
+      status: 'error',
+      duration: 6000,
+      isClosable: true,
+    });
+    onError?.(error, errorInfo);
+  };
+
+  return (
+    <ErrorBoundaryWithI18n fallback={fallback} onError={handleError}>
+      {children}
+    </ErrorBoundaryWithI18n>
+  );
+};
+
+export default ErrorBoundaryWithI18n;
+export { ErrorBoundaryWithToast };

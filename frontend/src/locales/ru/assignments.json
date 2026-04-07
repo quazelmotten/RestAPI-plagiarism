@@ -6,12 +6,12 @@
   "noAssignments": "Заданий пока нет",
   "noAssignmentsInSubject": "В этой теме нет заданий",
   "createAssignmentPrompt": "Создайте задание (к примеру, лабораторную работу) для проверки на плагиат",
-  "uncategorized": "Без темы",
+  "uncategorized": "Не назначено",
   "modal": {
     "edit": "Редактировать задание",
     "new": "Новое задание",
     "editSubject": "Редактировать тему",
-    "newSubject": "Новая тема"
+    "newSubject": "Новая дисциплина"
   },
   "form": {
     "name": "Название",

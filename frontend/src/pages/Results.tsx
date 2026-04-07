@@ -15,6 +15,10 @@ import {
   Skeleton,
   SkeletonText,
   useColorModeValue,
+  Flex,
+  Icon,
+  Tooltip,
+  IconButton,
 } from '@chakra-ui/react';
 import {
   FiCheckCircle,
@@ -23,7 +27,12 @@ import {
   FiLayers,
   FiRefreshCw,
   FiChevronDown,
+  FiDownload,
+  FiCopy,
+  FiInbox,
+  FiCheck,
 } from 'react-icons/fi';
+import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import type { TaskListItem, TaskDetails, PlagiarismResult } from '../types';
@@ -66,7 +75,7 @@ const Results: React.FC = () => {
   const userSelectedRef = React.useRef(false);
 
 
-  const { data: tasksData, isLoading: loadingTasks, isFetching: isRefetchingTasks, refetch: refetchTasks } = useTasksList();
+  const { data: tasksData, isLoading: loadingTasks, isFetching: isRefetchingTasks, refetch: refetchTasks } = useTasksList({ selectedTaskId });
   const tasks = tasksData?.items ?? [];
 
   const { data: selectedTaskDetails, isLoading: loadingTaskDetails, isFetching: isRefetchingDetails } = useTaskDetails(selectedTaskId || undefined);
@@ -90,6 +99,8 @@ const Results: React.FC = () => {
   const handleRefresh = useCallback(async () => {
     await refetchTasks();
   }, [refetchTasks]);
+
+  const { copied: taskIdCopied, copy: copyTaskId } = useCopyToClipboard();
 
   const getStats = () => {
     if (!selectedTask) return { high: 0, medium: 0, low: 0, avg: 0 };
@@ -145,15 +156,17 @@ const Results: React.FC = () => {
    
    return (
      <Box display="flex" flexDirection="column" flex={1} minH={0} overflowY="auto">
-       {tasks.length === 0 ? (
-         <Card bg={cardBg}>
-           <CardBody>
-             <Text textAlign="center" color="gray.500" py={8}>
-               {t('noChecks')}
-             </Text>
-           </CardBody>
-         </Card>
-       ) : (
+        {tasks.length === 0 ? (
+          <Card bg={cardBg}>
+            <CardBody>
+              <Flex direction="column" align="center" justify="center" py={16} color="gray.500">
+                <Icon as={FiInbox} boxSize={16} mb={4} opacity={0.5} />
+                <Text fontWeight="medium" fontSize="lg">{t('noChecks')}</Text>
+                <Text fontSize="sm">Upload files to get started</Text>
+              </Flex>
+            </CardBody>
+          </Card>
+        ) : (
          <VStack spacing={6} align="stretch">
            {/* Task Selector */}
            <Card bg={cardBg}>
@@ -161,44 +174,88 @@ const Results: React.FC = () => {
                <HStack justify="space-between" wrap="wrap" spacing={4}>
                  <HStack>
                    <Text fontWeight="semibold">{t('selectTask')}</Text>
-                   <Button
-                     size="sm"
-                     rightIcon={<FiChevronDown />}
-                     onClick={() => setIsTaskPickerOpen(true)}
-                     minW="320px"
-                     variant="outline"
-                   >
-                     {selectedTaskListItem ? (
-                       <HStack spacing={2} isTruncated>
-                         {getStatusIcon(selectedTaskListItem.status)}
-                         <Text isTruncated fontSize="sm">
-                           {selectedTaskListItem.task_id.substring(0, 12)}...
-                         </Text>
-                         <Badge size="sm" colorScheme={getStatusColorScheme(selectedTaskListItem.status)}>
-                           {t(`status:${selectedTaskListItem.status}`)}
-                         </Badge>
-                         {['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(selectedTaskListItem.status) && selectedTaskListItem.progress && (
-                           <Text fontSize="xs" color="gray.500">
-                             {selectedTaskListItem.progress.display}
-                           </Text>
-                         )}
-                       </HStack>
-                     ) : (
-                       t('selectTaskPrompt')
-                     )}
-                   </Button>
+                    <Button
+                      size="sm"
+                      rightIcon={<FiChevronDown />}
+                      onClick={() => setIsTaskPickerOpen(true)}
+                      minW="320px"
+                      variant="outline"
+                    >
+                      {selectedTaskListItem ? (
+                        <HStack spacing={2} isTruncated>
+                          {getStatusIcon(selectedTaskListItem.status)}
+                          <Text isTruncated fontSize="sm">
+                            {selectedTaskListItem.task_id.substring(0, 12)}...
+                          </Text>
+                          <Tooltip label={taskIdCopied ? 'Copied!' : 'Copy task ID'} placement="top">
+                            <Tooltip label={taskIdCopied ? 'Copied!' : 'Copy task ID'} placement="top">
+                              <IconButton
+                                aria-label="Copy task ID"
+                                icon={taskIdCopied ? <FiCheck color="green.500" /> : <FiCopy />}
+                                size="xs"
+                                variant="ghost"
+                                onClick={(e: React.MouseEvent) => {
+                                  e.stopPropagation();
+                                  copyTaskId(selectedTaskListItem.task_id);
+                                }}
+                                isDisabled={taskIdCopied}
+                              />
+                            </Tooltip>
+                          </Tooltip>
+                          <Badge size="sm" colorScheme={getStatusColorScheme(selectedTaskListItem.status)}>
+                            {t(`status:${selectedTaskListItem.status}`)}
+                          </Badge>
+                          {['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(selectedTaskListItem.status) && selectedTaskListItem.progress && (
+                            <Text fontSize="xs" color="gray.500">
+                              {selectedTaskListItem.progress.display}
+                            </Text>
+                          )}
+                        </HStack>
+                      ) : (
+                        t('selectTaskPrompt')
+                      )}
+                    </Button>
                     {selectedTaskListItem && ['indexing', 'finding_intra_pairs', 'finding_cross_pairs', 'storing_results'].includes(selectedTaskListItem.status) && (
                        <Spinner size="sm" color="orange.500" speed="0.8s" />
                     )}
-                     <Button
-                       size="sm"
-                       leftIcon={<FiRefreshCw />}
-                       onClick={handleRefresh}
-                       isLoading={isRefetchingTasks}
-                     >
-                       {t('common:refresh')}
-                     </Button>
-                 </HStack>
+                      <Button
+                        size="sm"
+                        leftIcon={<FiRefreshCw />}
+                        onClick={handleRefresh}
+                        isLoading={isRefetchingTasks}
+                      >
+                        {t('common:refresh')}
+                      </Button>
+                      {selectedTask && selectedTask.results.length > 0 && (
+                        <Button
+                          size="sm"
+                          leftIcon={<FiDownload />}
+                          variant="outline"
+                          onClick={() => {
+                            const headers = ['File A', 'File B', 'Similarity', 'Task ID'];
+                            const rows = selectedTask.results.map(r => [
+                              r.file_a.filename,
+                              r.file_b.filename,
+                              ((r.ast_similarity || 0) * 100).toFixed(2) + '%',
+                              r.file_a.task_id || '',
+                            ]);
+                            const csvContent = [
+                              headers.join(','),
+                              ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
+                            ].join('\n');
+                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `plagiarism-results-${selectedTask.task_id.substring(0, 8)}.csv`;
+                            link.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                        >
+                          Export CSV
+                        </Button>
+                      )}
+                  </HStack>
 
 
                </HStack>
@@ -244,6 +301,7 @@ const Results: React.FC = () => {
                     getSimilarityColor={getSimilarityColor}
                     handleCompare={handleCompare}
                     cardBg={cardBg}
+                    loading={loadingTaskDetails || isRefetchingDetails}
                   />
               </ErrorBoundary>
            ) : loadingTaskDetails ? (

@@ -11,8 +11,10 @@ import {
   HStack,
   Text,
   Box,
+  Flex,
+  Icon,
 } from '@chakra-ui/react';
-import { FiArrowRight, FiChevronUp, FiChevronDown } from 'react-icons/fi';
+import { FiArrowRight, FiChevronUp, FiChevronDown, FiInbox } from 'react-icons/fi';
 import {
   useReactTable,
   getCoreRowModel,
@@ -92,6 +94,24 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
         size: 150,
       },
       {
+        accessorKey: 'assignment_name',
+        header: 'Assignment',
+        size: 180,
+        cell: (info) => {
+          const name = info.getValue<string | null>();
+          return name ? <Text fontWeight="medium">{name}</Text> : <Text color="gray.400">—</Text>;
+        },
+      },
+      {
+        accessorKey: 'subject_name',
+        header: 'Subject',
+        size: 150,
+        cell: (info) => {
+          const name = info.getValue<string | null>();
+          return name ? <Text fontWeight="medium">{name}</Text> : <Text color="gray.400">—</Text>;
+        },
+      },
+      {
         id: 'actions',
         header: t('table.actions'),
         size: 100,
@@ -158,9 +178,11 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
 
   if (data.length === 0) {
     return (
-      <Box textAlign="center" py={8}>
-        <Text color="gray.500">{t('noMatches')}</Text>
-      </Box>
+      <Flex direction="column" align="center" justify="center" py={16} color="gray.500">
+        <Icon as={FiInbox} boxSize={16} mb={4} opacity={0.5} />
+        <Text fontWeight="medium" fontSize="lg">{t('noMatches')}</Text>
+        <Text fontSize="sm">No submissions found</Text>
+      </Flex>
     );
   }
 

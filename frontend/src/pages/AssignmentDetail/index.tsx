@@ -461,64 +461,64 @@ const AssignmentDetail: React.FC = () => {
       </Flex>
 
       {/* Combined Tasks + Upload section */}
-      {assignmentData.tasks.length > 0 && (
-        <Box bg={cardBg} borderRadius="lg" borderWidth="1px" borderColor={borderColor} mb={3} flexShrink={0} overflow="hidden">
-          {/* Expanded view: upload + task table */}
-          {!collapsed && (
-            <>
-              {/* Upload area */}
-              <Box p={3} pb={2}>
-                <Flex direction={{ base: 'column', md: 'row' }} gap={3} align="flex-start">
-                  <HStack spacing={3} flexShrink={0}>
-                    <Box>
-                      <Text fontSize="xs" color={mutedColor} mb={1}>{t('language')}</Text>
-                      <Select
-                        value={language}
-                        onChange={(e) => { setLanguage(e.target.value); localStorage.setItem(LANG_STORAGE_KEY, e.target.value); }}
-                        size="sm" maxW="130px"
-                      >
-                        {languageOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{t(`languages:${opt.key}`)}</option>
-                        ))}
-                      </Select>
-                    </Box>
-                  </HStack>
-                  <Box
-                    {...getRootProps()}
-                    border="2px dashed" borderColor={isDragActive ? 'brand.500' : borderColor}
-                    borderRadius="lg" p={2} flex={1} w="100%"
-                    display="flex" alignItems="center" justifyContent="center"
-                    textAlign="center" cursor="pointer"
-                    bg={isDragActive ? dropzoneHoverBg : subtleBg}
-                    transition="all 0.2s" minH="48px"
-                    _hover={{ borderColor: 'brand.400', bg: dropzoneHoverBg }}
-                  >
-                    <input {...getInputProps()} />
-                    <HStack spacing={2}>
-                      <Icon as={FiUploadCloud} boxSize={4} color="brand.400" />
-                      <Text fontSize="xs" fontWeight="medium">
-                        {files.length > 0 ? `${files.length} file(s) (${formatFileSize(totalSize)})` : t('dragAndDrop')}
-                      </Text>
-                    </HStack>
+      <Box bg={cardBg} borderRadius="lg" borderWidth="1px" borderColor={borderColor} mb={3} flexShrink={0} overflow="hidden">
+        {/* Expanded view: upload + task table */}
+        {!collapsed && (
+          <>
+            {/* Upload area */}
+            <Box p={3} pb={2}>
+              <Flex direction={{ base: 'column', md: 'row' }} gap={3} align="flex-start">
+                <HStack spacing={3} flexShrink={0}>
+                  <Box>
+                    <Text fontSize="xs" color={mutedColor} mb={1}>{t('language')}</Text>
+                    <Select
+                      value={language}
+                      onChange={(e) => { setLanguage(e.target.value); localStorage.setItem(LANG_STORAGE_KEY, e.target.value); }}
+                      size="sm" maxW="130px"
+                    >
+                      {languageOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{t(`languages:${opt.key}`)}</option>
+                      ))}
+                    </Select>
                   </Box>
-                  {files.length > 0 && (
-                    <HStack flexShrink={0}>
-                      {isUploading && (
-                        <Box w="120px">
-                          <Progress value={uploadProgress} size="sm" colorScheme="brand" borderRadius="full" hasStripe isAnimated />
-                          <Text fontSize="xs" textAlign="center" mt={1}>{uploadProgress}%</Text>
-                        </Box>
-                      )}
-                      <Button colorScheme="brand" size="xs" onClick={handleUpload} isLoading={isUploading} loadingText={t('uploading')} leftIcon={<FiCheckCircle />}>
-                        {t('upload', { count: files.length, size: formatFileSize(totalSize) })}
-                      </Button>
-                      <IconButton aria-label="Clear files" icon={<FiX />} size="xs" variant="ghost" colorScheme="red" onClick={() => setFiles([])} isDisabled={isUploading} />
-                    </HStack>
-                  )}
-                </Flex>
-              </Box>
+                </HStack>
+                <Box
+                  {...getRootProps()}
+                  border="2px dashed" borderColor={isDragActive ? 'brand.500' : borderColor}
+                  borderRadius="lg" p={2} flex={1} w="100%"
+                  display="flex" alignItems="center" justifyContent="center"
+                  textAlign="center" cursor="pointer"
+                  bg={isDragActive ? dropzoneHoverBg : subtleBg}
+                  transition="all 0.2s" minH="48px"
+                  _hover={{ borderColor: 'brand.400', bg: dropzoneHoverBg }}
+                >
+                  <input {...getInputProps()} />
+                  <HStack spacing={2}>
+                    <Icon as={FiUploadCloud} boxSize={4} color="brand.400" />
+                    <Text fontSize="xs" fontWeight="medium">
+                      {files.length > 0 ? `${files.length} file(s) (${formatFileSize(totalSize)})` : t('dragAndDrop')}
+                    </Text>
+                  </HStack>
+                </Box>
+                {files.length > 0 && (
+                  <HStack flexShrink={0}>
+                    {isUploading && (
+                      <Box w="120px">
+                        <Progress value={uploadProgress} size="sm" colorScheme="brand" borderRadius="full" hasStripe isAnimated />
+                        <Text fontSize="xs" textAlign="center" mt={1}>{uploadProgress}%</Text>
+                      </Box>
+                    )}
+                    <Button colorScheme="brand" size="xs" onClick={handleUpload} isLoading={isUploading} loadingText={t('uploading')} leftIcon={<FiCheckCircle />}>
+                      {t('upload', { count: files.length, size: formatFileSize(totalSize) })}
+                    </Button>
+                    <IconButton aria-label="Clear files" icon={<FiX />} size="xs" variant="ghost" colorScheme="red" onClick={() => setFiles([])} isDisabled={isUploading} />
+                  </HStack>
+                )}
+              </Flex>
+            </Box>
 
-              {/* Task table */}
+            {/* Task table */}
+            {assignmentData.tasks.length > 0 && (
               <Box overflowX="auto">
                 <Table size="sm" variant="simple">
                   <Thead>
@@ -582,64 +582,64 @@ const AssignmentDetail: React.FC = () => {
                   </Tbody>
                 </Table>
               </Box>
-            </>
-          )}
+            )}
+          </>
+        )}
 
-          {/* Collapsed view: just the selected task summary + upload toggle */}
-          {collapsed && (
-            <Box px={3} py={2}>
-              <HStack justify="space-between" spacing={3}>
-                <HStack spacing={3}>
-                  <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />
-                  {selectedTaskId === '' ? (
-                    <>
-                      <Text fontSize="sm" fontWeight="semibold">All tasks</Text>
-                      <Badge colorScheme="blue" fontSize="xs">{aggFilesCount} files</Badge>
-                      <Badge fontSize="xs">{assignmentData.total_pairs} pairs</Badge>
-                      {aggHighCount > 0 && <Badge colorScheme="red" fontSize="xs">{aggHighCount} high</Badge>}
-                      <Badge colorScheme={getSimilarityColor(aggAvgSim)} fontSize="xs">{(aggAvgSim * 100).toFixed(1)}% avg</Badge>
-                    </>
-                  ) : (
-                    <>
-                      <Text fontSize="xs" fontFamily="monospace" fontWeight="medium">{selectedTaskId.substring(0, 12)}...</Text>
-                      {selectedTask && (
-                        <>
-                          <Badge colorScheme={getStatusColorScheme(selectedTask.status)} fontSize="xs">{selectedTask.status}</Badge>
-                          <Badge fontSize="xs">{selectedTask.files_count ?? '-'} files</Badge>
-                          <Badge fontSize="xs">{selectedTask.total_pairs ?? 0} pairs</Badge>
-                          {(selectedTask.high_similarity_count ?? 0) > 0 && (
-                            <Badge colorScheme="red" fontSize="xs">{selectedTask.high_similarity_count} high</Badge>
-                          )}
-                          <Badge colorScheme={getSimilarityColor(selectedTask.avg_similarity ?? 0)} fontSize="xs">
-                            {((selectedTask.avg_similarity ?? 0) * 100).toFixed(1)}% avg
-                          </Badge>
-                        </>
-                      )}
-                    </>
-                  )}
-                </HStack>
-                <Button
-                  size="xs"
-                  variant="outline"
-                  leftIcon={<FiUploadCloud />}
-                  onClick={() => setCollapsed(false)}
-                >
-                  Add files
-                </Button>
+        {/* Collapsed view: just the selected task summary + upload toggle */}
+        {collapsed && (
+          <Box px={3} py={2}>
+            <HStack justify="space-between" spacing={3}>
+              <HStack spacing={3}>
+                <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />
+                {selectedTaskId === '' ? (
+                  <>
+                    <Text fontSize="sm" fontWeight="semibold">All tasks</Text>
+                    <Badge colorScheme="blue" fontSize="xs">{aggFilesCount} files</Badge>
+                    <Badge fontSize="xs">{assignmentData.total_pairs} pairs</Badge>
+                    {aggHighCount > 0 && <Badge colorScheme="red" fontSize="xs">{aggHighCount} high</Badge>}
+                    <Badge colorScheme={getSimilarityColor(aggAvgSim)} fontSize="xs">{(aggAvgSim * 100).toFixed(1)}% avg</Badge>
+                  </>
+                ) : (
+                  <>
+                    <Text fontSize="xs" fontFamily="monospace" fontWeight="medium">{selectedTaskId.substring(0, 12)}...</Text>
+                    {selectedTask && (
+                      <>
+                        <Badge colorScheme={getStatusColorScheme(selectedTask.status)} fontSize="xs">{selectedTask.status}</Badge>
+                        <Badge fontSize="xs">{selectedTask.files_count ?? '-'} files</Badge>
+                        <Badge fontSize="xs">{selectedTask.total_pairs ?? 0} pairs</Badge>
+                        {(selectedTask.high_similarity_count ?? 0) > 0 && (
+                          <Badge colorScheme="red" fontSize="xs">{selectedTask.high_similarity_count} high</Badge>
+                        )}
+                        <Badge colorScheme={getSimilarityColor(selectedTask.avg_similarity ?? 0)} fontSize="xs">
+                          {((selectedTask.avg_similarity ?? 0) * 100).toFixed(1)}% avg
+                        </Badge>
+                      </>
+                    )}
+                  </>
+                )}
               </HStack>
-            </Box>
-          )}
+              <Button
+                size="xs"
+                variant="outline"
+                leftIcon={<FiUploadCloud />}
+                onClick={() => setCollapsed(false)}
+              >
+                Add files
+              </Button>
+            </HStack>
+          </Box>
+        )}
 
-          {/* Toggle */}
-          <Flex
-            justify="center" py={0.5} cursor="pointer"
-            onClick={() => setCollapsed(!collapsed)}
-            _hover={{ bg: subtleBg }} transition="background 0.15s"
-          >
-            <Icon as={collapsed ? FiChevronDown : FiChevronUp} color={mutedColor} boxSize={3} opacity={0.5} />
-          </Flex>
-        </Box>
-      )}
+        {/* Toggle */}
+        <Flex
+          justify="center" py={0.5} cursor="pointer"
+          onClick={() => setCollapsed(!collapsed)}
+          _hover={{ bg: subtleBg }} transition="background 0.15s"
+        >
+          <Icon as={collapsed ? FiChevronDown : FiChevronUp} color={mutedColor} boxSize={3} opacity={0.5} />
+        </Flex>
+      </Box>
 
       {/* Task progress */}
       {activeTask && (

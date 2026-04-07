@@ -4,10 +4,11 @@ Files domain repository - data access for file operations using SQL-first approa
 
 from datetime import datetime
 
-from shared.models import File, PlagiarismTask, SimilarityResult
+from shared.models import Assignment, File, PlagiarismTask, SimilarityResult, Subject
 from sqlalchemy import func, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
+from sqlalchemy.orm import selectinload
 
 from files.schemas import FileInfoListItem, FileResponse
 from schemas.common import PaginatedResponse
@@ -31,7 +32,7 @@ class FileRepository:
         )
 
     async def get_all_files(self) -> list[FileResponse]:
-        """Get all files with their max similarity scores using SQL aggregation."""
+        """Get all files with their max similarity scores, assignment, and subject using SQL aggregation."""
         max_sim_subq = self._build_max_similarity_subquery()
 
         query = (
@@ -43,8 +44,14 @@ class FileRepository:
                 PlagiarismTask.id.label("task_id"),
                 PlagiarismTask.status,
                 max_sim_subq.c.max_sim,
+                Assignment.id.label("assignment_id"),
+                Assignment.name.label("assignment_name"),
+                Subject.id.label("subject_id"),
+                Subject.name.label("subject_name"),
             )
             .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
+            .outerjoin(Assignment, PlagiarismTask.assignment_id == Assignment.id)
+            .outerjoin(Subject, Assignment.subject_id == Subject.id)
             .outerjoin(max_sim_subq, File.id == max_sim_subq.c.file_id)
             .order_by(File.created_at.desc())
         )
@@ -60,6 +67,10 @@ class FileRepository:
                 task_id=str(row.task_id),
                 status=row.status,
                 similarity=float(row.max_sim) if row.max_sim is not None else None,
+                assignment_id=str(row.assignment_id) if row.assignment_id else None,
+                assignment_name=row.assignment_name,
+                subject_id=str(row.subject_id) if row.subject_id else None,
+                subject_name=row.subject_name,
             )
             for row in rows
         ]
@@ -72,6 +83,8 @@ class FileRepository:
         language: str | None = None,
         status: str | None = None,
         task_id: str | None = None,
+        assignment_id: str | None = None,
+        subject_id: str | None = None,
         similarity_min: float | None = None,
         similarity_max: float | None = None,
         submitted_after: datetime | None = None,
@@ -89,8 +102,14 @@ class FileRepository:
                 PlagiarismTask.id.label("task_id"),
                 PlagiarismTask.status,
                 max_sim_subq.c.max_sim,
+                Assignment.id.label("assignment_id"),
+                Assignment.name.label("assignment_name"),
+                Subject.id.label("subject_id"),
+                Subject.name.label("subject_name"),
             )
             .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
+            .outerjoin(Assignment, PlagiarismTask.assignment_id == Assignment.id)
+            .outerjoin(Subject, Assignment.subject_id == Subject.id)
             .outerjoin(max_sim_subq, File.id == max_sim_subq.c.file_id)
         )
 
@@ -103,6 +122,10 @@ class FileRepository:
                 q = q.where(PlagiarismTask.status == status)
             if task_id:
                 q = q.where(PlagiarismTask.id == task_id)
+            if assignment_id:
+                q = q.where(Assignment.id == assignment_id)
+            if subject_id:
+                q = q.where(Subject.id == subject_id)
             if submitted_after:
                 q = q.where(File.created_at >= submitted_after)
             if submitted_before:
@@ -118,6 +141,8 @@ class FileRepository:
             select(func.count())
             .select_from(File)
             .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
+            .outerjoin(Assignment, PlagiarismTask.assignment_id == Assignment.id)
+            .outerjoin(Subject, Assignment.subject_id == Subject.id)
             .outerjoin(max_sim_subq, File.id == max_sim_subq.c.file_id)
         )
         count_query = apply_filters(count_base)
@@ -138,6 +163,10 @@ class FileRepository:
                 task_id=str(row.task_id),
                 status=str(row.status),
                 similarity=float(row.max_sim) if row.max_sim is not None else None,
+                assignment_id=str(row.assignment_id) if row.assignment_id else None,
+                assignment_name=row.assignment_name,
+                subject_id=str(row.subject_id) if row.subject_id else None,
+                subject_name=row.subject_name,
             )
             for row in rows
         ]
@@ -145,15 +174,21 @@ class FileRepository:
         return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
 
     async def get_all_file_info(self) -> PaginatedResponse:
-        """Get minimal file info for dropdowns."""
+        """Get minimal file info for dropdowns, including assignment and subject."""
         result = await self.db.execute(
             select(
                 File.id,
                 File.filename,
                 File.language,
                 PlagiarismTask.id.label("task_id"),
+                Assignment.id.label("assignment_id"),
+                Assignment.name.label("assignment_name"),
+                Subject.id.label("subject_id"),
+                Subject.name.label("subject_name"),
             )
             .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
+            .outerjoin(Assignment, PlagiarismTask.assignment_id == Assignment.id)
+            .outerjoin(Subject, Assignment.subject_id == Subject.id)
             .order_by(File.filename)
         )
         rows = result.all()
@@ -163,6 +198,10 @@ class FileRepository:
                 filename=str(row.filename),
                 language=str(row.language),
                 task_id=str(row.task_id),
+                assignment_id=str(row.assignment_id) if row.assignment_id else None,
+                assignment_name=row.assignment_name,
+                subject_id=str(row.subject_id) if row.subject_id else None,
+                subject_name=row.subject_name,
             )
             for row in rows
         ]

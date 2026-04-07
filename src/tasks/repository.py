@@ -4,9 +4,10 @@ Tasks domain repository - data access for plagiarism tasks.
 
 import uuid
 
-from shared.models import File, PlagiarismTask, SimilarityResult
+from shared.models import Assignment, File, PlagiarismTask, SimilarityResult, Subject
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from schemas.common import PaginatedResponse
 from tasks.schemas import TaskListResponse, TaskProgress, TaskResponse
@@ -68,6 +69,7 @@ class TaskRepository:
 
             query = (
                 select(PlagiarismTask)
+                .options(selectinload(PlagiarismTask.assignment).selectinload(Assignment.subject))
                 .order_by(PlagiarismTask.id.desc())
                 .limit(limit)
                 .offset(offset)
@@ -95,6 +97,14 @@ class TaskRepository:
                     files_count=0,
                     high_similarity_count=0,
                     total_pairs=t.total_pairs or 0,
+                    assignment_id=str(t.assignment.id) if t.assignment else None,
+                    assignment_name=t.assignment.name if t.assignment else None,
+                    subject_id=str(t.assignment.subject.id)
+                    if t.assignment and t.assignment.subject
+                    else None,
+                    subject_name=t.assignment.subject.name
+                    if t.assignment and t.assignment.subject
+                    else None,
                 )
                 for t in tasks
             ]
@@ -126,7 +136,13 @@ class TaskRepository:
                 PlagiarismTask,
                 func.coalesce(files_count_subq.c.files_count, 0).label("files_count"),
                 func.coalesce(high_sim_subq.c.high_count, 0).label("high_similarity_count"),
+                Assignment.id.label("assignment_id"),
+                Assignment.name.label("assignment_name"),
+                Subject.id.label("subject_id"),
+                Subject.name.label("subject_name"),
             )
+            .outerjoin(Assignment, PlagiarismTask.assignment_id == Assignment.id)
+            .outerjoin(Subject, Assignment.subject_id == Subject.id)
             .outerjoin(files_count_subq, PlagiarismTask.id == files_count_subq.c.task_id)
             .outerjoin(high_sim_subq, PlagiarismTask.id == high_sim_subq.c.task_id)
             .order_by(PlagiarismTask.id.desc())
@@ -156,6 +172,10 @@ class TaskRepository:
                 files_count=row.files_count,
                 high_similarity_count=row.high_similarity_count,
                 total_pairs=row.PlagiarismTask.total_pairs or 0,
+                assignment_id=str(row.assignment_id) if row.assignment_id else None,
+                assignment_name=row.assignment_name,
+                subject_id=str(row.subject_id) if row.subject_id else None,
+                subject_name=row.subject_name,
             )
             for row in rows
         ]

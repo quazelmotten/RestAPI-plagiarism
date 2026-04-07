@@ -1,24 +1,29 @@
 import React, { useMemo } from 'react';
 import {
   Box,
-  SimpleGrid,
+  Text,
+  Card,
+  CardBody,
+  VStack,
+  HStack,
   Stat,
   StatLabel,
   StatNumber,
-  Card,
-  CardBody,
-  Heading,
-  Text,
   Badge,
+  Spinner,
+  SimpleGrid,
+  Flex,
+  Icon,
+  useColorModeValue,
   Skeleton,
   SkeletonText,
-  VStack,
-  HStack,
+  Heading,
   Divider,
-  useColorModeValue,
+  Button,
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
-import { FiFileText, FiClock, FiAlertCircle, FiActivity, FiLayers } from 'react-icons/fi';
+import { FiFileText, FiClock, FiAlertCircle, FiActivity, FiLayers, FiUpload, FiInbox } from 'react-icons/fi';
+import { useNavigate } from 'react-router';
 import { useTasks, type Task } from '../hooks/useTasks';
 
 interface ActivityItem {
@@ -27,6 +32,8 @@ interface ActivityItem {
   filesCount: number;
   pairsCount: number;
   status: string;
+  assignment_name?: string | null;
+  subject_name?: string | null;
 }
 
 const getStatusColor = (status: string): string => {
@@ -72,6 +79,7 @@ const formatTimeAgo = (date: Date, t: (key: string, options?: { count: number })
 
 const Overview: React.FC = () => {
   const { t } = useTranslation(['overview', 'common']);
+  const navigate = useNavigate();
   const { data, isLoading } = useTasks();
   const tasks = data?.items ?? [];
 
@@ -97,6 +105,8 @@ const Overview: React.FC = () => {
         filesCount: task.files_count || 0,
         pairsCount: task.total_pairs || 0,
         status: task.status,
+        assignment_name: task.assignment_name ?? null,
+        subject_name: task.subject_name ?? null,
       }))
       .filter(item => item.timestamp >= oneWeekAgo)
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
@@ -200,43 +210,61 @@ const Overview: React.FC = () => {
           </Text>
 
           {recentActivity.length === 0 ? (
-            <Text color="gray.500" textAlign="center" py={8}>
-              {t('noActivity')}
-            </Text>
+            <Flex direction="column" align="center" justify="center" py={12} color="gray.500">
+              <Icon as={FiInbox} boxSize={16} mb={4} opacity={0.5} />
+              <Text fontWeight="medium" fontSize="lg">{t('noActivity')}</Text>
+              <Text fontSize="sm">Upload files to see activity</Text>
+            </Flex>
           ) : (
             <Box flex={1} minH={0} overflowY="auto">
               <VStack align="stretch" spacing={3}>
               {recentActivity.map((item, index) => (
                 <React.Fragment key={item.id}>
-                  <Box
-                    p={3}
-                    borderRadius="md"
-                    _hover={{ bg: hoverBg }}
-                    transition="background 0.2s"
-                  >
-                    <HStack justify="space-between" align="start">
-                      <VStack align="start" spacing={1} flex={1}>
-                        <HStack spacing={2}>
-                          {getStatusIcon(item.status)}
-                          <Text fontWeight="medium" fontSize="sm">
-                            {t('taskId', { id: item.id.substring(0, 8) })}...
-                          </Text>
-                          <Badge
-                            size="sm"
-                            colorScheme={getStatusColor(item.status)}
-                          >
-                            {item.status}
-                          </Badge>
-                        </HStack>
-                        <Text fontSize="xs" color="gray.500">
-                          {item.filesCount} {t('files')} • {item.pairsCount} {t('pairs')}
+            <Box
+              p={3}
+              borderRadius="md"
+              _hover={{ bg: hoverBg }}
+              transition="background 0.2s"
+              onClick={() => navigate(`/dashboard/results?task=${item.id}`)}
+              cursor="pointer"
+            >
+              <HStack justify="space-between" align="start">
+                <VStack align="start" spacing={1} flex={1}>
+                  <HStack spacing={2}>
+                    {getStatusIcon(item.status)}
+                    <Text fontWeight="medium" fontSize="sm">
+                      {t('taskId', { id: item.id.substring(0, 8) })}...
+                    </Text>
+                    <Badge
+                      size="sm"
+                      colorScheme={getStatusColor(item.status)}
+                    >
+                      {item.status}
+                    </Badge>
+                  </HStack>
+                  {(item.subject_name || item.assignment_name) && (
+                    <HStack spacing={2} mt={1}>
+                      {item.subject_name && (
+                        <Text fontSize="2xs" color="purple.600" bg="purple.50" px={1} borderRadius="sm">
+                          {item.subject_name}
                         </Text>
-                      </VStack>
-                      <Text fontSize="xs" color="gray.400">
-                        {formatTimeAgo(item.timestamp, t)}
-                      </Text>
+                      )}
+                      {item.assignment_name && (
+                        <Text fontSize="2xs" color="blue.600" bg="blue.50" px={1} borderRadius="sm">
+                          {item.assignment_name}
+                        </Text>
+                      )}
                     </HStack>
-                  </Box>
+                  )}
+                  <Text fontSize="xs" color="gray.500">
+                    {item.filesCount} {t('files')} • {item.pairsCount} {t('pairs')}
+                  </Text>
+                </VStack>
+                <Text fontSize="xs" color="gray.400">
+                  {formatTimeAgo(item.timestamp, t)}
+                </Text>
+              </HStack>
+            </Box>
                   {index < recentActivity.length - 1 && <Divider />}
                 </React.Fragment>
               ))}

@@ -19,8 +19,15 @@ import {
   Alert,
   AlertIcon,
   Skeleton,
+  Tooltip,
+  useToast,
+  Flex,
+  Icon,
+  Button,
 } from '@chakra-ui/react';
+import { FiZoomIn, FiZoomOut, FiMaximize, FiInbox } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useSearchParams } from 'react-router';
 import type { TaskListItem, TaskDetails, PlagiarismResult } from '../types';
 import { useGraphTasks, useGraphTaskDetails } from '../hooks/useGraphQueries';
 type Task = TaskDetails;
@@ -29,10 +36,27 @@ cytoscape.use(coseBilkent);
 
 const PlagiarismGraph: React.FC = () => {
   const { t } = useTranslation(['graph', 'common', 'status', 'results']);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [similarityThreshold, setSimilarityThreshold] = useState(0.75);
-  const [, setCy] = useState<cytoscape.Core | null>(null);
+  const [similarityThreshold, setSimilarityThreshold] = useState(() => {
+    const param = searchParams.get('threshold');
+    if (param) {
+      const val = parseFloat(param);
+      if (!isNaN(val) && val >= 0 && val <= 1) return val;
+    }
+    try {
+      const stored = localStorage.getItem('graph-threshold');
+      if (stored) {
+        const val = parseFloat(stored);
+        if (!isNaN(val) && val >= 0 && val <= 1) return val;
+      }
+    } catch { /* ignore */ }
+    return 0.75;
+  });
+  const [cyInstance, setCy] = useState<cytoscape.Core | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
   const { data: tasksData, isLoading: loadingTasks } = useGraphTasks();
   const tasks = tasksData?.items ?? [];
@@ -52,6 +76,35 @@ const PlagiarismGraph: React.FC = () => {
   }, [tasks, selectedTaskId]);
 
   const selectedTask = selectedTaskDetails;
+
+  // Persist threshold to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('graph-threshold', similarityThreshold.toString());
+    } catch { /* ignore */ }
+  }, [similarityThreshold]);
+
+  // Handle node click to open pair comparison
+  useEffect(() => {
+    if (!cyInstance) return;
+
+    const handleNodeClick = (evt: cytoscape.EventObject) => {
+      const node = evt.target;
+      if (!node.isNode()) return;
+
+      const fileId = node.id();
+      const taskId = selectedTaskId;
+      if (fileId && taskId) {
+        navigate(`/dashboard/pair-comparison?file_a=${fileId}&file_b=`);
+      }
+    };
+
+    cyInstance.on('tap', 'node', handleNodeClick);
+
+    return () => {
+      cyInstance.off('tap', 'node', handleNodeClick);
+    };
+  }, [cyInstance, selectedTaskId, navigate]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -202,9 +255,11 @@ const PlagiarismGraph: React.FC = () => {
       {tasks.length === 0 ? (
         <Card>
           <CardBody>
-            <Text textAlign="center" color="gray.500" py={8}>
-              {t('empty.noChecks')}
-            </Text>
+            <Flex direction="column" align="center" justify="center" py={16} color="gray.500">
+              <Icon as={FiInbox} boxSize={16} mb={4} opacity={0.5} />
+              <Text fontWeight="medium" fontSize="lg">{t('empty.noChecks')}</Text>
+              <Text fontSize="sm">Upload files to generate graph</Text>
+            </Flex>
           </CardBody>
         </Card>
       ) : (

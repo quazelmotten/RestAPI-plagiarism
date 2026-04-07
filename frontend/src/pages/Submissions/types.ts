@@ -4,8 +4,12 @@ export interface FileSubmission {
   language: string;
   created_at: string;
   task_id: string;
-  status: 'queued' | 'indexing' | 'finding_pairs' | 'processing' | 'completed' | 'failed';
+  status: string;
   similarity: number | null;
+  assignment_id?: string | null;
+  assignment_name?: string | null;
+  subject_id?: string | null;
+  subject_name?: string | null;
 }
 
 export interface SubmissionsResponse {
@@ -22,6 +26,8 @@ export interface Filters {
   similarity: string;
   submittedAt: string;
   task_id: string;
+  assignment_id: string;
+  subject_id: string;
 }
 
 export interface PaginationInfo {

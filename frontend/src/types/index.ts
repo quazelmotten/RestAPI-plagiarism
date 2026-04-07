@@ -91,6 +91,10 @@ export interface TaskListItem {
   high_similarity_count?: number;
   avg_similarity?: number;
   created_at?: string;
+  assignment_id?: string | null;
+  assignment_name?: string | null;
+  subject_id?: string | null;
+  subject_name?: string | null;
 }
 
 export interface TaskDetails extends TaskListItem {

@@ -1,4 +1,4 @@
-import { ChakraProvider, extendTheme } from '@chakra-ui/react';
+import { ChakraProvider, extendTheme, ColorModeScript } from '@chakra-ui/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router';
 import Dashboard from './pages/Dashboard';
@@ -13,9 +13,17 @@ const queryClient = new QueryClient({
   },
 });
 
+const getColorMode = (): 'light' | 'dark' => {
+  try {
+    return (localStorage.getItem('chakra-ui-color-mode') as 'light' | 'dark') || 'light';
+  } catch {
+    return 'light';
+  }
+};
+
 const theme = extendTheme({
   config: {
-    initialColorMode: 'light',
+    initialColorMode: getColorMode(),
     useSystemColorMode: false,
   },
   colors: {
@@ -38,16 +46,19 @@ const BASE = getBasePath();
 
 function App() {
   return (
-    <ChakraProvider theme={theme}>
-      <QueryClientProvider client={queryClient}>
-        <Router basename={BASE}>
-          <Routes>
-            <Route path="/dashboard/*" element={<Dashboard />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </Router>
-      </QueryClientProvider>
-    </ChakraProvider>
+    <>
+      <ColorModeScript initialColorMode={theme.config.initialColorMode} />
+      <ChakraProvider theme={theme}>
+        <QueryClientProvider client={queryClient}>
+          <Router basename={BASE}>
+            <Routes>
+              <Route path="/dashboard/*" element={<Dashboard />} />
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Router>
+        </QueryClientProvider>
+      </ChakraProvider>
+    </>
   );
 }
 

@@ -7,7 +7,11 @@ import {
   Alert,
   AlertIcon,
   Button,
+  Flex,
+  Icon,
+  Text,
 } from '@chakra-ui/react';
+import { FiInbox } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import { useSubmissions } from './hooks/useSubmissions';
 import { useSubmissionsMetadata } from './hooks/useSubmissionsMetadata';
@@ -26,11 +30,15 @@ const SubmissionsContent: React.FC = () => {
     similarity: '',
     submittedAt: '',
     task_id: '',
+    assignment_id: '',
+    subject_id: '',
   });
   const [offset, setOffset] = useState(0);
   const [pageSize, setPageSize] = useState(50);
 
   const { data: metadata } = useSubmissionsMetadata();
+  const uniqueAssignments = metadata?.assignments ?? [];
+  const uniqueSubjects = metadata?.subjects ?? [];
   const { data: submissionsData, isLoading, error, refetch } = useSubmissions({
     offset,
     limit: pageSize,
@@ -98,6 +106,8 @@ const SubmissionsContent: React.FC = () => {
           onFilterChange={handleFilterChange}
           uniqueLanguages={metadata?.languages ?? []}
           uniqueTaskIds={metadata?.taskIds ?? []}
+          uniqueAssignments={uniqueAssignments}
+          uniqueSubjects={uniqueSubjects}
           allStatuses={ALL_STATUSES}
         />
 
