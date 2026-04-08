@@ -2,6 +2,8 @@
 Assignments domain repository - data access for assignments.
 """
 
+from datetime import datetime, timezone
+
 from shared.models import Assignment, File, PlagiarismTask, Subject
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,14 +24,29 @@ class SubjectRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_subject(self, subject_id: str) -> SubjectResponse | None:
+    async def get_subject(
+        self, subject_id: str, include_deleted: bool = False
+    ) -> SubjectResponse | None:
         """Get a single subject by ID with assignment count."""
         subject = await self.db.get(Subject, subject_id)
         if not subject:
             return None
+        if not include_deleted and subject.deleted_at is not None:
+            return None
 
         assignments_count_result = await self.db.execute(
-            select(func.count()).select_from(Assignment).where(Assignment.subject_id == subject_id)
+            select(func.count())
+            .select_from(Assignment)
+            .where(Assignment.subject_id == subject_id, Assignment.deleted_at.is_(None))
+        )
+        assignments_count = assignments_count_result.scalar_one()
+
+        return SubjectResponse(
+            id=str(subject.id),
+            name=subject.name,
+            description=subject.description,
+            created_at=subject.created_at.isoformat() if subject.created_at else None,
+            assignments_count=assignments_count,
         )
         assignments_count = assignments_count_result.scalar_one()
 
@@ -43,13 +60,35 @@ class SubjectRepository:
 
     async def get_subject_by_name(self, name: str) -> SubjectResponse | None:
         """Get a subject by name with assignment count."""
-        result = await self.db.execute(select(Subject).where(Subject.name == name))
+        result = await self.db.execute(
+            select(Subject).where(Subject.name == name, Subject.deleted_at.is_(None))
+        )
         subject = result.scalar_one_or_none()
         if not subject:
             return None
 
         assignments_count_result = await self.db.execute(
-            select(func.count()).select_from(Assignment).where(Assignment.subject_id == subject.id)
+            select(func.count())
+            .select_from(Assignment)
+            .where(Assignment.subject_id == subject.id, Assignment.deleted_at.is_(None))
+        )
+        assignments_count = assignments_count_result.scalar_one()
+
+        return SubjectResponse(
+            id=str(subject.id),
+            name=subject.name,
+            description=subject.description,
+            created_at=subject.created_at.isoformat() if subject.created_at else None,
+            assignments_count=assignments_count,
+        )
+        subject = result.scalar_one_or_none()
+        if not subject:
+            return None
+
+        assignments_count_result = await self.db.execute(
+            select(func.count())
+            .select_from(Assignment)
+            .where(Assignment.subject_id == subject.id, Assignment.deleted_at.is_(None))
         )
         assignments_count = assignments_count_result.scalar_one()
 
@@ -69,11 +108,79 @@ class SubjectRepository:
     ) -> SubjectWithAssignments | None:
         """Get subject with its assignments."""
         subject = await self.db.get(Subject, subject_id)
-        if not subject:
+        if not subject or subject.deleted_at is not None:
             return None
 
         assignments_count_result = await self.db.execute(
-            select(func.count()).select_from(Assignment).where(Assignment.subject_id == subject_id)
+            select(func.count())
+            .select_from(Assignment)
+            .where(Assignment.subject_id == subject_id, Assignment.deleted_at.is_(None))
+        )
+        assignments_count = assignments_count_result.scalar_one()
+
+        tasks_count_subq = (
+            select(
+                PlagiarismTask.assignment_id,
+                func.count().label("tasks_count"),
+            )
+            .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(PlagiarismTask.deleted_at.is_(None))  # Filter out deleted tasks
+            .group_by(PlagiarismTask.assignment_id)
+            .subquery()
+        )
+
+        files_count_subq = (
+            select(
+                PlagiarismTask.assignment_id,
+                func.count(File.id).label("files_count"),
+            )
+            .join(File, File.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(File.deleted_at.is_(None))  # Filter out deleted files
+            .group_by(PlagiarismTask.assignment_id)
+            .subquery()
+        )
+
+        query = (
+            select(
+                Assignment,
+                func.coalesce(tasks_count_subq.c.tasks_count, 0).label("tasks_count"),
+                func.coalesce(files_count_subq.c.files_count, 0).label("files_count"),
+            )
+            .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
+            .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
+            .where(Assignment.subject_id == subject_id)
+            .where(Assignment.deleted_at.is_(None))  # Filter out deleted assignments
+            .order_by(Assignment.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        assignments = [
+            AssignmentResponse(
+                id=str(row.Assignment.id),
+                name=row.Assignment.name,
+                description=row.Assignment.description,
+                subject_id=str(row.Assignment.subject_id) if row.Assignment.subject_id else None,
+                created_at=row.Assignment.created_at.isoformat()
+                if row.Assignment.created_at
+                else None,
+                tasks_count=row.tasks_count,
+                files_count=row.files_count,
+            )
+            for row in rows
+        ]
+
+        return SubjectWithAssignments(
+            id=str(subject.id),
+            name=subject.name,
+            description=subject.description,
+            created_at=subject.created_at.isoformat() if subject.created_at else None,
+            assignments_count=assignments_count,
+            assignments=assignments,
         )
         assignments_count = assignments_count_result.scalar_one()
 
@@ -107,6 +214,7 @@ class SubjectRepository:
             .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
             .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
             .where(Assignment.subject_id == subject_id)
+            .where(Assignment.deleted_at.is_(None))
             .order_by(Assignment.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -147,11 +255,14 @@ class SubjectRepository:
                 func.count().label("assignments_count"),
             )
             .where(Assignment.subject_id.isnot(None))
+            .where(Assignment.deleted_at.is_(None))
             .group_by(Assignment.subject_id)
             .subquery()
         )
 
-        count_result = await self.db.execute(select(func.count()).select_from(Subject))
+        count_result = await self.db.execute(
+            select(func.count()).select_from(Subject).where(Subject.deleted_at.is_(None))
+        )
         total = count_result.scalar_one()
 
         query = (
@@ -162,6 +273,7 @@ class SubjectRepository:
                 ),
             )
             .outerjoin(assignments_count_subq, Subject.id == assignments_count_subq.c.subject_id)
+            .where(Subject.deleted_at.is_(None))
             .order_by(Subject.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -196,6 +308,7 @@ class SubjectRepository:
                 func.count().label("assignments_count"),
             )
             .where(Assignment.subject_id.isnot(None))
+            .where(Assignment.deleted_at.is_(None))
             .group_by(Assignment.subject_id)
             .subquery()
         )
@@ -206,6 +319,7 @@ class SubjectRepository:
                 func.count().label("tasks_count"),
             )
             .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(PlagiarismTask.deleted_at.is_(None))  # Filter out deleted tasks
             .group_by(PlagiarismTask.assignment_id)
             .subquery()
         )
@@ -217,6 +331,7 @@ class SubjectRepository:
             )
             .join(File, File.task_id == PlagiarismTask.id)
             .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(File.deleted_at.is_(None))  # Filter out deleted files
             .group_by(PlagiarismTask.assignment_id)
             .subquery()
         )
@@ -229,6 +344,7 @@ class SubjectRepository:
                 ),
             )
             .outerjoin(assignments_count_subq, Subject.id == assignments_count_subq.c.subject_id)
+            .where(Subject.deleted_at.is_(None))
             .order_by(Subject.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -250,6 +366,7 @@ class SubjectRepository:
                 .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
                 .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
                 .where(Assignment.subject_id == subject.id)
+                .where(Assignment.deleted_at.is_(None))  # Filter out deleted assignments
                 .order_by(Assignment.created_at.desc())
                 .limit(assignment_limit)
             )
@@ -292,13 +409,14 @@ class SubjectRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> list[AssignmentResponse]:
-        """Get assignments without a subject."""
+        """Get assignments without a subject or whose subject is soft-deleted."""
         tasks_count_subq = (
             select(
                 PlagiarismTask.assignment_id,
                 func.count().label("tasks_count"),
             )
             .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(PlagiarismTask.deleted_at.is_(None))  # Filter out deleted tasks
             .group_by(PlagiarismTask.assignment_id)
             .subquery()
         )
@@ -310,6 +428,7 @@ class SubjectRepository:
             )
             .join(File, File.task_id == PlagiarismTask.id)
             .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(File.deleted_at.is_(None))  # Filter out deleted files
             .group_by(PlagiarismTask.assignment_id)
             .subquery()
         )
@@ -322,7 +441,9 @@ class SubjectRepository:
             )
             .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
             .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
-            .where(Assignment.subject_id.is_(None))
+            .outerjoin(Subject, Assignment.subject_id == Subject.id)
+            .where((Assignment.subject_id.is_(None)) | (Subject.deleted_at.isnot(None)))
+            .where(Assignment.deleted_at.is_(None))  # Filter out deleted assignments
             .order_by(Assignment.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -389,12 +510,22 @@ class SubjectRepository:
         return await self.get_subject(subject_id)
 
     async def delete_subject(self, subject_id: str) -> bool:
-        """Delete a subject. Returns True if deleted, False if not found."""
+        """Soft delete a subject. Returns True if deleted, False if not found."""
         subject = await self.db.get(Subject, subject_id)
         if not subject:
             return False
 
-        await self.db.delete(subject)
+        subject.deleted_at = datetime.now(timezone.utc)  # noqa: UP017
+        await self.db.commit()
+        return True
+
+    async def restore_subject(self, subject_id: str) -> bool:
+        """Restore a soft-deleted subject. Returns True if restored, False if not found or not deleted."""
+        subject = await self.db.get(Subject, subject_id)
+        if not subject or subject.deleted_at is None:
+            return False
+
+        subject.deleted_at = None
         await self.db.commit()
         return True
 
@@ -405,16 +536,41 @@ class AssignmentRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_assignment(self, assignment_id: str) -> AssignmentResponse | None:
+    async def get_assignment(
+        self, assignment_id: str, include_deleted: bool = False
+    ) -> AssignmentResponse | None:
         """Get a single assignment by ID with counts."""
         assignment = await self.db.get(Assignment, assignment_id)
         if not assignment:
+            return None
+        if not include_deleted and assignment.deleted_at is not None:
             return None
 
         tasks_count_result = await self.db.execute(
             select(func.count())
             .select_from(PlagiarismTask)
             .where(PlagiarismTask.assignment_id == assignment_id)
+            .where(PlagiarismTask.deleted_at.is_(None))  # Filter out deleted tasks
+        )
+        tasks_count = tasks_count_result.scalar_one()
+
+        files_count_result = await self.db.execute(
+            select(func.count())
+            .select_from(File)
+            .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == assignment_id)
+            .where(File.deleted_at.is_(None))  # Filter out deleted files
+        )
+        files_count = files_count_result.scalar_one()
+
+        return AssignmentResponse(
+            id=str(assignment.id),
+            name=assignment.name,
+            description=assignment.description,
+            subject_id=str(assignment.subject_id) if assignment.subject_id else None,
+            created_at=assignment.created_at.isoformat() if assignment.created_at else None,
+            tasks_count=tasks_count,
+            files_count=files_count,
         )
         tasks_count = tasks_count_result.scalar_one()
 
@@ -447,7 +603,7 @@ class AssignmentRepository:
     ) -> AssignmentFullResponse | None:
         """Get full assignment details with all tasks, files, results, and stats."""
         assignment = await self.db.get(Assignment, assignment_id)
-        if not assignment:
+        if not assignment or assignment.deleted_at is not None:
             return None
 
         # Get counts
@@ -455,6 +611,7 @@ class AssignmentRepository:
             select(func.count())
             .select_from(PlagiarismTask)
             .where(PlagiarismTask.assignment_id == assignment_id)
+            .where(PlagiarismTask.deleted_at.is_(None))  # Filter out deleted tasks
         )
         tasks_count = tasks_count_result.scalar_one()
 
@@ -463,6 +620,63 @@ class AssignmentRepository:
             .select_from(File)
             .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
             .where(PlagiarismTask.assignment_id == assignment_id)
+            .where(File.deleted_at.is_(None))  # Filter out deleted files
+        )
+        files_count = files_count_result.scalar_one()
+
+        # Get aggregated results using ResultRepository
+        result_repo = ResultRepository(self.db)
+        agg_data = await result_repo.get_assignment_results(
+            assignment_id=assignment_id,
+            task_id=task_id,
+            limit=limit,
+            offset=offset,
+            file_limit=file_limit,
+            file_offset=file_offset,
+        )
+
+        if agg_data is None:
+            return AssignmentFullResponse(
+                id=str(assignment.id),
+                name=assignment.name,
+                description=assignment.description,
+                subject_id=str(assignment.subject_id) if assignment.subject_id else None,
+                created_at=assignment.created_at.isoformat() if assignment.created_at else None,
+                tasks_count=tasks_count,
+                files_count=files_count,
+                tasks=[],
+                files=[],
+                total_files=0,
+                results=[],
+                total_pairs=0,
+                total_results=0,
+                overall_stats=None,
+            )
+
+        return AssignmentFullResponse(
+            id=str(assignment.id),
+            name=assignment.name,
+            description=assignment.description,
+            subject_id=str(assignment.subject_id) if assignment.subject_id else None,
+            created_at=assignment.created_at.isoformat() if assignment.created_at else None,
+            tasks_count=tasks_count,
+            files_count=files_count,
+            tasks=agg_data["tasks"],
+            files=agg_data["files"],
+            total_files=agg_data["total_files"],
+            results=agg_data["results"],
+            total_pairs=agg_data["total_pairs"],
+            total_results=agg_data["total_results"],
+            overall_stats=agg_data["overall_stats"],
+        )
+        tasks_count = tasks_count_result.scalar_one()
+
+        files_count_result = await self.db.execute(
+            select(func.count())
+            .select_from(File)
+            .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == assignment_id)
+            .where(File.deleted_at.is_(None))  # Filter out deleted files
         )
         files_count = files_count_result.scalar_one()
 
@@ -520,6 +734,7 @@ class AssignmentRepository:
                 func.count().label("tasks_count"),
             )
             .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(PlagiarismTask.deleted_at.is_(None))  # Filter out deleted tasks
             .group_by(PlagiarismTask.assignment_id)
             .subquery()
         )
@@ -531,11 +746,14 @@ class AssignmentRepository:
             )
             .join(File, File.task_id == PlagiarismTask.id)
             .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(File.deleted_at.is_(None))  # Filter out deleted files
             .group_by(PlagiarismTask.assignment_id)
             .subquery()
         )
 
-        count_result = await self.db.execute(select(func.count()).select_from(Assignment))
+        count_result = await self.db.execute(
+            select(func.count()).select_from(Assignment).where(Assignment.deleted_at.is_(None))
+        )
         total = count_result.scalar_one()
 
         query = (
@@ -546,6 +764,7 @@ class AssignmentRepository:
             )
             .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
             .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
+            .where(Assignment.deleted_at.is_(None))  # Filter out deleted assignments
             .order_by(Assignment.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -597,7 +816,6 @@ class AssignmentRepository:
 
     async def update_assignment(self, assignment_id: str, **updates) -> AssignmentResponse | None:
         """Update an existing assignment. Only fields provided in updates are modified."""
-        from typing import Any  # avoid top-level import if not needed
 
         assignment = await self.db.get(Assignment, assignment_id)
         if not assignment:
@@ -616,11 +834,21 @@ class AssignmentRepository:
         return await self.get_assignment(assignment_id)
 
     async def delete_assignment(self, assignment_id: str) -> bool:
-        """Delete an assignment. Returns True if deleted, False if not found."""
+        """Soft delete an assignment. Returns True if deleted, False if not found."""
         assignment = await self.db.get(Assignment, assignment_id)
         if not assignment:
             return False
 
-        await self.db.delete(assignment)
+        assignment.deleted_at = datetime.now(timezone.utc)  # noqa: UP017
+        await self.db.commit()
+        return True
+
+    async def restore_assignment(self, assignment_id: str) -> bool:
+        """Restore a soft-deleted assignment. Returns True if restored, False if not found or not deleted."""
+        assignment = await self.db.get(Assignment, assignment_id)
+        if not assignment or assignment.deleted_at is None:
+            return False
+
+        assignment.deleted_at = None
         await self.db.commit()
         return True

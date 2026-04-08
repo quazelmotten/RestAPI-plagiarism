@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api, { API_ENDPOINTS } from '../services/api';
 import type { Subject, SubjectWithAssignments, Assignment } from '../types';
+import { restoreSubject, restoreAssignment } from '../services/api';
 
 interface SubjectsResponse {
   items: Subject[];
@@ -76,6 +77,34 @@ export function useDeleteSubject() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    },
+  });
+}
+
+export function useRestoreSubject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await restoreSubject(id);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    },
+  });
+}
+
+export function useRestoreAssignment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await restoreAssignment(id);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects'] });
     },
   });
 }

@@ -51,6 +51,7 @@ where = ["src", "shared", "worker", "cli"]
 line-length = 100
 target-version = "py311"
 src = ["src", "tests", "worker", "cli", "shared"]
+extend-exclude = ["tests/plagiarism/type1", "tests/plagiarism/type2", "tests/plagiarism/type3", "tests/plagiarism/type4"]
 
 [tool.ruff.lint]
 select = [

@@ -6,12 +6,10 @@ eliminating per-file Redis round trips.
 """
 
 import logging
-import threading
 import time
 import warnings
-from collections import defaultdict
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from shared.interfaces import CandidateIndex
@@ -69,77 +67,45 @@ class CandidateService:
         if not valid_files:
             return []
 
-        # Batch-fetch ALL fingerprints in a single pipeline call
+        # Batch-fetch fingerprints for files_a
         fingerprint_map = self.index.get_file_fingerprints_batch(file_hashes, language)
         elapsed_fetch = time.perf_counter() - t0
         logger.debug(f"Batch-fetched {len(file_hashes)} fingerprints in {elapsed_fetch:.2f}s")
 
-        # Build in-memory inverted index: fp_hash -> set of file_hashes
-        # This replaces 1000 Redis round trips with a single in-memory dict lookup
-        inv_index: dict[str, set[str]] = defaultdict(set)
-        fp_counts: dict[str, int] = {}
-        for fh, fps in fingerprint_map.items():
-            if fps:
-                fp_counts[fh] = len(fps)
-                for fp_hash in fps:
-                    inv_index[fp_hash].add(fh)
-
-        logger.debug(
-            f"In-memory index: {len(inv_index)} unique fingerprints, {len(fp_counts)} files indexed"
-        )
-
-        # Compute all candidate pairs in-memory
-        min_overlap_ratio = getattr(self.index, "min_overlap_threshold", 0.15)
-        max_fp_ratio = getattr(self.index, "MAX_FP_COUNT_RATIO", 4.0)
-
         all_pairs: list[tuple[dict, dict, float]] = []
-        all_seen: set[frozenset] = set()
+        all_seen: set[frozenset] = set()  # for intra deduplication
         checked_counter = 0
         log_interval = max(1, len(valid_files) // 20)
 
+        # Set of file hashes in files_b for cross-task filtering
+        files_b_hash_set = set(files_b_by_hash.keys())
+
         for file_a in valid_files:
             file_a_hash = file_a.get("hash") or file_a.get("file_hash")
-            if not file_a_hash:
-                continue
-
-            fps_a = fingerprint_map.get(file_a_hash)
-            if not fps_a:
+            fps = fingerprint_map.get(file_a_hash)
+            if not fps:
                 checked_counter += 1
                 continue
 
-            query_count = len(fps_a)
-            min_overlap = max(1, int(query_count * min_overlap_ratio))
+            # Get candidate matches from the inverted index
+            candidates = self.index.find_candidates(fps, language)  # Dict: file_hash -> similarity
 
-            # Count overlaps via in-memory inverted index
-            overlap_counts: dict[str, int] = defaultdict(int)
-            for fp_hash in fps_a:
-                for candidate_fh in inv_index.get(fp_hash, ()):
-                    overlap_counts[candidate_fh] += 1
-
-            # Compute Jaccard for candidates meeting threshold
-            for file_b_hash, overlap in overlap_counts.items():
-                if overlap < min_overlap:
-                    continue
-
-                # Pre-filter by fingerprint count ratio
-                candidate_count = fp_counts.get(file_b_hash)
-                if candidate_count is not None:
-                    ratio = max(query_count, candidate_count) / min(query_count, candidate_count)
-                    if ratio > max_fp_ratio:
+            for cand_hash, sim in candidates.items():
+                # For cross-task, only keep candidates that are in files_b
+                if not is_intra:
+                    if cand_hash not in files_b_hash_set:
+                        continue
+                    file_b = files_b_by_hash[cand_hash]
+                else:
+                    # Intra-task: skip self-comparison
+                    if cand_hash == file_a_hash:
+                        continue
+                    file_b = files_b_by_hash.get(cand_hash)
+                    if not file_b:
                         continue
 
-                file_b = files_b_by_hash.get(file_b_hash)
-                if not file_b:
-                    continue
-                if is_intra and file_a_hash == file_b_hash:
-                    continue
-
-                union = query_count + (candidate_count or query_count) - overlap
-                sim = overlap / union if union > 0 else 0.0
-                sim = min(sim, 1.0)
-
-                if deduplicate:
-                    pair_key = frozenset([file_a_hash, file_b_hash])
+                if deduplicate and is_intra:
+                    pair_key = frozenset([file_a_hash, cand_hash])
                     if pair_key in all_seen:
                         continue
                     all_seen.add(pair_key)
@@ -157,7 +123,7 @@ class CandidateService:
                 on_progress(checked_counter, len(valid_files))
 
         elapsed = time.perf_counter() - t0
-        files_checked = len(valid_files)
+        files_checked = checked_counter
         speed = files_checked / elapsed if elapsed > 0 else 0
         scope = "intra" if is_intra else f"cross ({len(files_b)} existing)"
         logger.info(

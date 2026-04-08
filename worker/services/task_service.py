@@ -196,6 +196,8 @@ class TaskService:
                 f"[Task {task_id}] Phase 2.5: Computing AST similarities for {total_pairs} pairs"
             )
             all_pairs = self.indexing_svc.compute_ast_similarities(all_pairs)
+            # Update total_pairs to the actual number of pairs after AST processing
+            total_pairs = len(all_pairs)
             ast_elapsed = time.perf_counter() - phase_start
             logger.info(
                 f"[Task {task_id}] Phase 2.5 COMPLETE: computed AST similarities "

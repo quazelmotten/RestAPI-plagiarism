@@ -49,7 +49,8 @@ class TestTaskService:
 
         idx_map = {"h1": [{"hash": 1}], "h2": [{"hash": 2}]}
         mock_services["indexing_service"].ensure_files_indexed.return_value = idx_map
-        mock_services["repository"].get_all_files.return_value = []
+        existing_files = [{"file_hash": "ex1", "file_path": "/ex.py"}]
+        mock_services["repository"].get_all_files.return_value = existing_files
         intra_pairs = [(files[0], files[0], 0.5)]
         cross_pairs = [(files[0], files[1], 0.3)]
         mock_services["candidate_service"].find_candidate_pairs.side_effect = [
@@ -71,7 +72,7 @@ class TestTaskService:
         # 1. Indexing phase
         assert any(call[1]["status"] == "indexing" for call in repo_update_calls)
         mock_services["indexing_service"].ensure_files_indexed.assert_called_once_with(
-            files=files, language=language, existing_files=[], on_progress=ANY
+            files=files, language=language, existing_files=existing_files, on_progress=ANY
         )
 
         # 2. Finding pairs phase

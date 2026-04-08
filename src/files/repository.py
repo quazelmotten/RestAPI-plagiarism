@@ -8,7 +8,6 @@ from shared.models import Assignment, File, PlagiarismTask, SimilarityResult, Su
 from sqlalchemy import func, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
-from sqlalchemy.orm import selectinload
 
 from files.schemas import FileInfoListItem, FileResponse
 from schemas.common import PaginatedResponse

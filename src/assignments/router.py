@@ -10,6 +10,8 @@ from assignments.dependencies import (
     get_assignment_service,
     get_subject_service,
     valid_assignment_id,
+    valid_deleted_assignment_id,
+    valid_deleted_subject_id,
     valid_subject_id,
 )
 from assignments.schemas import (
@@ -254,6 +256,33 @@ async def delete_assignment(
     await assignment_service.delete_assignment(assignment.id)
 
 
+@router.post(
+    "/{assignment_id}/restore",
+    response_model=AssignmentResponse,
+    summary="Restore an assignment",
+    description="Restore a previously deleted assignment.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": AssignmentResponse,
+            "description": "Assignment restored successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Assignment with the specified ID does not exist or was not deleted",
+        },
+    },
+)
+async def restore_assignment(
+    assignment: AssignmentResponse = Depends(valid_deleted_assignment_id),
+    assignment_service: AssignmentService = Depends(get_assignment_service),
+):
+    """Restore an assignment."""
+    success = await assignment_service.restore_assignment(assignment.id)
+    if not success:
+        raise NotFoundError("Assignment not found or was not deleted")
+    return await assignment_service.get_assignment(assignment.id)
+
+
 @subject_router.post(
     "",
     response_model=SubjectResponse,
@@ -413,3 +442,30 @@ async def delete_subject(
 ):
     """Delete a subject."""
     await subject_service.delete_subject(subject.id)
+
+
+@subject_router.post(
+    "/{subject_id}/restore",
+    response_model=SubjectResponse,
+    summary="Restore a subject",
+    description="Restore a previously deleted subject.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": SubjectResponse,
+            "description": "Subject restored successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Subject with the specified ID does not exist or was not deleted",
+        },
+    },
+)
+async def restore_subject(
+    subject: SubjectResponse = Depends(valid_deleted_subject_id),
+    subject_service: SubjectService = Depends(get_subject_service),
+):
+    """Restore a subject."""
+    success = await subject_service.restore_subject(subject.id)
+    if not success:
+        raise NotFoundError("Subject not found or was not deleted")
+    return await subject_service.get_subject(subject.id)

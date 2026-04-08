@@ -12,11 +12,6 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from plagiarism_core.fingerprints import (
-    compute_and_winnow,
-    parse_file_once,
-    tokenize_and_hash_ast,
-)
 from shared.interfaces import CandidateIndex, FingerprintCache
 
 from worker.services.fingerprint_service import FingerprintService
@@ -76,69 +71,45 @@ class IndexingService:
         t0 = time.perf_counter()
         log_interval = max(1, min(20, len(files) // 20))
 
-        # Step 1: Check cache for all files
-        all_hashes = [
-            f.get("file_hash") or f.get("hash")
-            for f in files
-            if (f.get("file_hash") or f.get("hash"))
-        ]
-        cached_data = self.cache.batch_get(all_hashes)
-
-        fingerprint_map: dict[str, list[dict[str, Any]]] = {}
-        ast_to_cache: list[tuple[str, list[dict], list[int]]] = []
-
+        # Build list of valid file hashes and file_info
+        file_hashes = []
+        valid_file_infos = []
         for file_info in files:
-            file_hash = file_info.get("file_hash") or file_info.get("hash")
-            if not file_hash:
-                continue
+            fh = file_info.get("file_hash") or file_info.get("hash")
+            if fh:
+                file_hashes.append(fh)
+                valid_file_infos.append(file_info)
 
-            file_data = cached_data.get(file_hash, {})
-            fps = file_data.get("fingerprints")
-            ast_hashes = file_data.get("ast_hashes")
+        if not valid_file_infos:
+            return {}
 
-            if fps is not None and ast_hashes is not None:
-                fingerprint_map[file_hash] = fps
+        # Check cache for existing fingerprints and AST hashes
+        cached_data = self.cache.batch_get(file_hashes)
+        fingerprint_map: dict[str, list[dict[str, Any]]] = {}
 
-        logger.debug(f"Cache hit: {len(fingerprint_map)}/{len(files)} files already fingerprinted")
+        for file_info in valid_file_infos:
+            fh = file_info.get("file_hash") or file_info.get("hash")
+            data = cached_data.get(fh, {})
+            if data.get("fingerprints") is not None and data.get("ast_hashes") is not None:
+                fingerprint_map[fh] = data["fingerprints"]
 
-        # Step 2: For uncached files — fingerprint then immediately index
-        # (interleaved approach: avoids holding all fingerprints in memory)
+        logger.debug(
+            f"Cache hit: {len(fingerprint_map)}/{len(valid_file_infos)} files already fingerprinted"
+        )
+
+        # Process files that need fingerprinting
         total_fps = 0
         pipe = self.index.redis.pipeline()
         pipe_count = 0
-        max_pipe_count = 200  # Execute pipeline every 200 commands
+        max_pipe_count = 200
 
-        for idx, file_info in enumerate(files, 1):
+        for idx, file_info in enumerate(valid_file_infos, 1):
             file_hash = file_info.get("file_hash") or file_info.get("hash")
-            if not file_hash:
-                continue
-
-            # Already cached — just add to inverted index
-            if file_hash in fingerprint_map:
-                fps = fingerprint_map[file_hash]
-            else:
-                # Generate fingerprints directly
-                file_path = file_info.get("file_path") or file_info.get("path")
-                if not file_path:
-                    continue
+            fps = fingerprint_map.get(file_hash)
+            if fps is None:
                 try:
-                    tree, _ = parse_file_once(file_path, language)
-                    tokens, ast_hashes = tokenize_and_hash_ast(file_path, language, tree=tree)
-                    fps = compute_and_winnow(tokens)
-
-                    fps_for_storage = [
-                        {
-                            "hash": fp["hash"],
-                            "start": tuple(fp["start"]),
-                            "end": tuple(fp["end"]),
-                            "kgram_idx": fp.get("kgram_idx", 0),
-                        }
-                        for fp in fps
-                    ]
-
-                    fingerprint_map[file_hash] = fps_for_storage
-                    ast_to_cache.append((file_hash, fps_for_storage, ast_hashes))
-                    fps = fps_for_storage
+                    fps = self.fingerprint_service.ensure_fingerprinted(file_info, language)
+                    fingerprint_map[file_hash] = fps
                 except Exception as e:
                     logger.error(f"Failed to index file {file_hash[:16]}...: {e}")
                     continue
@@ -163,21 +134,18 @@ class IndexingService:
                     pipe = self.index.redis.pipeline()
                     pipe_count = 0
 
-            if idx % log_interval == 0 or idx == len(files):
+            if idx % log_interval == 0 or idx == len(valid_file_infos):
                 elapsed = time.perf_counter() - t0
                 speed = idx / elapsed if elapsed > 0 else 0
-                logger.info(f"  Indexed {idx}/{len(files)} files ({speed:.1f} files/sec)")
+                logger.info(
+                    f"  Indexed {idx}/{len(valid_file_infos)} files ({speed:.1f} files/sec)"
+                )
                 if on_progress:
-                    on_progress(idx, len(files))
+                    on_progress(idx, len(valid_file_infos))
 
-        # Flush remaining pipeline
+        # Flush any remaining pipeline commands
         if pipe.command_stack:
             pipe.execute()
-
-        # Batch-cache all newly generated fingerprints
-        if ast_to_cache:
-            self.cache.batch_cache(ast_to_cache)
-            logger.debug(f"Batch-cached {len(ast_to_cache)} new fingerprint sets")
 
         elapsed = time.perf_counter() - t0
         speed = len(fingerprint_map) / elapsed if elapsed > 0 else 0

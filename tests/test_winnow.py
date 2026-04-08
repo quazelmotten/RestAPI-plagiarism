@@ -21,7 +21,7 @@ class TestFingerprint:
 
     def test_frozen(self):
         fp = Fingerprint(hash_value=123, position=5)
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             fp.hash_value = 999
 
 

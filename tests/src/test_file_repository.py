@@ -67,6 +67,10 @@ class TestFileRepository:
         mock_row.task_id = sample_task.id
         mock_row.status = sample_task.status
         mock_row.max_sim = 0.95
+        mock_row.assignment_id = None
+        mock_row.assignment_name = None
+        mock_row.subject_id = None
+        mock_row.subject_name = None
 
         mock_db.execute.return_value.all.return_value = [mock_row]
 
@@ -91,6 +95,10 @@ class TestFileRepository:
         mock_row.task_id = sample_task.id
         mock_row.status = sample_task.status
         mock_row.max_sim = None
+        mock_row.assignment_id = None
+        mock_row.assignment_name = None
+        mock_row.subject_id = None
+        mock_row.subject_name = None
 
         # Mock count query
         mock_db.execute.return_value.scalar.return_value = 10
@@ -161,6 +169,10 @@ class TestFileRepository:
         mock_row.filename = sample_file.filename
         mock_row.language = sample_file.language
         mock_row.task_id = sample_task.id
+        mock_row.assignment_id = None
+        mock_row.assignment_name = None
+        mock_row.subject_id = None
+        mock_row.subject_name = None
 
         mock_db.execute.return_value.all.return_value = [mock_row]
 

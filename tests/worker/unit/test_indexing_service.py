@@ -18,6 +18,11 @@ class TestIndexingService:
         """Mock CandidateIndex (inverted index)."""
         idx = MagicMock(spec=CandidateIndex)
         idx.add_file_fingerprints = MagicMock()
+        # Setup redis mock with pipeline that has command_stack
+        idx.redis = MagicMock()
+        pipeline_mock = MagicMock()
+        pipeline_mock.command_stack = []  # initial empty stack
+        idx.redis.pipeline.return_value = pipeline_mock
         return idx
 
     @pytest.fixture

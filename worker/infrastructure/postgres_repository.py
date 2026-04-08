@@ -12,6 +12,7 @@ from typing import Any
 from shared.interfaces import TaskRepository
 from shared.models import File, PlagiarismTask, SimilarityResult
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from worker.database import get_session
 
@@ -127,81 +128,53 @@ class PostgresRepository(TaskRepository):
                 logger.debug("Failed to publish progress to Redis: %s", e)
 
     def bulk_insert_results(self, results: list[dict[str, Any]]) -> None:
-        """Bulk insert similarity results using psycopg2 execute_values for speed."""
+        """Bulk insert similarity results with fallback to individual inserts on conflict."""
         if not results:
             return
 
         from uuid import uuid4
 
-        from psycopg2.extras import execute_values
-
         with get_session() as session:
-            raw_conn = session.connection().connection
-            cursor = raw_conn.cursor()
-
-            values = [
-                (
-                    str(uuid4()),
-                    r["task_id"],
-                    r["file_a_id"],
-                    r["file_b_id"],
-                    r.get("ast_similarity"),
-                    json.dumps(r.get("matches", {})),
-                )
-                for r in results
-            ]
-
             try:
-                execute_values(
-                    cursor,
-                    """
-                    INSERT INTO similarity_results
-                        (id, task_id, file_a_id, file_b_id, ast_similarity, matches)
-                    VALUES %s
-                    ON CONFLICT DO NOTHING
-                    """,
-                    values,
-                    page_size=5000,
-                )
+                # Prepare mappings for bulk insert
+                values = [
+                    {
+                        "id": str(uuid4()),
+                        "task_id": r["task_id"],
+                        "file_a_id": r["file_a_id"],
+                        "file_b_id": r["file_b_id"],
+                        "ast_similarity": r.get("ast_similarity"),
+                        "matches": json.dumps(r.get("matches", {})),
+                    }
+                    for r in results
+                ]
+                session.bulk_insert_mappings(SimilarityResult, values)
                 session.commit()
-                self._update_file_max_similarity(cursor, results)
-                session.commit()
-            except Exception:
+                self._update_file_max_similarity(session, results)
+            except IntegrityError:
                 session.rollback()
-                logger.debug(
-                    "Bulk insert of %d results failed, falling back to per-row insert", len(results)
-                )
+                # Fallback: insert each result individually, ignoring conflicts
                 for r in results:
                     try:
-                        cursor.execute(
-                            """
-                            INSERT INTO similarity_results
-                                (id, task_id, file_a_id, file_b_id, ast_similarity, matches)
-                            VALUES (%s, %s, %s, %s, %s, %s::jsonb)
-                            ON CONFLICT DO NOTHING
-                            """,
-                            (
-                                str(uuid4()),
-                                r["task_id"],
-                                r["file_a_id"],
-                                r["file_b_id"],
-                                r.get("ast_similarity"),
-                                json.dumps(r.get("matches", {})),
-                            ),
+                        obj = SimilarityResult(
+                            id=str(uuid4()),
+                            task_id=r["task_id"],
+                            file_a_id=r["file_a_id"],
+                            file_b_id=r["file_b_id"],
+                            ast_similarity=r.get("ast_similarity"),
+                            matches=json.dumps(r.get("matches", {})),
                         )
-                    except Exception:
+                        session.add(obj)
+                        session.commit()  # commit each to isolate errors
+                    except IntegrityError:
                         session.rollback()
-                        logger.debug(
-                            "Skipping duplicate result for files %s <-> %s",
-                            r["file_a_id"],
-                            r["file_b_id"],
-                        )
-                session.commit()
-                self._update_file_max_similarity(cursor, results)
-                session.commit()
+                        continue
+                self._update_file_max_similarity(session, results)
 
-    def _update_file_max_similarity(self, cursor, results: list[dict[str, Any]]) -> None:
+    def _update_file_max_similarity(self, session, results: list[dict[str, Any]]) -> None:
         """Update cached max_similarity on files affected by the inserted results."""
+        from sqlalchemy import text
+
         file_ids = set()
         for r in results:
             file_ids.add(r["file_a_id"])
@@ -210,7 +183,7 @@ class PostgresRepository(TaskRepository):
             return
 
         file_ids_list = ",".join(f"'{fid}'" for fid in file_ids)
-        cursor.execute(f"""
+        stmt = text(f"""
             UPDATE files
             SET max_similarity = sub.max_sim
             FROM (
@@ -226,6 +199,7 @@ class PostgresRepository(TaskRepository):
             ) sub
             WHERE files.id = sub.id
         """)
+        session.execute(stmt)
 
     def get_max_similarity(self, task_id: str) -> float:
         """Get maximum similarity score for a task."""

@@ -22,11 +22,13 @@ export const API_ENDPOINTS = {
   ASSIGNMENT_FULL: (id: string) => `/plagiarism/assignments/${id}/full`,
   ASSIGNMENT_HISTOGRAM: (id: string, bins: number, taskId?: string) =>
     `/plagiarism/assignments/${id}/histogram?bins=${bins}${taskId ? `&task_id=${taskId}` : ''}`,
+  ASSIGNMENT_RESTORE: (id: string) => `/plagiarism/assignments/${id}/restore`,
 
   // Subjects
   SUBJECTS: '/plagiarism/subjects',
   SUBJECT_WITH_ASSIGNMENTS: (id: string) => `/plagiarism/subjects/${id}/assignments`,
   UNCATEGORIZED_ASSIGNMENTS: '/plagiarism/subjects/uncategorized',
+  SUBJECT_RESTORE: (id: string) => `/plagiarism/subjects/${id}/restore`,
 
   // Health & version
   HEALTH: '/health',

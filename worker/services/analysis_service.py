@@ -63,7 +63,9 @@ class AnalysisService:
                 file2_path=file2_path,
                 file1_hash=file1_hash,
                 file2_hash=file2_hash,
+                get_fingerprints=self._get_fingerprints,
                 get_ast_hashes=self._get_ast_hashes,
+                cache_fingerprints=self._cache_fingerprints,
                 language=language,
             )
 

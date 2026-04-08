@@ -180,6 +180,8 @@ class TestServiceIntegration:
         index = RedisInvertedIndex(redis_test_instance, min_overlap_threshold=0.15)
         fpsvc = FingerprintService(cache)
         idxsvc = IndexingService(index, cache, fpsvc)
+        # Patch compute_ast_similarities to avoid scipy dependency in tests
+        idxsvc.compute_ast_similarities = lambda pairs: pairs
         candsvc = CandidateService(index)
         result_svc = ResultService(fake_repo)
         result_svc.store_similarity_scores = MagicMock(wraps=result_svc.store_similarity_scores)

@@ -86,6 +86,9 @@ class SubjectService:
     async def delete_subject(self, subject_id: str) -> bool:
         return await self.repo.delete_subject(subject_id)
 
+    async def restore_subject(self, subject_id: str) -> bool:
+        return await self.repo.restore_subject(subject_id)
+
 
 class AssignmentService:
     def __init__(self, db: AsyncSession):
@@ -134,3 +137,6 @@ class AssignmentService:
 
     async def delete_assignment(self, assignment_id: str) -> bool:
         return await self.repo.delete_assignment(assignment_id)
+
+    async def restore_assignment(self, assignment_id: str) -> bool:
+        return await self.repo.restore_assignment(assignment_id)

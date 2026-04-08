@@ -70,42 +70,6 @@ async def get_files(
     )
 
 
-async def get_files(
-    file_service: FileService = Depends(get_file_service),
-    limit: int = Query(default=50, ge=1, le=500, description="Number of files to return (1-500)"),
-    offset: int = Query(default=0, ge=0, description="Number of files to skip for pagination"),
-    filename: str | None = Query(default=None, description="Filter by filename (partial match)"),
-    language: str | None = Query(default=None, description="Filter by programming language"),
-    status: str | None = Query(default=None, description="Filter by file status"),
-    task_id: uuid.UUID | None = Query(default=None, description="Filter by task ID"),
-    similarity_min: float | None = Query(
-        default=None, ge=0.0, le=1.0, description="Minimum similarity threshold (0.0-1.0)"
-    ),
-    similarity_max: float | None = Query(
-        default=None, ge=0.0, le=1.0, description="Maximum similarity threshold (0.0-1.0)"
-    ),
-    submitted_after: str | None = Query(
-        default=None, description="Filter by submission date (YYYY-MM-DD)"
-    ),
-    submitted_before: str | None = Query(
-        default=None, description="Filter by submission date (YYYY-MM-DD)"
-    ),
-):
-    """Get paginated list of files with total count and optional filters."""
-    return await file_service.get_files(
-        limit=limit,
-        offset=offset,
-        filename=filename,
-        language=language,
-        status=status,
-        task_id=str(task_id) if task_id else None,
-        similarity_min=similarity_min,
-        similarity_max=similarity_max,
-        submitted_after=submitted_after,
-        submitted_before=submitted_before,
-    )
-
-
 @router.get(
     "/files/list",
     response_model=PaginatedResponse,

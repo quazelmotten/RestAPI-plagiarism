@@ -23,5 +23,13 @@ export const getApiUrl = (endpoint: string): string => {
   return `${base}${endpoint}`;
 };
 
+// Assignment APIs
+export const restoreAssignment = (id: string) => 
+  api.post(`${API_ENDPOINTS.ASSIGNMENTS}/${id}/restore`);
+
+// Subject APIs
+export const restoreSubject = (id: string) => 
+  api.post(`${API_ENDPOINTS.SUBJECTS}/${id}/restore`);
+
 export { API_ENDPOINTS };
 export default api;

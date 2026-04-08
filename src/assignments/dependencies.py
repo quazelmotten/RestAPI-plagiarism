@@ -49,6 +49,7 @@ async def valid_assignment_id(
 ) -> AssignmentResponse:
     """
     Dependency that retrieves an assignment by ID or raises 404.
+    Only returns non-deleted assignments.
     """
     assignment = await assignment_repo.get_assignment(str(assignment_id))
     if not assignment:
@@ -62,8 +63,37 @@ async def valid_subject_id(
 ) -> SubjectResponse:
     """
     Dependency that retrieves a subject by ID or raises 404.
+    Only returns non-deleted subjects.
     """
     subject = await subject_repo.get_subject(str(subject_id))
+    if not subject:
+        raise NotFoundError(f"Subject {subject_id} not found")
+    return subject
+
+
+async def valid_deleted_assignment_id(
+    assignment_id: uuid.UUID = Path(..., alias="assignment_id", description="Assignment UUID"),
+    assignment_repo: AssignmentRepository = Depends(get_assignment_repository),
+) -> AssignmentResponse:
+    """
+    Dependency that retrieves an assignment by ID including soft-deleted ones.
+    Used for restore operations.
+    """
+    assignment = await assignment_repo.get_assignment(str(assignment_id), include_deleted=True)
+    if not assignment:
+        raise NotFoundError(f"Assignment {assignment_id} not found")
+    return assignment
+
+
+async def valid_deleted_subject_id(
+    subject_id: uuid.UUID = Path(..., alias="subject_id", description="Subject UUID"),
+    subject_repo: SubjectRepository = Depends(get_subject_repository),
+) -> SubjectResponse:
+    """
+    Dependency that retrieves a subject by ID including soft-deleted ones.
+    Used for restore operations.
+    """
+    subject = await subject_repo.get_subject(str(subject_id), include_deleted=True)
     if not subject:
         raise NotFoundError(f"Subject {subject_id} not found")
     return subject

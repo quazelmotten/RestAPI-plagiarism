@@ -191,6 +191,11 @@ class SimpleRedis:
         self._pipeline_results = []
         return self
 
+    @property
+    def command_stack(self):
+        """Return the current pipeline command stack (list of commands). Used by IndexingService to check if pipeline has pending commands."""
+        return self._pipeline_results if self._pipeline_results is not None else []
+
     def execute(self):
         if self._pipeline_results is not None:
             results = self._pipeline_results

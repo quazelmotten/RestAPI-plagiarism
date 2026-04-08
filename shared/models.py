@@ -38,6 +38,7 @@ class Subject(SharedBase):
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationship to assignments
     assignments: Mapped[list["Assignment"]] = relationship("Assignment", back_populates="subject")
@@ -53,6 +54,7 @@ class Assignment(SharedBase):
         UUID(as_uuid=True), ForeignKey("subjects.id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationship to subject
     subject: Mapped["Subject | None"] = relationship("Subject", back_populates="assignments")
@@ -78,6 +80,7 @@ class PlagiarismTask(SharedBase):
         UUID(as_uuid=True), ForeignKey("assignments.id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationship to files
     files: Mapped[list["File"]] = relationship(
@@ -100,6 +103,7 @@ class File(SharedBase):
     language: Mapped[str] = mapped_column(String, nullable=False)
     max_similarity: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationship back to task
     task: Mapped["PlagiarismTask"] = relationship("PlagiarismTask", back_populates="files")

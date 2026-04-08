@@ -77,7 +77,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../services/api';
-import { useSubjects, useUncategorizedAssignments, useCreateSubject, useUpdateSubject, useDeleteSubject } from '../hooks/useSubjects';
+import { useSubjects, useUncategorizedAssignments, useCreateSubject, useUpdateSubject, useDeleteSubject, useRestoreSubject, useRestoreAssignment } from '../hooks/useSubjects';
 
 interface Assignment {
   id: string;
@@ -251,96 +251,92 @@ const Assignments: React.FC = () => {
   const { isOpen: isSubjectModalOpen, onOpen: onSubjectModalOpen, onClose: onSubjectModalClose } = useDisclosure();
   const { isOpen: isDeleteSubjectOpen, onOpen: onDeleteSubjectOpen, onClose: onDeleteSubjectClose } = useDisclosure();
 
-  const { data, isLoading: assignmentsLoading } = useQuery<AssignmentsResponse>({
-    queryKey: ['assignments'],
-    queryFn: async () => {
-      const res = await api.get(API_ENDPOINTS.ASSIGNMENTS);
-      return res.data;
-    },
-  });
+    const { data, isLoading: assignmentsLoading } = useQuery<AssignmentsResponse>({
+      queryKey: ['assignments'],
+      queryFn: async () => {
+        const res = await api.get(API_ENDPOINTS.ASSIGNMENTS);
+        return res.data;
+      },
+    });
 
-  const { data: subjects, isLoading: subjectsLoading } = useSubjects();
-  const { data: uncategorizedAssignments, isLoading: uncategorizedLoading } = useUncategorizedAssignments();
+    const { data: subjects, isLoading: subjectsLoading } = useSubjects();
+    const { data: uncategorizedAssignments, isLoading: uncategorizedLoading } = useUncategorizedAssignments();
 
-  const createSubjectMutation = useCreateSubject();
-  const updateSubjectMutation = useUpdateSubject();
-  const deleteSubjectMutation = useDeleteSubject();
+    const createSubjectMutation = useCreateSubject();
+    const updateSubjectMutation = useUpdateSubject();
+    const deleteSubjectMutation = useDeleteSubject();
+    const restoreSubjectMutation = useRestoreSubject();
 
-  const createMutation = useMutation({
-    mutationFn: async (payload: { name: string; description: string | null; subject_id: string | null }) => {
-      const res = await api.post(API_ENDPOINTS.ASSIGNMENTS, payload);
-      return res.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      queryClient.invalidateQueries({ queryKey: ['subjects'] });
-      toast({ title: t('toasts.created'), status: 'success', duration: 3000 });
-      closeAssignmentModal();
-    },
-    onError: (err: unknown) => {
-      const msg = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : t('common:error');
-      toast({ title: t('common:error'), description: msg, status: 'error', duration: 5000 });
-    },
-  });
+    const createMutation = useMutation({
+      mutationFn: async (payload: { name: string; description: string | null; subject_id: string | null }) => {
+        const res = await api.post(API_ENDPOINTS.ASSIGNMENTS, payload);
+        return res.data;
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['assignments'] });
+        queryClient.invalidateQueries({ queryKey: ['subjects'] });
+        toast({ title: t('toasts.created'), status: 'success', duration: 3000 });
+        closeAssignmentModal();
+      },
+       onError: (err: unknown) => {
+         const msg = err && typeof err === 'object' && 'response' in err
+           ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+           : t('common:error');
+         toast({ title: t('common:error'), description: msg, status: 'error', duration: 5000 });
+       },
+    });
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, payload }: { id: string; payload: { name?: string; description?: string | null; subject_id?: string | null } }) => {
-      const res = await api.patch(`${API_ENDPOINTS.ASSIGNMENTS}/${id}`, payload);
-      return res.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      queryClient.invalidateQueries({ queryKey: ['subjects'] });
-      toast({ title: t('toasts.updated'), status: 'success', duration: 3000 });
-      closeAssignmentModal();
-    },
-    onError: () => {
-      toast({ title: t('common:error'), description: t('toasts.updateFailed'), status: 'error', duration: 5000 });
-    },
-  });
+    const updateMutation = useMutation({
+      mutationFn: async ({ id, payload }: { id: string; payload: { name?: string; description?: string | null; subject_id?: string | null } }) => {
+        const res = await api.patch(`${API_ENDPOINTS.ASSIGNMENTS}/${id}`, payload);
+        return res.data;
+      },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['assignments'] });
+        queryClient.invalidateQueries({ queryKey: ['subjects'] });
+        toast({ title: t('toasts.updated'), status: 'success', duration: 3000 });
+        closeAssignmentModal();
+      },
+      onError: () => {
+        toast({ title: t('common:error'), description: t('toasts.updateFailed'), status: 'error', duration: 5000 });
+      },
+    });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (assignment: Assignment) => {
-      await api.delete(`${API_ENDPOINTS.ASSIGNMENTS}/${assignment.id}`);
-    },
-    onSuccess: (_, assignment) => {
-      toast({
-        title: t('toasts.deleted'),
-        description: (
-          <HStack>
-            <Text>{t('toasts.deleted')}</Text>
+    const restoreAssignmentMutation = useRestoreAssignment();
+
+    const deleteMutation = useMutation({
+      mutationFn: async (assignment: Assignment) => {
+        await api.delete(`${API_ENDPOINTS.ASSIGNMENTS}/${assignment.id}`);
+      },
+      onSuccess: (_, assignment) => {
+        toast({
+          title: t('toasts.deleted'),
+          description: (
             <Button
-              size="xs"
+              size="sm"
               colorScheme="blue"
-              variant="outline"
-              ml={2}
+              mt={2}
               onClick={() => {
-                createMutation.mutate({
-                  name: assignment.name,
-                  description: assignment.description,
-                  subject_id: assignment.subject_id,
-                });
+                restoreAssignmentMutation.mutate(assignment.id);
               }}
+              width="100%"
             >
               {t('common:undo')}
             </Button>
-          </HStack>
-        ),
-        status: 'info',
-        duration: 5000,
-        isClosable: true,
-      });
-      queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      queryClient.invalidateQueries({ queryKey: ['subjects'] });
-      setDeletingAssignment(null);
-      onDeleteAssignmentClose();
-    },
-    onError: () => {
-      toast({ title: t('common:error'), description: t('toasts.deleteFailed'), status: 'error', duration: 5000 });
-    },
-  });
+          ),
+          status: 'warning',
+          duration: 8000,
+          isClosable: true,
+        });
+        queryClient.invalidateQueries({ queryKey: ['assignments'] });
+        queryClient.invalidateQueries({ queryKey: ['subjects'] });
+        setDeletingAssignment(null);
+        onDeleteAssignmentClose();
+      },
+      onError: () => {
+        toast({ title: t('common:error'), description: t('toasts.deleteFailed'), status: 'error', duration: 5000 });
+      },
+    });
 
   useEffect(() => {
     try {
@@ -497,50 +493,44 @@ const Assignments: React.FC = () => {
     closeSubjectModal();
   }, [newName, newDescription, editingSubject, createSubjectMutation, updateSubjectMutation, toast]);
 
-  const handleDeleteAssignment = useCallback(() => {
-    if (deletingAssignment) {
-      deleteMutation.mutate(deletingAssignment);
-    }
-  }, [deletingAssignment, deleteMutation]);
+   const handleDeleteAssignment = useCallback(() => {
+     if (deletingAssignment) {
+       deleteMutation.mutate(deletingAssignment);
+     }
+   }, [deletingAssignment, deleteMutation]);
 
-  const handleDeleteSubject = useCallback(() => {
-    if (!deletingSubject) return;
+   const handleDeleteSubject = useCallback(() => {
+     if (!deletingSubject) return;
 
-    const subjectToUndo = deletingSubject;
+     const subjectToUndo = deletingSubject;
 
-    deleteSubjectMutation.mutate(subjectToUndo.id, {
-      onSuccess: () => {
-        toast({
-          title: t('toasts.deleted'),
-          description: (
-            <HStack>
-              <Text>{t('toasts.deleted')}</Text>
+      deleteSubjectMutation.mutate(subjectToUndo.id, {
+        onSuccess: () => {
+          toast({
+            title: t('toasts.deleted'),
+            description: (
               <Button
-                size="xs"
+                size="sm"
                 colorScheme="blue"
-                variant="outline"
-                ml={2}
+                mt={2}
                 onClick={() => {
-                  createSubjectMutation.mutate({
-                    name: subjectToUndo.name,
-                    description: subjectToUndo.description,
-                  });
+                  restoreSubjectMutation.mutate(subjectToUndo.id);
                 }}
+                width="100%"
               >
                 {t('common:undo')}
               </Button>
-            </HStack>
-          ),
-          status: 'info',
-          duration: 5000,
-          isClosable: true,
-        });
-      },
-    });
+            ),
+            status: 'warning',
+            duration: 8000,
+            isClosable: true,
+          });
+        },
+      });
 
-    setDeletingSubject(null);
-    onDeleteSubjectClose();
-  }, [deletingSubject, deleteSubjectMutation, createSubjectMutation, t]);
+     setDeletingSubject(null);
+     onDeleteSubjectClose();
+   }, [deletingSubject, deleteSubjectMutation, restoreSubjectMutation, t]);
 
   const filterAssignments = (assignments: Assignment[]) => {
     if (!searchQuery.trim()) return assignments;
