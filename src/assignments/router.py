@@ -52,7 +52,10 @@ async def create_assignment(
     assignment_service: AssignmentService = Depends(get_assignment_service),
 ):
     """Create a new assignment."""
-    return await assignment_service.create_assignment(data)
+    result = assignment_service.create_assignment(data)
+    if hasattr(result, "__await__"):
+        result = await result
+    return result
 
 
 @router.get(

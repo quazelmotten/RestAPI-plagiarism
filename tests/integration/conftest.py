@@ -5,7 +5,14 @@ Uses real services (PostgreSQL, Redis, RabbitMQ) via docker-compose.test.yml.
 
 import os
 import sys
+import uuid
 from unittest.mock import MagicMock
+
+import pytest
+import pytest_asyncio
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 src_path = os.path.join(_project_root, "src")
@@ -14,7 +21,7 @@ if src_path not in sys.path:
 
 os.environ["INTEGRATION_TESTS"] = "1"
 os.environ["DB_HOST"] = "localhost"
-os.environ["DB_PORT"] = "5433"
+os.environ["DB_PORT"] = "5432"
 os.environ["DB_NAME"] = "plagiarism_db"
 os.environ["DB_USER"] = "plagiarism_user"
 os.environ["DB_PASS"] = "iNseUMJMuFlX1Q5Sr6yPwjUDPprX4VMP"
@@ -31,20 +38,13 @@ os.environ["RATE_LIMIT_ENABLED"] = "false"
 
 os.makedirs("/tmp/test_plagiarism_storage", exist_ok=True)
 
-import uuid
-import pytest
-import pytest_asyncio
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-
-
-TEST_DB_URL = "postgresql+asyncpg://plagiarism_user:iNseUMJMuFlX1Q5Sr6yPwjUDPprX4VMP@localhost:5433/plagiarism_db"
+TEST_DB_URL = "postgresql+asyncpg://plagiarism_user:iNseUMJMuFlX1Q5Sr6yPwjUDPprX4VMP@localhost:5432/plagiarism_db"
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_db_schema():
     import asyncio
+
     from alembic import command
     from alembic.config import Config
 
@@ -82,9 +82,9 @@ async def fresh_db_session():
         max_overflow=0,
         echo=False,
     )
-    TestSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    test_session_local = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    async with TestSessionLocal() as session:
+    async with test_session_local() as session:
         yield session
 
     await engine.dispose()
@@ -159,23 +159,34 @@ class MockS3Storage:
 
 
 @pytest_asyncio.fixture
-async def client(db_clean, fresh_db_session):
+async def client(db_clean):
     from httpx import ASGITransport, AsyncClient
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.orm import sessionmaker
 
     import database as db_module
 
+    # Import app first - this loads the routes which depend on the original database module
+    from app import app
+
+    # Clear any dependency overrides from parent conftest.py
+    app.dependency_overrides.clear()
+
+    # Save the original for reference
+    original_maker = db_module.async_session_maker
+
+    # Set up test database after app import
     engine = create_async_engine(
         TEST_DB_URL,
         pool_size=1,
         max_overflow=0,
         echo=False,
     )
-    TestSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    test_session_local = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     db_module.engine = engine
-    db_module.async_session_maker = TestSessionLocal
+    db_module.async_session_maker = test_session_local
 
-    from app import app
-
+    # Set up mocks
     if not hasattr(app.state, "redis_client"):
         app.state.redis_client = MockRedisClient()
     if not hasattr(app.state, "rabbitmq"):
@@ -187,6 +198,8 @@ async def client(db_clean, fresh_db_session):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
+    db_module.engine = None
+    db_module.async_session_maker = original_maker
     await engine.dispose()
 
 

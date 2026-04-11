@@ -3,13 +3,12 @@ Unit tests for migration idempotency and safety.
 """
 
 
-
 class TestMigrationFixUniqueConstraints:
     """Tests for fix_unique_constraints_001 migration idempotency."""
 
     def test_migration_uses_if_exists_syntax(self):
         """Verify migration uses IF EXISTS to be idempotent."""
-        migration_file = "database/migration/versions/2026-04-08_fix_unique_constraints_001.py"
+        migration_file = "database/migration/versions/fix_unique_constraints_001.py"
 
         with open(migration_file) as f:
             content = f.read()
@@ -21,7 +20,7 @@ class TestMigrationFixUniqueConstraints:
 
     def test_migration_handles_missing_constraints(self):
         """Test that migration handles already-dropped constraints gracefully."""
-        migration_file = "database/migration/versions/2026-04-08_fix_unique_constraints_001.py"
+        migration_file = "database/migration/versions/fix_unique_constraints_001.py"
 
         with open(migration_file) as f:
             content = f.read()
@@ -37,7 +36,7 @@ class TestMigrationImports:
 
     def test_migration_imports_text(self):
         """Verify migration imports text from sqlalchemy."""
-        with open("database/migration/versions/2026-04-08_fix_unique_constraints_001.py") as f:
+        with open("database/migration/versions/fix_unique_constraints_001.py") as f:
             content = f.read()
 
         assert "from sqlalchemy import text" in content or "from sqlalchemy import" in content, (
@@ -50,14 +49,14 @@ class TestMigrationDowngrade:
 
     def test_migration_has_downgrade(self):
         """Verify migration has downgrade path."""
-        with open("database/migration/versions/2026-04-08_fix_unique_constraints_001.py") as f:
+        with open("database/migration/versions/fix_unique_constraints_001.py") as f:
             content = f.read()
 
         assert "def downgrade()" in content, "Migration must have downgrade function"
 
     def test_downgrade_restores_constraints(self):
         """Verify downgrade restores unique constraints."""
-        with open("database/migration/versions/2026-04-08_fix_unique_constraints_001.py") as f:
+        with open("database/migration/versions/fix_unique_constraints_001.py") as f:
             content = f.read()
 
         assert "create_unique_constraint" in content, "Downgrade must recreate original constraints"
@@ -68,7 +67,7 @@ class TestMigrationIndexes:
 
     def test_creates_partial_indexes(self):
         """Verify migration creates partial indexes for soft delete."""
-        with open("database/migration/versions/2026-04-08_fix_unique_constraints_001.py") as f:
+        with open("database/migration/versions/fix_unique_constraints_001.py") as f:
             content = f.read()
 
         assert "ix_assignments_name_not_deleted" in content, (
@@ -87,7 +86,7 @@ class TestMigrationFutureSafety:
 
     def test_no_hardcoded_constraint_names(self):
         """Verify we don't hardcode constraint names that may vary."""
-        migration_file = "database/migration/versions/2026-04-08_fix_unique_constraints_001.py"
+        migration_file = "database/migration/versions/fix_unique_constraints_001.py"
 
         with open(migration_file) as f:
             content = f.read()
@@ -99,7 +98,7 @@ class TestMigrationFutureSafety:
 
     def test_migration_is_idempotent(self):
         """Test that running migration twice doesn't fail."""
-        with open("database/migration/versions/2026-04-08_fix_unique_constraints_001.py") as f:
+        with open("database/migration/versions/fix_unique_constraints_001.py") as f:
             content = f.read()
 
         uses_if_exists = "IF EXISTS" in content

@@ -25,3 +25,9 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 
 # Compatibility alias for code expecting get_session
 get_session = get_async_session
+
+
+def override_session_maker(new_maker):
+    """Override session maker - useful for testing."""
+    global async_session_maker
+    async_session_maker = new_maker

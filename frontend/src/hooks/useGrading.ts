@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import api, { API_ENDPOINTS } from '../services/api';
-import type { ReviewQueueResponse, PlagiarismResult } from '../types';
+import type { ReviewQueueResponse, PlagiarismResult, ReviewStatusSummary } from '../types';
 
 interface ReviewProgress {
   total_files: number;
@@ -55,6 +55,17 @@ export function useBulkConfirm() {
   });
 }
 
+export function useBulkClear() {
+  return useMutation({
+    mutationFn: async ({ assignmentId, threshold }: { assignmentId: string; threshold: number }) => {
+      const res = await api.post(API_ENDPOINTS.BULK_CLEAR(assignmentId), null, {
+        params: { threshold },
+      });
+      return res.data;
+    },
+  });
+}
+
 interface FileNote {
   id: string;
   file_id: string;
@@ -102,5 +113,27 @@ export function useExportReview() {
       const res = await api.get<ExportReviewResponse>(API_ENDPOINTS.EXPORT_REVIEW(assignmentId, threshold));
       return res.data;
     },
+  });
+}
+
+export function useReviewStatus(assignmentId: string) {
+  return useQuery<ReviewStatusSummary>({
+    queryKey: ['reviewStatus', assignmentId],
+    queryFn: async () => {
+      const res = await api.get(API_ENDPOINTS.REVIEW_STATUS(assignmentId));
+      return res.data;
+    },
+    enabled: !!assignmentId,
+  });
+}
+
+export function usePairsByStatus(assignmentId: string, status: string, limit = 100, offset = 0) {
+  return useQuery<{ items: PlagiarismResult[]; total: number; limit: number; offset: number }>({
+    queryKey: ['pairsByStatus', assignmentId, status, limit, offset],
+    queryFn: async () => {
+      const res = await api.get(API_ENDPOINTS.PAIRS_BY_STATUS(assignmentId, status, limit, offset));
+      return res.data;
+    },
+    enabled: !!assignmentId,
   });
 }

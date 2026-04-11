@@ -6,7 +6,6 @@ error responses (422 for validation errors, 404 for not found, etc.)
 """
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.integration

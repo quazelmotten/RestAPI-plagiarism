@@ -18,6 +18,7 @@ from results.schemas import (
     ResultItem,
     ReviewExportResponse,
     ReviewQueueResponse,
+    ReviewStatusSummary,
     TaskResultsResponse,
 )
 from schemas.common import PaginatedResponse
@@ -221,6 +222,9 @@ class ResultService:
                 file_b.is_confirmed = True
                 confirmed_files.add(r.file_b_id)
 
+            r.review_disposition = "bulk_confirmed"
+            r.reviewed_at = datetime.now(UTC)
+
             confirmed_pairs += 1
 
         await self.db.commit()
@@ -231,6 +235,38 @@ class ResultService:
             confirmed_pairs=confirmed_pairs,
             confirmed_files=len(confirmed_files),
             skipped_pairs=len(results) - confirmed_pairs,
+        )
+
+    async def bulk_clear(self, assignment_id: str, threshold: float) -> BulkConfirmResponse:
+        """Clear all pairs above threshold (set as not plagiarized)."""
+        query = (
+            select(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(SimilarityResult.ast_similarity >= threshold)
+        )
+        result = await self.db.execute(query)
+        results = result.scalars().all()
+
+        cleared_pairs = 0
+        skipped_pairs = 0
+
+        for r in results:
+            if r.review_disposition is None:
+                r.review_disposition = "clear"
+                r.reviewed_at = datetime.now(UTC)
+                cleared_pairs += 1
+            else:
+                skipped_pairs += 1
+
+        await self.db.commit()
+
+        return BulkConfirmResponse(
+            assignment_id=assignment_id,
+            threshold=threshold,
+            confirmed_pairs=cleared_pairs,
+            confirmed_files=0,
+            skipped_pairs=skipped_pairs,
         )
 
     async def get_review_queue(self, assignment_id: str, limit: int) -> ReviewQueueResponse:
@@ -279,7 +315,7 @@ class ResultService:
             .where(SimilarityResult.review_disposition == "clear")
         )
         cleared_result = await self.db.execute(cleared_count_query)
-        cleared_count = len(cleared_result.scalars().all())
+        _cleared_count = len(cleared_result.scalars().all())
 
         plagiarism_count_query = (
             select(SimilarityResult)
@@ -288,7 +324,7 @@ class ResultService:
             .where(SimilarityResult.review_disposition == "plagiarism")
         )
         plagiarism_result = await self.db.execute(plagiarism_count_query)
-        plagiarism_count = len(plagiarism_result.scalars().all())
+        _plagiarism_count = len(plagiarism_result.scalars().all())
 
         return ReviewQueueResponse(
             assignment_id=assignment_id,
@@ -334,6 +370,78 @@ class ResultService:
             .where(SimilarityResult.review_disposition == "plagiarism")
             .order_by(SimilarityResult.reviewed_at.desc())
         )
+        result = await self.db.execute(query)
+        all_results = result.scalars().all()
+
+        total = len(all_results)
+        paginated_results = all_results[offset : offset + limit]
+
+        return PaginatedResponse(
+            items=[await self.repo._map_to_result_item(r) for r in paginated_results],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def get_review_status(self, assignment_id: str) -> ReviewStatusSummary:
+        """Get summary of review status for an assignment."""
+        query = (
+            select(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .distinct()
+        )
+        result = await self.db.execute(query)
+        all_results = result.scalars().all()
+
+        unreviewed = 0
+        confirmed = 0
+        bulk_confirmed = 0
+        cleared = 0
+
+        for r in all_results:
+            if r.review_disposition is None:
+                unreviewed += 1
+            elif r.review_disposition == "plagiarism":
+                confirmed += 1
+            elif r.review_disposition == "bulk_confirmed":
+                bulk_confirmed += 1
+            elif r.review_disposition == "clear":
+                cleared += 1
+
+        return ReviewStatusSummary(
+            assignment_id=assignment_id,
+            total_pairs=len(all_results),
+            unreviewed=unreviewed,
+            confirmed=confirmed,
+            bulk_confirmed=bulk_confirmed,
+            cleared=cleared,
+        )
+
+    async def get_pairs_by_status(
+        self, assignment_id: str, status: str, limit: int = 100, offset: int = 0
+    ) -> PaginatedResponse:
+        """Get all pairs for an assignment filtered by review status."""
+        base_query = (
+            select(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .distinct()
+        )
+
+        if status == "unreviewed" or status == "all":
+            query = base_query
+        elif status in ("confirmed", "plagiarism"):
+            query = base_query.where(SimilarityResult.review_disposition == "plagiarism")
+        elif status == "bulk_confirmed":
+            query = base_query.where(SimilarityResult.review_disposition == "bulk_confirmed")
+        elif status in ("cleared", "clear"):
+            query = base_query.where(SimilarityResult.review_disposition == "clear")
+        else:
+            query = base_query
+
+        query = query.order_by(SimilarityResult.ast_similarity.desc())
+
         result = await self.db.execute(query)
         all_results = result.scalars().all()
 
@@ -419,7 +527,7 @@ class ResultService:
             bucket_name=BUCKET_NAME,
         )
 
-        filename = f"plagiarism-review-{assignment.name.replace(' ', '-').lower()}-{datetime.now().strftime('%Y%m%d')}.html"
+        filename = f"plagiarism-review-{assignment.name.replace(' ', '-').lower()}-{datetime.now(UTC).strftime('%Y%m%d')}.html"
 
         return ReviewExportResponse(
             html_content=html_content,
@@ -486,8 +594,8 @@ class ResultService:
 </head>
 <body>
     <h1>Plagiarism Review Report</h1>
-    <p style="color: #666; margin-bottom: 20px;">Assignment: {html.escape(assignment_name)} | Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}</p>
-    
+<p style="color: #666; margin-bottom: 20px;">Assignment: {html.escape(assignment_name)} | Generated: {datetime.now(UTC).strftime("%Y-%m-%d %H:%M")}</p>
+
     <div class="card">
         <h2>Summary</h2>
         <div class="stats">
@@ -509,7 +617,7 @@ class ResultService:
             </div>
         </div>
     </div>
-    
+
     <div class="card">
         <h2>All Files</h2>
         <table class="file-table">
@@ -558,7 +666,7 @@ class ResultService:
         html += """            </tbody>
         </table>
     </div>
-    
+
     <div class="card">
         <h2>Suspicious Pairs (Side-by-Side Comparison)</h2>
 """

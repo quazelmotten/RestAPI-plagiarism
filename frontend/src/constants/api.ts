@@ -23,7 +23,11 @@ export const API_ENDPOINTS = {
   SKIP_PAIR: (resultId: string) => `/plagiarism/results/${resultId}/skip`,
   UNDO_REVIEW: (resultId: string) => `/plagiarism/results/${resultId}/undo`,
   BULK_CONFIRM: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/bulk-confirm`,
+  BULK_CLEAR: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/bulk-clear`,
   REVIEW_QUEUE: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/review-queue`,
+  REVIEW_STATUS: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/review-status`,
+  PAIRS_BY_STATUS: (assignmentId: string, status: string, limit?: number, offset?: number) => 
+    `/plagiarism/assignments/${assignmentId}/pairs?status=${status}${limit ? `&limit=${limit}` : ''}${offset ? `&offset=${offset}` : ''}`,
   CLEARED_PAIRS: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/cleared-pairs`,
   PLAGIARISM_PAIRS: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/plagiarism-pairs`,
   UNCONFIRM_FILE: (fileId: string) => `/plagiarism/files/${fileId}/unconfirm`,

@@ -5,7 +5,6 @@ These tests use real PostgreSQL, Redis, and RabbitMQ services.
 """
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.integration

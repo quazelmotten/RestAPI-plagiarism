@@ -16,6 +16,7 @@ from results.schemas import (
     ResultItem,
     ReviewExportResponse,
     ReviewQueueResponse,
+    ReviewStatusSummary,
     TaskResultsResponse,
 )
 from results.service import ResultService
@@ -227,6 +228,29 @@ async def bulk_confirm(
     return await result_service.bulk_confirm(str(assignment_id), threshold)
 
 
+@router.post(
+    "/assignments/{assignment_id}/bulk-clear",
+    response_model=BulkConfirmResponse,
+    summary="Bulk clear pairs",
+    description="Clear all pairs (set as not plagiarized) above threshold.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": BulkConfirmResponse,
+            "description": "Pairs cleared successfully",
+        },
+    },
+)
+async def bulk_clear(
+    assignment_id: uuid.UUID,
+    threshold: float = Query(
+        default=0.0, ge=0.0, le=1.0, description="Similarity threshold (0.0-1.0)"
+    ),
+    result_service: ResultService = Depends(get_result_service),
+):
+    """Bulk clear all pairs above threshold."""
+    return await result_service.bulk_clear(str(assignment_id), threshold)
+
+
 @router.get(
     "/assignments/{assignment_id}/review-queue",
     response_model=ReviewQueueResponse,
@@ -250,6 +274,30 @@ async def get_review_queue(
 ):
     """Get smart review queue prioritized by unconfirmed files."""
     return await result_service.get_review_queue(str(assignment_id), limit)
+
+
+@router.get(
+    "/assignments/{assignment_id}/review-status",
+    response_model=ReviewStatusSummary,
+    summary="Get review status summary for assignment",
+    description="Get counts of unreviewed, confirmed, bulk_confirmed, and cleared pairs.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": ReviewStatusSummary,
+            "description": "Review status retrieved",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Assignment not found",
+        },
+    },
+)
+async def get_review_status(
+    assignment_id: uuid.UUID,
+    result_service: ResultService = Depends(get_result_service),
+):
+    """Get review status summary for an assignment."""
+    return await result_service.get_review_status(str(assignment_id))
 
 
 @router.get(
@@ -382,3 +430,23 @@ async def get_plagiarism_pairs(
 ):
     """Get plagiarism pairs for an assignment."""
     return await result_service.get_plagiarism_pairs(str(assignment_id), limit, offset)
+
+
+@router.get(
+    "/assignments/{assignment_id}/pairs",
+    response_model=PaginatedResponse,
+    summary="Get pairs by status",
+    description="Get all pairs for an assignment filtered by review status.",
+)
+async def get_pairs_by_status(
+    assignment_id: uuid.UUID,
+    status: str = Query(
+        default="all",
+        description="Filter by status: all, unreviewed, confirmed, bulk_confirmed, cleared",
+    ),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    result_service: ResultService = Depends(get_result_service),
+):
+    """Get pairs by status for an assignment."""
+    return await result_service.get_pairs_by_status(str(assignment_id), status, limit, offset)

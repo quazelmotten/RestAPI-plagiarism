@@ -4,14 +4,14 @@ import {
   Input, InputGroup, InputRightElement, Progress, Spinner,
   useToast, AlertDialog, AlertDialogBody, AlertDialogFooter,
   AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
-  useDisclosure, Select, Box, Flex, IconButton, Tooltip
+  useDisclosure, Select, Box, Flex, IconButton, Tooltip, Tabs, TabList, Tab
 } from '@chakra-ui/react';
-import { FiZap, FiFilter, FiDownload, FiRefreshCw, FiChevronLeft, FiChevronRight, FiHelpCircle } from 'react-icons/fi';
+import { FiZap, FiFilter, FiDownload, FiRefreshCw, FiChevronLeft, FiChevronRight, FiHelpCircle, FiCheckCircle, FiAlertTriangle, FiLayers } from 'react-icons/fi';
 import { FaFilter } from 'react-icons/fa';
 import api, { API_ENDPOINTS } from '../../services/api';
-import type { ReviewQueueResponse, PlagiarismResult, BulkConfirmResponse } from '../../types';
+import type { ReviewQueueResponse, PlagiarismResult, BulkConfirmResponse, ReviewStatusSummary } from '../../types';
 import ReviewQueueItem from './ReviewQueueItem';
-import { useExportReview } from '../../hooks/useGrading';
+import { useExportReview, useReviewStatus, usePairsByStatus, useBulkClear } from '../../hooks/useGrading';
 
 interface ReviewQueueProps {
   assignmentId: string;
@@ -25,8 +25,15 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
   const [bulkLoading, setBulkLoading] = useState(false);
   const toast = useToast();
   const { isOpen: isBulkOpen, onOpen: onBulkOpen, onClose: onBulkClose } = useDisclosure();
+  const { isOpen: isBulkClearOpen, onOpen: onBulkClearOpen, onClose: onBulkClearClose } = useDisclosure();
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
   const cancelRef = React.useRef<HTMLButtonElement>(null);
+
+  const bulkClearMutation = useBulkClear();
+  const [bulkClearThreshold, setBulkClearThreshold] = useState('0');
+
+  // Tabs
+  const [activeTab, setActiveTab] = useState<number>(0);
 
   // Filters
   const [similarityFilter, setSimilarityFilter] = useState<string>('all');
@@ -34,6 +41,18 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
   const exportReview = useExportReview();
+  const { data: reviewStatus, isLoading: statusLoading, refetch: refetchStatus } = useReviewStatus(assignmentId);
+  const { data: pairsData, isLoading: pairsLoading, refetch: refetchPairs } = usePairsByStatus(
+    assignmentId,
+    activeTab === 0 ? 'unreviewed' : activeTab === 1 ? 'all' : activeTab === 2 ? 'plagiarism' : activeTab === 3 ? 'bulk_confirmed' : 'clear',
+    100,
+    0
+  );
+
+  const handleStatusRefresh = useCallback(() => {
+    refetchStatus();
+    refetchPairs();
+  }, [refetchStatus, refetchPairs]);
 
   useEffect(() => {
     fetchQueue();
@@ -54,6 +73,26 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
         status: 'error',
         duration: 3000,
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAllPairs = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get<{ items: PlagiarismResult[]; total: number }>(
+        API_ENDPOINTS.PAIRS_BY_STATUS(assignmentId, 'all', 100, 0)
+      );
+      return response.data.items;
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch pairs',
+        status: 'error',
+        duration: 3000,
+      });
+      return [];
     } finally {
       setLoading(false);
     }
@@ -97,6 +136,44 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
       });
     } finally {
       setBulkLoading(false);
+    }
+  };
+
+  const handleBulkClear = async () => {
+    const threshold = parseFloat(bulkClearThreshold);
+    if (isNaN(threshold) || threshold < 0 || threshold > 1) {
+      toast({
+        title: 'Invalid threshold',
+        description: 'Please enter a value between 0 and 1',
+        status: 'error',
+        duration: 3000,
+      });
+      return;
+    }
+
+    try {
+      const response = await bulkClearMutation.mutateAsync({
+        assignmentId,
+        threshold,
+      });
+
+      toast({
+        title: 'Bulk Clear Complete',
+        description: `Cleared ${response.confirmed_pairs} pairs`,
+        status: 'success',
+        duration: 5000,
+      });
+
+      onBulkClearClose();
+      await fetchQueue();
+      handleStatusRefresh();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to bulk clear',
+        status: 'error',
+        duration: 3000,
+      });
     }
   };
 
@@ -163,6 +240,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
     
     // Refresh queue
     const newQueue = await fetchQueueOnce();
+    handleStatusRefresh();
     
     // Auto-advance to next pair if we have more items
     if (newQueue && newQueue.queue.length > 0 && selectedIndex < newQueue.queue.length - 1) {
@@ -263,79 +341,109 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
   }, [handleKeyDown]);
 
   if (loading) return <Spinner size="lg" />;
-  if (!queue) return null;
+  if (!queue && !reviewStatus) return null;
 
-  const progress = (queue.confirmed_files / queue.total_files) * 100;
-  const isComplete = queue.remaining_files === 0;
+  const reviewedPairs = (reviewStatus?.confirmed || 0) + (reviewStatus?.bulk_confirmed || 0) + (reviewStatus?.cleared || 0);
+  const totalPairs = reviewStatus?.total_pairs || 0;
+  const progress = totalPairs > 0 ? (reviewedPairs / totalPairs) * 100 : 0;
+  const isComplete = reviewStatus ? reviewStatus.unreviewed === 0 : false;
 
   return (
     <VStack align="stretch" spacing={4}>
-      {/* Progress Header */}
+      {/* Tabs */}
       <Card>
-        <CardBody>
-          <Flex justify="space-between" align="flex-start" mb={3} wrap="wrap" gap={3}>
-            <VStack align="start" spacing={0}>
-              <HStack>
-                <Text fontSize="lg" fontWeight="bold">Review Progress</Text>
-                <Tooltip label="Keyboard shortcuts">
-                  <IconButton
-                    aria-label="Help"
-                    icon={<FiHelpCircle />}
-                    size="sm"
-                    variant="ghost"
-                    onClick={onHelpOpen}
-                  />
-                </Tooltip>
-              </HStack>
-              <Text fontSize="sm" color="gray.500">
-                {queue.confirmed_files} / {queue.total_files} files confirmed
-              </Text>
-            </VStack>
-            <HStack spacing={2} flexWrap="wrap">
-              <Badge colorScheme="blue" fontSize="md" px={3} py={1}>
-                {queue.remaining_files} remaining
-              </Badge>
-              {isComplete && (
-                <Badge colorScheme="green" fontSize="md" px={3} py={1}>
-                  Complete ✓
-                </Badge>
-              )}
-            </HStack>
-          </Flex>
-          <Progress value={progress} colorScheme="blue" size="lg" />
-
-          {/* Bulk Confirm + Export */}
-          <HStack mt={4} spacing={2} flexWrap="wrap">
-            {!isComplete && (
-              <Button
-                leftIcon={<FiZap />}
-                colorScheme="orange"
-                onClick={onBulkOpen}
-                size="sm"
-              >
-                Bulk Confirm
-              </Button>
-            )}
-            <Button
-              leftIcon={<FiDownload />}
-              variant="outline"
-              onClick={handleExport}
-              size="sm"
-              isLoading={exportReview.isPending}
-            >
-              Export HTML
-            </Button>
-            <Button
-              leftIcon={<FiRefreshCw />}
-              variant="ghost"
-              onClick={fetchQueue}
-              size="sm"
-            >
-              Refresh
-            </Button>
-          </HStack>
+        <CardBody py={2}>
+          <Tabs variant="soft-rounded" colorScheme="blue" onChange={setActiveTab}>
+            <TabList>
+              <Tab>To Review ({reviewStatus?.unreviewed || 0})</Tab>
+              <Tab>All Pairs ({reviewStatus?.total_pairs || 0})</Tab>
+              <Tab>Confirmed ({reviewStatus?.confirmed || 0})</Tab>
+              <Tab>Bulk Confirmed ({reviewStatus?.bulk_confirmed || 0})</Tab>
+              <Tab>Cleared ({reviewStatus?.cleared || 0})</Tab>
+            </TabList>
+          </Tabs>
         </CardBody>
       </Card>
+
+      {/* Progress Header */}
+      {activeTab === 0 && reviewStatus && (
+        <Card>
+          <CardBody>
+            <Flex justify="space-between" align="flex-start" mb={3} wrap="wrap" gap={3}>
+              <VStack align="start" spacing={0}>
+                <HStack>
+                  <Text fontSize="lg" fontWeight="bold">Review Progress</Text>
+                  <Tooltip label="Keyboard shortcuts">
+                    <IconButton
+                      aria-label="Help"
+                      icon={<FiHelpCircle />}
+                      size="sm"
+                      variant="ghost"
+                      onClick={onHelpOpen}
+                    />
+                  </Tooltip>
+                </HStack>
+                <Text fontSize="sm" color="gray.500">
+                  {reviewedPairs} / {totalPairs} pairs reviewed
+                </Text>
+              </VStack>
+              <HStack spacing={2} flexWrap="wrap">
+                <Badge colorScheme="blue" fontSize="md" px={3} py={1}>
+                  {reviewStatus.unreviewed} unreviewed
+                </Badge>
+                {isComplete && (
+                  <Badge colorScheme="green" fontSize="md" px={3} py={1}>
+                    Complete ✓
+                  </Badge>
+                )}
+              </HStack>
+            </Flex>
+            <Progress value={progress} colorScheme="blue" size="lg" />
+
+            {/* Bulk Confirm + Bulk Clear + Export */}
+            <HStack mt={4} spacing={2} flexWrap="wrap">
+              {!isComplete && (
+                <>
+                  <Button
+                    leftIcon={<FiZap />}
+                    colorScheme="orange"
+                    onClick={onBulkOpen}
+                    size="sm"
+                  >
+                    Bulk Confirm
+                  </Button>
+                  <Button
+                    leftIcon={<FiZap />}
+                    colorScheme="green"
+                    variant="outline"
+                    onClick={onBulkClearOpen}
+                    size="sm"
+                  >
+                    Bulk Clear
+                  </Button>
+                </>
+              )}
+              <Button
+                leftIcon={<FiDownload />}
+                variant="outline"
+                onClick={handleExport}
+                size="sm"
+                isLoading={exportReview.isPending}
+              >
+                Export HTML
+              </Button>
+              <Button
+                leftIcon={<FiRefreshCw />}
+                variant="ghost"
+                onClick={fetchQueue}
+                size="sm"
+              >
+                Refresh
+              </Button>
+            </HStack>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Filter Toolbar */}
       <Card>
@@ -356,42 +464,85 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
               <option value="0.5">≥50%</option>
               <option value="0.3">≥30%</option>
             </Select>
-            <Text fontSize="sm" color="gray.500">
-              Showing {filteredQueue.length} of {queue.queue.length} pairs
-            </Text>
+            {activeTab === 0 && queue && (
+              <Text fontSize="sm" color="gray.500">
+                Showing {filteredQueue.length} of {queue.queue.length} pairs
+              </Text>
+            )}
+            {activeTab > 0 && pairsData && (
+              <Text fontSize="sm" color="gray.500">
+                {pairsData.total} pairs
+              </Text>
+            )}
           </HStack>
         </CardBody>
       </Card>
 
-      {/* Queue List */}
-      <VStack align="stretch" spacing={2}>
-        {filteredQueue.length === 0 ? (
+      {/* Pairs List */}
+      <Box overflowY="auto" maxH="calc(100vh - 400px)" borderWidth="1px" borderRadius="md" p={2}>
+        <VStack align="stretch" spacing={2}>
+        {activeTab === 0 ? (
+          filteredQueue.length === 0 ? (
+            <Card>
+              <CardBody>
+                <Text textAlign="center" color="gray.500">
+                  {isComplete ? 'All files reviewed! 🎉' : 'No pairs to review'}
+                </Text>
+              </CardBody>
+            </Card>
+          ) : (
+            filteredQueue.map((item, idx) => (
+              <Box
+                key={item.id || `${item.file_a.id}-${item.file_b.id}`}
+                borderWidth={selectedIndex === idx ? '2px' : '1px'}
+                borderColor={selectedIndex === idx ? 'brand.500' : 'gray.200'}
+                borderRadius="md"
+                transition="border-color 0.15s"
+              >
+                <ReviewQueueItem
+                  item={item}
+                  index={idx}
+                  onReview={(pair) => onReviewPair(pair, filteredQueue)}
+                  onAction={handleItemAction}
+                />
+              </Box>
+            ))
+          )
+        ) : pairsLoading ? (
           <Card>
             <CardBody>
-              <Text textAlign="center" color="gray.500">
-                {isComplete ? 'All files reviewed! 🎉' : 'No pairs to review'}
-              </Text>
+              <Spinner />
             </CardBody>
           </Card>
-        ) : (
-          filteredQueue.map((item, idx) => (
+        ) : pairsData && pairsData.items.length > 0 ? (
+          pairsData.items.map((item, idx) => (
             <Box
               key={item.id || `${item.file_a.id}-${item.file_b.id}`}
-              borderWidth={selectedIndex === idx ? '2px' : '1px'}
-              borderColor={selectedIndex === idx ? 'brand.500' : 'gray.200'}
+              borderWidth="1px"
+              borderColor="gray.200"
               borderRadius="md"
-              transition="border-color 0.15s"
             >
               <ReviewQueueItem
                 item={item}
                 index={idx}
-                onReview={(pair) => onReviewPair(pair, filteredQueue)}
-                onAction={handleItemAction}
+                onReview={(pair) => onReviewPair(pair, pairsData.items)}
+                onAction={async () => {
+                  await Promise.all([refetchStatus(), refetchPairs()]);
+                }}
               />
             </Box>
           ))
+        ) : (
+          <Card>
+            <CardBody>
+              <Text textAlign="center" color="gray.500">
+                No pairs found
+              </Text>
+            </CardBody>
+          </Card>
         )}
-      </VStack>
+        </VStack>
+      </Box>
 
       {/* Navigation */}
       {filteredQueue.length > 0 && (
@@ -499,6 +650,61 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                 ml={3}
               >
                 Confirm All
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
+
+      {/* Bulk Clear Dialog */}
+      <AlertDialog
+        isOpen={isBulkClearOpen}
+        leastDestructiveRef={cancelRef}
+        onClose={onBulkClearClose}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Bulk Clear Pairs
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              <VStack align="stretch" spacing={4}>
+                <Text>
+                  This will automatically clear all pairs with similarity above the threshold.
+                  Cleared pairs will be marked as not plagiarized.
+                </Text>
+
+                <InputGroup>
+                  <Input
+                    placeholder="Threshold (0.0 - 1.0)"
+                    value={bulkClearThreshold}
+                    onChange={(e) => setBulkClearThreshold(e.target.value)}
+                  />
+                  <InputRightElement>
+                    <Text fontSize="sm" color="gray.500" mr={2}>
+                      {bulkClearThreshold ? (parseFloat(bulkClearThreshold) * 100).toFixed(0) : 0}%
+                    </Text>
+                  </InputRightElement>
+                </InputGroup>
+
+                <Text fontSize="xs" color="green.600">
+                  ✓ This action can be undone by navigating to the pair.
+                </Text>
+              </VStack>
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={onBulkClearClose}>
+                Cancel
+              </Button>
+              <Button
+                colorScheme="green"
+                onClick={handleBulkClear}
+                isLoading={bulkClearMutation.isPending}
+                ml={3}
+              >
+                Clear All
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>

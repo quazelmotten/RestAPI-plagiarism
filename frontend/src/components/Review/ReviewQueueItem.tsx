@@ -10,7 +10,7 @@ interface ReviewQueueItemProps {
   item: PlagiarismResult;
   index: number;
   onReview: (pair: PlagiarismResult, allPairs?: PlagiarismResult[]) => void;
-  onAction: () => void;
+  onAction?: () => void;
 }
 
 const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({ 
@@ -31,7 +31,7 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
         status: 'success',
         duration: 2000,
       });
-      onAction();
+      onAction?.();
     } catch (error) {
       toast({
         title: 'Error',
@@ -55,7 +55,7 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
         status: 'info',
         duration: 2000,
       });
-      onAction();
+      onAction?.();
     } catch (error) {
       toast({
         title: 'Error',

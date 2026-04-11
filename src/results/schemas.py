@@ -106,3 +106,14 @@ class ReviewExportResponse(CustomBaseModel):
 
     html_content: str
     filename: str
+
+
+class ReviewStatusSummary(CustomBaseModel):
+    """Summary of review status for an assignment."""
+
+    assignment_id: str
+    total_pairs: int
+    unreviewed: int
+    confirmed: int
+    bulk_confirmed: int
+    cleared: int

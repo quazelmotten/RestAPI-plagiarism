@@ -232,3 +232,12 @@ export interface BulkConfirmResponse {
   confirmed_files: number;
   skipped_pairs: number;
 }
+
+export interface ReviewStatusSummary {
+  assignment_id: string;
+  total_pairs: number;
+  unreviewed: number;
+  confirmed: number;
+  bulk_confirmed: number;
+  cleared: number;
+}
