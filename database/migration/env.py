@@ -32,11 +32,11 @@ if config.config_file_name is not None:
 
 # Set database connection settings in alembic.ini
 section = config.config_ini_section
-config.set_section_option(section, "DB_HOST", settings.db_host)
-config.set_section_option(section, "DB_PORT", str(settings.db_port))
-config.set_section_option(section, "DB_USER", settings.db_user)
-config.set_section_option(section, "DB_NAME", settings.db_name)
-config.set_section_option(section, "DB_PASS", settings.db_pass)
+config.set_section_option(section, "DB_HOST", settings.database.host)
+config.set_section_option(section, "DB_PORT", str(settings.database.port))
+config.set_section_option(section, "DB_USER", settings.database.user)
+config.set_section_option(section, "DB_NAME", settings.database.name)
+config.set_section_option(section, "DB_PASS", settings.database.password)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
