@@ -15,6 +15,24 @@ export const API_ENDPOINTS = {
   FILES: '/plagiarism/files',
   FILE_CONTENT: (fileId: string) => `/plagiarism/files/${fileId}/content`,
   FILE_SIMILARITIES: (fileId: string) => `/plagiarism/files/${fileId}/similarities`,
+  TOP_SIMILAR_PAIRS: (fileId: string) => `/plagiarism/files/${fileId}/top-similar-pairs`,
+
+  // Results - Review workflow
+  CONFIRM_PLAGIARISM: (resultId: string) => `/plagiarism/results/${resultId}/confirm`,
+  CLEAR_PAIR: (resultId: string) => `/plagiarism/results/${resultId}/clear`,
+  SKIP_PAIR: (resultId: string) => `/plagiarism/results/${resultId}/skip`,
+  UNDO_REVIEW: (resultId: string) => `/plagiarism/results/${resultId}/undo`,
+  BULK_CONFIRM: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/bulk-confirm`,
+  REVIEW_QUEUE: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/review-queue`,
+  CLEARED_PAIRS: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/cleared-pairs`,
+  PLAGIARISM_PAIRS: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/plagiarism-pairs`,
+  UNCONFIRM_FILE: (fileId: string) => `/plagiarism/files/${fileId}/unconfirm`,
+  EXPORT_REVIEW: (assignmentId: string, threshold: number) => 
+    `/plagiarism/assignments/${assignmentId}/export-review?threshold=${threshold}`,
+
+  // File notes
+  FILE_NOTES: (fileId: string) => `/plagiarism/files/${fileId}/notes`,
+  DELETE_NOTE: (noteId: string) => `/plagiarism/notes/${noteId}`,
 
   // Assignments
   ASSIGNMENTS: '/plagiarism/assignments',

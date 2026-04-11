@@ -4,12 +4,16 @@ Files domain service - business logic for file management.
 
 import logging
 from datetime import UTC, datetime
+from uuid import uuid4
 
+from shared.models import File as FileModel
+from shared.models import PlagiarismTask, ReviewNote
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from constants import BUCKET_NAME
 from files.repository import FileRepository
-from files.schemas import FileContentResponse, FileResponse
+from files.schemas import FileContentResponse, FileResponse, ReviewNoteResponse
 from schemas.common import PaginatedResponse
 
 logger = logging.getLogger(__name__)
@@ -98,3 +102,96 @@ class FileService:
 
     async def get_file_similarities(self, file_id: str) -> PaginatedResponse:
         return await self.repo.get_file_similarities(file_id)
+
+    async def unconfirm_file(self, file_id: str) -> FileResponse:
+        from exceptions.exceptions import NotFoundError
+
+        file = await self.repo.get_file(file_id)
+        if not file:
+            raise NotFoundError("File not found")
+
+        file.is_confirmed = False
+        await self.db.commit()
+        await self.db.refresh(file)
+
+        return FileResponse(
+            id=str(file.id),
+            filename=str(file.filename),
+            language=str(file.language),
+            created_at=file.created_at.isoformat() if file.created_at else None,
+            task_id=str(file.task_id),
+            status="completed",
+            similarity=float(file.max_similarity) if file.max_similarity is not None else None,
+            is_confirmed=bool(file.is_confirmed),
+        )
+
+    async def get_file_notes(self, file_id: str) -> list[ReviewNoteResponse]:
+        from exceptions.exceptions import NotFoundError
+
+        file = await self.repo.get_file(file_id)
+        if not file:
+            raise NotFoundError("File not found")
+
+        result = await self.db.execute(
+            select(ReviewNote)
+            .where(ReviewNote.file_id == file_id)
+            .order_by(ReviewNote.created_at.desc())
+        )
+        notes = result.scalars().all()
+
+        return [
+            ReviewNoteResponse(
+                id=str(note.id),
+                file_id=str(note.file_id),
+                assignment_id=str(note.assignment_id),
+                content=note.content,
+                created_at=note.created_at.isoformat() if note.created_at else "",
+            )
+            for note in notes
+        ]
+
+    async def add_file_note(self, file_id: str, content: str) -> ReviewNoteResponse:
+        from exceptions.exceptions import NotFoundError
+
+        file = await self.repo.get_file(file_id)
+        if not file:
+            raise NotFoundError("File not found")
+
+        task_result = await self.db.execute(select(FileModel).where(FileModel.id == file_id))
+        file_with_task = task_result.scalar_one_or_none()
+
+        if not file_with_task or not file_with_task.task_id:
+            raise NotFoundError("File has no associated task")
+
+        task = await self.db.get(PlagiarismTask, file_with_task.task_id)
+        if not task or not task.assignment_id:
+            raise NotFoundError("File has no associated assignment")
+
+        note = ReviewNote(
+            id=str(uuid4()),
+            file_id=file_id,
+            assignment_id=str(task.assignment_id),
+            content=content,
+        )
+        self.db.add(note)
+        await self.db.commit()
+        await self.db.refresh(note)
+
+        return ReviewNoteResponse(
+            id=str(note.id),
+            file_id=str(note.file_id),
+            assignment_id=str(note.assignment_id),
+            content=note.content,
+            created_at=note.created_at.isoformat() if note.created_at else "",
+        )
+
+    async def delete_note(self, note_id: str) -> None:
+        from exceptions.exceptions import NotFoundError
+
+        result = await self.db.execute(select(ReviewNote).where(ReviewNote.id == note_id))
+        note = result.scalar_one_or_none()
+        if not note:
+            raise NotFoundError("Note not found")
+
+        await self.db.delete(note)
+        await self.db.commit()

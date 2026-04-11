@@ -8,7 +8,7 @@ with their respective database connections.
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, MetaData, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, MetaData, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -102,10 +102,13 @@ class File(SharedBase):
     file_hash: Mapped[str] = mapped_column(String, nullable=False)
     language: Mapped[str] = mapped_column(String, nullable=False)
     max_similarity: Mapped[float | None] = mapped_column(Float, nullable=True, default=0.0)
+    is_confirmed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Relationship back to task
+    # Relationship to file
     task: Mapped["PlagiarismTask"] = relationship("PlagiarismTask", back_populates="files")
     # Relationship to similarity results
     similarity_results_a: Mapped[list["SimilarityResult"]] = relationship(
@@ -119,6 +122,10 @@ class File(SharedBase):
         foreign_keys="SimilarityResult.file_b_id",
         back_populates="file_b",
         cascade="all, delete-orphan",
+    )
+    # Relationship to review notes
+    review_notes: Mapped[list["ReviewNote"]] = relationship(
+        "ReviewNote", back_populates="file", cascade="all, delete-orphan"
     )
 
 
@@ -137,6 +144,8 @@ class SimilarityResult(SharedBase):
     )
     ast_similarity: Mapped[float | None] = mapped_column(Float, nullable=True)
     matches: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    review_disposition: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships to files
@@ -146,3 +155,18 @@ class SimilarityResult(SharedBase):
     file_b: Mapped["File"] = relationship(
         "File", foreign_keys=[file_b_id], back_populates="similarity_results_b"
     )
+
+
+class ReviewNote(SharedBase):
+    __tablename__ = "review_notes"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    file_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("files.id"), nullable=False)
+    assignment_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("assignments.id"), nullable=False
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationship to file
+    file: Mapped["File"] = relationship("File", back_populates="review_notes")

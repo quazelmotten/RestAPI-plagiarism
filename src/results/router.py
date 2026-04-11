@@ -10,7 +10,14 @@ from fastapi import APIRouter, Depends, Query, status
 from dependencies import get_fingerprint_cache
 from exceptions.exceptions import NotFoundError
 from results.dependencies import get_result_service
-from results.schemas import HistogramResponse, ResultItem, TaskResultsResponse
+from results.schemas import (
+    BulkConfirmResponse,
+    HistogramResponse,
+    ResultItem,
+    ReviewExportResponse,
+    ReviewQueueResponse,
+    TaskResultsResponse,
+)
 from results.service import ResultService
 from schemas.common import PaginatedResponse
 
@@ -145,3 +152,233 @@ async def analyze_file_pair(
 ):
     """Run full plagiarism analysis on-demand for a file pair. Updates DB with matches."""
     return await result_service.analyze_file_pair(str(file_a), str(file_b), cache)
+
+
+@router.post(
+    "/results/{result_id}/confirm",
+    response_model=ResultItem,
+    summary="Confirm plagiarism for a file pair",
+    description="Mark both files in a pair as confirmed plagiarism.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": ResultItem,
+            "description": "Files confirmed as plagiarism",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Result not found",
+        },
+    },
+)
+async def confirm_plagiarism(
+    result_id: uuid.UUID,
+    result_service: ResultService = Depends(get_result_service),
+):
+    """Confirm plagiarism for a pair - marks both files as confirmed."""
+    return await result_service.confirm_plagiarism(str(result_id))
+
+
+@router.post(
+    "/results/{result_id}/skip",
+    response_model=ResultItem,
+    summary="Skip a file pair",
+    description="Mark a pair as reviewed but not confirmed (no plagiarism found).",
+    responses={
+        status.HTTP_200_OK: {
+            "model": ResultItem,
+            "description": "Pair marked as reviewed",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Result not found",
+        },
+    },
+)
+async def skip_pair(
+    result_id: uuid.UUID,
+    result_service: ResultService = Depends(get_result_service),
+):
+    """Skip a pair - marks as reviewed but not confirmed."""
+    return await result_service.skip_pair(str(result_id))
+
+
+@router.post(
+    "/assignments/{assignment_id}/bulk-confirm",
+    response_model=BulkConfirmResponse,
+    summary="Bulk confirm pairs above threshold",
+    description="Confirm all pairs with similarity above a threshold.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": BulkConfirmResponse,
+            "description": "Bulk confirm completed",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Assignment not found",
+        },
+    },
+)
+async def bulk_confirm(
+    assignment_id: uuid.UUID,
+    threshold: float = Query(..., ge=0.0, le=1.0, description="Similarity threshold (0.0-1.0)"),
+    result_service: ResultService = Depends(get_result_service),
+):
+    """Bulk confirm all pairs above threshold."""
+    return await result_service.bulk_confirm(str(assignment_id), threshold)
+
+
+@router.get(
+    "/assignments/{assignment_id}/review-queue",
+    response_model=ReviewQueueResponse,
+    summary="Get smart review queue for assignment",
+    description="Get prioritized list of pairs to review, skipping confirmed files.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": ReviewQueueResponse,
+            "description": "Review queue retrieved successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Assignment not found",
+        },
+    },
+)
+async def get_review_queue(
+    assignment_id: uuid.UUID,
+    result_service: ResultService = Depends(get_result_service),
+    limit: int = Query(default=50, ge=1, le=500),
+):
+    """Get smart review queue prioritized by unconfirmed files."""
+    return await result_service.get_review_queue(str(assignment_id), limit)
+
+
+@router.get(
+    "/files/{file_id}/top-similar-pairs",
+    response_model=PaginatedResponse,
+    summary="Get top similar pairs for a file",
+    description="Get top similar pairs for a file (for thorough checking).",
+    responses={
+        status.HTTP_200_OK: {
+            "model": PaginatedResponse,
+            "description": "Top similar pairs retrieved",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "File not found",
+        },
+    },
+)
+async def get_top_similar_pairs(
+    file_id: uuid.UUID,
+    result_service: ResultService = Depends(get_result_service),
+    limit: int = Query(default=5, ge=1, le=10),
+):
+    """Get top similar pairs for a file."""
+    return await result_service.get_top_similar_pairs(str(file_id), limit)
+
+
+@router.get(
+    "/assignments/{assignment_id}/export-review",
+    response_model=ReviewExportResponse,
+    summary="Export review data as HTML",
+    description="Generate an HTML report with file status, notes, and suspicious pair comparisons.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": ReviewExportResponse,
+            "description": "HTML export generated successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Assignment not found",
+        },
+    },
+)
+async def export_review(
+    assignment_id: uuid.UUID,
+    result_service: ResultService = Depends(get_result_service),
+    threshold: float = Query(
+        default=0.3, ge=0.0, le=1.0, description="Similarity threshold for suspicious pairs"
+    ),
+):
+    """Export review data as HTML."""
+    return await result_service.export_review_html(str(assignment_id), threshold)
+
+
+@router.post(
+    "/results/{result_id}/clear",
+    response_model=ResultItem,
+    summary="Clear a file pair",
+    description="Mark a pair as reviewed and not plagiarism.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": ResultItem,
+            "description": "Pair marked as cleared",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Result not found",
+        },
+    },
+)
+async def clear_pair(
+    result_id: uuid.UUID,
+    result_service: ResultService = Depends(get_result_service),
+):
+    """Clear a pair - marks as reviewed but not plagiarism."""
+    return await result_service.clear_pair(str(result_id))
+
+
+@router.post(
+    "/results/{result_id}/undo",
+    response_model=ResultItem,
+    summary="Undo a review",
+    description="Reset a pair back to unreviewed state.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": ResultItem,
+            "description": "Pair undo review",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Result not found",
+        },
+    },
+)
+async def undo_review(
+    result_id: uuid.UUID,
+    result_service: ResultService = Depends(get_result_service),
+):
+    """Undo review - reset pair to unreviewed."""
+    return await result_service.undo_review(str(result_id))
+
+
+@router.get(
+    "/assignments/{assignment_id}/cleared-pairs",
+    response_model=PaginatedResponse,
+    summary="Get cleared pairs",
+    description="Get all cleared (reviewed-not-plagiarism) pairs for an assignment.",
+)
+async def get_cleared_pairs(
+    assignment_id: uuid.UUID,
+    result_service: ResultService = Depends(get_result_service),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    """Get cleared pairs for an assignment."""
+    return await result_service.get_cleared_pairs(str(assignment_id), limit, offset)
+
+
+@router.get(
+    "/assignments/{assignment_id}/plagiarism-pairs",
+    response_model=PaginatedResponse,
+    summary="Get plagiarism pairs",
+    description="Get all confirmed plagiarism pairs for an assignment.",
+)
+async def get_plagiarism_pairs(
+    assignment_id: uuid.UUID,
+    result_service: ResultService = Depends(get_result_service),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    """Get plagiarism pairs for an assignment."""
+    return await result_service.get_plagiarism_pairs(str(assignment_id), limit, offset)

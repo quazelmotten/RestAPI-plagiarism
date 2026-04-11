@@ -40,6 +40,7 @@ class FileRepository:
                 File.filename,
                 File.language,
                 File.created_at,
+                File.is_confirmed,
                 PlagiarismTask.id.label("task_id"),
                 PlagiarismTask.status,
                 max_sim_subq.c.max_sim,
@@ -70,6 +71,7 @@ class FileRepository:
                 assignment_name=row.assignment_name,
                 subject_id=str(row.subject_id) if row.subject_id else None,
                 subject_name=row.subject_name,
+                is_confirmed=bool(row.is_confirmed) if row.is_confirmed is not None else False,
             )
             for row in rows
         ]
@@ -98,6 +100,7 @@ class FileRepository:
                 File.filename,
                 File.language,
                 File.created_at,
+                File.is_confirmed,
                 PlagiarismTask.id.label("task_id"),
                 PlagiarismTask.status,
                 max_sim_subq.c.max_sim,
@@ -166,6 +169,7 @@ class FileRepository:
                 assignment_name=row.assignment_name,
                 subject_id=str(row.subject_id) if row.subject_id else None,
                 subject_name=row.subject_name,
+                is_confirmed=bool(row.is_confirmed) if row.is_confirmed is not None else False,
             )
             for row in rows
         ]

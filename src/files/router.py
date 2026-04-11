@@ -10,7 +10,12 @@ from fastapi import APIRouter, Depends, Path, Query, status
 from dependencies import get_s3_storage
 from exceptions.exceptions import NotFoundError
 from files.dependencies import get_file_service, valid_file_id
-from files.schemas import FileContentResponse, FileResponse
+from files.schemas import (
+    FileContentResponse,
+    FileResponse,
+    ReviewNoteCreate,
+    ReviewNoteResponse,
+)
 from files.service import FileService
 from schemas.common import PaginatedResponse
 
@@ -143,3 +148,99 @@ async def get_file_content(
     if not content:
         raise NotFoundError("File content not found")
     return content
+
+
+@router.post(
+    "/files/{file_id}/unconfirm",
+    response_model=FileResponse,
+    summary="Unconfirm a file",
+    description="Remove confirmed status from a file.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": FileResponse,
+            "description": "File unconfirmed successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "File not found",
+        },
+    },
+)
+async def unconfirm_file(
+    file_id: uuid.UUID,
+    file_service: FileService = Depends(get_file_service),
+):
+    """Remove confirmed status from a file."""
+    return await file_service.unconfirm_file(str(file_id))
+
+
+@router.get(
+    "/files/{file_id}/notes",
+    response_model=list[ReviewNoteResponse],
+    summary="Get notes for a file",
+    description="Retrieve all review notes attached to a specific file.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": list[ReviewNoteResponse],
+            "description": "Notes retrieved successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "File not found",
+        },
+    },
+)
+async def get_file_notes(
+    file_id: uuid.UUID,
+    file_service: FileService = Depends(get_file_service),
+):
+    """Get all notes for a file."""
+    return await file_service.get_file_notes(str(file_id))
+
+
+@router.post(
+    "/files/{file_id}/notes",
+    response_model=ReviewNoteResponse,
+    summary="Add note to a file",
+    description="Create a new review note attached to a specific file.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": ReviewNoteResponse,
+            "description": "Note created successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "File not found",
+        },
+    },
+)
+async def add_file_note(
+    file_id: uuid.UUID,
+    note: ReviewNoteCreate,
+    file_service: FileService = Depends(get_file_service),
+):
+    """Add a note to a file."""
+    return await file_service.add_file_note(str(file_id), note.content)
+
+
+@router.delete(
+    "/notes/{note_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a note",
+    description="Delete a specific review note by its ID.",
+    responses={
+        status.HTTP_204_NO_CONTENT: {
+            "description": "Note deleted successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "Note not found",
+        },
+    },
+)
+async def delete_note(
+    note_id: uuid.UUID,
+    file_service: FileService = Depends(get_file_service),
+):
+    """Delete a note."""
+    await file_service.delete_note(str(note_id))

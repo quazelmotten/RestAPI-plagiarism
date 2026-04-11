@@ -2,16 +2,24 @@
 Results domain service - business logic for similarity results.
 """
 
+import html
 from datetime import UTC, datetime
+from uuid import UUID
 
+from shared.models import Assignment, PlagiarismTask, ReviewNote, SimilarityResult
 from shared.models import File as FileModel
-from shared.models import SimilarityResult
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from exceptions.exceptions import NotFoundError
 from results.repository import ResultRepository
-from results.schemas import ResultItem, TaskResultsResponse
+from results.schemas import (
+    BulkConfirmResponse,
+    ResultItem,
+    ReviewExportResponse,
+    ReviewQueueResponse,
+    TaskResultsResponse,
+)
 from schemas.common import PaginatedResponse
 
 
@@ -121,3 +129,537 @@ class ResultService:
             matches=legacy_matches,
             created_at=now,
         )
+
+    async def confirm_plagiarism(self, result_id: str) -> ResultItem:
+        """Confirm plagiarism for a pair - marks disposition and both files as confirmed."""
+        result = await self.db.get(SimilarityResult, UUID(result_id))
+        if not result:
+            raise NotFoundError("Result not found")
+
+        result.review_disposition = "plagiarism"
+        result.reviewed_at = datetime.now(UTC)
+
+        file_a = await self.db.get(FileModel, result.file_a_id)
+        file_b = await self.db.get(FileModel, result.file_b_id)
+
+        if file_a:
+            file_a.is_confirmed = True
+        if file_b:
+            file_b.is_confirmed = True
+
+        await self.db.commit()
+        await self.db.refresh(result)
+
+        return await self.repo._map_to_result_item(result)
+
+    async def clear_pair(self, result_id: str) -> ResultItem:
+        """Clear a pair - marks as reviewed but not plagiarism."""
+        result = await self.db.get(SimilarityResult, UUID(result_id))
+        if not result:
+            raise NotFoundError("Result not found")
+
+        result.review_disposition = "clear"
+        result.reviewed_at = datetime.now(UTC)
+
+        await self.db.commit()
+        await self.db.refresh(result)
+
+        return await self.repo._map_to_result_item(result)
+
+    async def undo_review(self, result_id: str) -> ResultItem:
+        """Undo review - resets disposition to unreviewed."""
+        result = await self.db.get(SimilarityResult, UUID(result_id))
+        if not result:
+            raise NotFoundError("Result not found")
+
+        previous_disposition = result.review_disposition
+
+        result.review_disposition = None
+        result.reviewed_at = None
+
+        if previous_disposition == "plagiarism":
+            file_a = await self.db.get(FileModel, result.file_a_id)
+            file_b = await self.db.get(FileModel, result.file_b_id)
+            if file_a:
+                file_a.is_confirmed = False
+            if file_b:
+                file_b.is_confirmed = False
+
+        await self.db.commit()
+        await self.db.refresh(result)
+
+        return await self.repo._map_to_result_item(result)
+
+    # Keep skip_pair as alias for clear_pair for backward compatibility
+    async def skip_pair(self, result_id: str) -> ResultItem:
+        """Skip a pair - marks as reviewed but not confirmed (alias for clear_pair)."""
+        return await self.clear_pair(result_id)
+
+    async def bulk_confirm(self, assignment_id: str, threshold: float) -> BulkConfirmResponse:
+        """Bulk confirm all pairs above threshold."""
+        query = (
+            select(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(SimilarityResult.ast_similarity >= threshold)
+        )
+        result = await self.db.execute(query)
+        results = result.scalars().all()
+
+        confirmed_files = set()
+        confirmed_pairs = 0
+
+        for r in results:
+            file_a = await self.db.get(FileModel, r.file_a_id)
+            file_b = await self.db.get(FileModel, r.file_b_id)
+
+            if file_a and not file_a.is_confirmed:
+                file_a.is_confirmed = True
+                confirmed_files.add(r.file_a_id)
+
+            if file_b and not file_b.is_confirmed:
+                file_b.is_confirmed = True
+                confirmed_files.add(r.file_b_id)
+
+            confirmed_pairs += 1
+
+        await self.db.commit()
+
+        return BulkConfirmResponse(
+            assignment_id=assignment_id,
+            threshold=threshold,
+            confirmed_pairs=confirmed_pairs,
+            confirmed_files=len(confirmed_files),
+            skipped_pairs=len(results) - confirmed_pairs,
+        )
+
+    async def get_review_queue(self, assignment_id: str, limit: int) -> ReviewQueueResponse:
+        """Get smart review queue prioritized by unconfirmed and unreviewed files."""
+        files_query = (
+            select(FileModel)
+            .join(PlagiarismTask, FileModel.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(FileModel.deleted_at.is_(None))
+        )
+        result = await self.db.execute(files_query)
+        all_files = result.scalars().all()
+
+        confirmed_files = {f.id for f in all_files if f.is_confirmed}
+        total_files = len(all_files)
+
+        results_query = (
+            select(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(SimilarityResult.review_disposition.is_(None))
+            .order_by(SimilarityResult.ast_similarity.desc())
+        )
+        result = await self.db.execute(results_query)
+        all_results = result.scalars().all()
+
+        priority_queue = []
+        secondary_queue = []
+
+        for r in all_results:
+            a_confirmed = r.file_a_id in confirmed_files
+            b_confirmed = r.file_b_id in confirmed_files
+
+            if not a_confirmed and not b_confirmed:
+                priority_queue.append(r)
+            elif not a_confirmed or not b_confirmed:
+                secondary_queue.append(r)
+
+        queue = priority_queue + secondary_queue
+        queue = queue[:limit]
+
+        cleared_count_query = (
+            select(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(SimilarityResult.review_disposition == "clear")
+        )
+        cleared_result = await self.db.execute(cleared_count_query)
+        cleared_count = len(cleared_result.scalars().all())
+
+        plagiarism_count_query = (
+            select(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(SimilarityResult.review_disposition == "plagiarism")
+        )
+        plagiarism_result = await self.db.execute(plagiarism_count_query)
+        plagiarism_count = len(plagiarism_result.scalars().all())
+
+        return ReviewQueueResponse(
+            assignment_id=assignment_id,
+            total_files=total_files,
+            confirmed_files=len(confirmed_files),
+            remaining_files=total_files - len(confirmed_files),
+            queue=[await self.repo._map_to_result_item(r) for r in queue],
+            estimated_reviews=len(queue),
+        )
+
+    async def get_cleared_pairs(
+        self, assignment_id: str, limit: int = 100, offset: int = 0
+    ) -> PaginatedResponse:
+        """Get all cleared pairs for an assignment."""
+        query = (
+            select(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(SimilarityResult.review_disposition == "clear")
+            .order_by(SimilarityResult.reviewed_at.desc())
+        )
+        result = await self.db.execute(query)
+        all_results = result.scalars().all()
+
+        total = len(all_results)
+        paginated_results = all_results[offset : offset + limit]
+
+        return PaginatedResponse(
+            items=[await self.repo._map_to_result_item(r) for r in paginated_results],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def get_plagiarism_pairs(
+        self, assignment_id: str, limit: int = 100, offset: int = 0
+    ) -> PaginatedResponse:
+        """Get all confirmed plagiarism pairs for an assignment."""
+        query = (
+            select(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(SimilarityResult.review_disposition == "plagiarism")
+            .order_by(SimilarityResult.reviewed_at.desc())
+        )
+        result = await self.db.execute(query)
+        all_results = result.scalars().all()
+
+        total = len(all_results)
+        paginated_results = all_results[offset : offset + limit]
+
+        return PaginatedResponse(
+            items=[await self.repo._map_to_result_item(r) for r in paginated_results],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def get_top_similar_pairs(self, file_id: str, limit: int) -> PaginatedResponse:
+        """Get top similar pairs for a file."""
+        query = (
+            select(SimilarityResult)
+            .where(
+                or_(
+                    SimilarityResult.file_a_id == UUID(file_id),
+                    SimilarityResult.file_b_id == UUID(file_id),
+                )
+            )
+            .order_by(SimilarityResult.ast_similarity.desc())
+            .limit(limit)
+        )
+        result = await self.db.execute(query)
+        results = result.scalars().all()
+
+        return PaginatedResponse(
+            total=len(results),
+            items=[await self.repo._map_to_result_item(r) for r in results],
+        )
+
+    async def export_review_html(
+        self, assignment_id: str, threshold: float
+    ) -> ReviewExportResponse:
+        """Generate HTML export with file status, notes, and pair comparisons."""
+        from clients.s3_client import S3Storage
+        from constants import BUCKET_NAME
+
+        assignment = await self.db.get(Assignment, UUID(assignment_id))
+        if not assignment:
+            raise NotFoundError("Assignment not found")
+
+        files_query = (
+            select(FileModel)
+            .join(PlagiarismTask, FileModel.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(FileModel.deleted_at.is_(None))
+        )
+        result = await self.db.execute(files_query)
+        all_files = result.scalars().all()
+
+        notes_query = select(ReviewNote).where(ReviewNote.assignment_id == assignment_id)
+        notes_result = await self.db.execute(notes_query)
+        all_notes = notes_result.scalars().all()
+        notes_by_file = {}
+        for note in all_notes:
+            if note.file_id not in notes_by_file:
+                notes_by_file[note.file_id] = []
+            notes_by_file[note.file_id].append(note)
+
+        results_query = (
+            select(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(SimilarityResult.ast_similarity >= threshold)
+            .order_by(SimilarityResult.ast_similarity.desc())
+        )
+        results_result = await self.db.execute(results_query)
+        suspicious_pairs = results_result.scalars().all()
+
+        s3_client = S3Storage()
+
+        html_content = self._generate_html_report(
+            assignment_name=assignment.name,
+            files=all_files,
+            notes_by_file=notes_by_file,
+            suspicious_pairs=suspicious_pairs,
+            threshold=threshold,
+            s3_client=s3_client,
+            bucket_name=BUCKET_NAME,
+        )
+
+        filename = f"plagiarism-review-{assignment.name.replace(' ', '-').lower()}-{datetime.now().strftime('%Y%m%d')}.html"
+
+        return ReviewExportResponse(
+            html_content=html_content,
+            filename=filename,
+        )
+
+    async def _generate_html_report(
+        self,
+        assignment_name: str,
+        files: list,
+        notes_by_file: dict,
+        suspicious_pairs: list,
+        threshold: float,
+        s3_client,
+        bucket_name: str,
+    ) -> str:
+        """Generate HTML report with embedded CSS and content."""
+
+        confirmed_files = {f.id for f in files if f.is_confirmed}
+        total_files = len(files)
+        confirmed_count = len(confirmed_files)
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plagiarism Review - {html.escape(assignment_name)}</title>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f5; }}
+        h1, h2, h3 {{ color: #1a1a1a; margin-bottom: 10px; }}
+        h1 {{ border-bottom: 3px solid #1890ff; padding-bottom: 10px; margin-bottom: 20px; }}
+        .card {{ background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        .stats {{ display: flex; gap: 20px; flex-wrap: wrap; }}
+        .stat {{ background: #f0f5ff; padding: 15px 20px; border-radius: 6px; text-align: center; min-width: 120px; }}
+        .stat-value {{ font-size: 24px; font-weight: bold; color: #1890ff; }}
+        .stat-label {{ font-size: 12px; color: #666; text-transform: uppercase; }}
+        .file-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+        .file-table th, .file-table td {{ padding: 12px; text-align: left; border-bottom: 1px solid #eee; }}
+        .file-table th {{ background: #f8f9fa; font-weight: 600; color: #555; }}
+        .file-table tr:hover {{ background: #f5f5f5; }}
+        .badge {{ display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }}
+        .badge-confirmed {{ background: #fff1f0; color: #cf1322; }}
+        .badge-clean {{ background: #f6ffed; color: #52c41a; }}
+        .badge-unreviewed {{ background: #fff7e6; color: #d48806; }}
+        .similarity {{ font-weight: 600; }}
+        .similarity-high {{ color: #cf1322; }}
+        .similarity-medium {{ color: #d48806; }}
+        .similarity-low {{ color: #52c41a; }}
+        .pair-section {{ margin-top: 30px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }}
+        .pair-header {{ background: #f5f5f5; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; }}
+        .pair-files {{ display: flex; gap: 30px; flex: 1; }}
+        .pair-file {{ flex: 1; }}
+        .pair-file-name {{ font-weight: 600; color: #1a1a1a; }}
+        .code-block {{ background: #1e1e1e; color: #d4d4d4; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.5; max-height: 400px; overflow-y: auto; }}
+        .code-line {{ display: flex; }}
+        .line-number {{ color: #6e7681; width: 40px; text-align: right; padding-right: 15px; user-select: none; }}
+        .line-content {{ flex: 1; white-space: pre; }}
+        .highlight {{ background: rgba(255, 235, 59, 0.3); }}
+        .note {{ background: #fff7e6; border-left: 3px solid #d48806; padding: 10px 15px; margin: 5px 0; font-size: 14px; }}
+        @media print {{ body {{ background: white; }} .card {{ box-shadow: none; border: 1px solid #ddd; }} }}
+    </style>
+</head>
+<body>
+    <h1>Plagiarism Review Report</h1>
+    <p style="color: #666; margin-bottom: 20px;">Assignment: {html.escape(assignment_name)} | Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}</p>
+    
+    <div class="card">
+        <h2>Summary</h2>
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value">{total_files}</div>
+                <div class="stat-label">Total Files</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">{confirmed_count}</div>
+                <div class="stat-label">Confirmed</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">{total_files - confirmed_count}</div>
+                <div class="stat-label">Unreviewed</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">{len(suspicious_pairs)}</div>
+                <div class="stat-label">Suspicious Pairs ({threshold * 100:.0f}%+)</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>All Files</h2>
+        <table class="file-table">
+            <thead>
+                <tr>
+                    <th>Filename</th>
+                    <th>Max Similarity</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+"""
+
+        for file in sorted(files, key=lambda f: f.filename):
+            max_sim = file.max_similarity or 0
+            is_confirmed = file.id in confirmed_files
+            file_notes = notes_by_file.get(str(file.id), [])
+
+            if is_confirmed:
+                status_badge = '<span class="badge badge-confirmed">Confirmed</span>'
+            elif max_sim > 0:
+                status_badge = '<span class="badge badge-unreviewed">Unreviewed</span>'
+            else:
+                status_badge = '<span class="badge badge-clean">Clean</span>'
+
+            if max_sim >= 0.8:
+                sim_class = "similarity-high"
+            elif max_sim >= 0.5:
+                sim_class = "similarity-medium"
+            else:
+                sim_class = "similarity-low"
+
+            notes_html = "".join(
+                [f'<div class="note">{html.escape(n.content)}</div>' for n in file_notes]
+            )
+
+            html += f"""                <tr>
+                    <td>{html.escape(file.filename)}</td>
+                    <td><span class="similarity {sim_class}">{max_sim * 100:.1f}%</span></td>
+                    <td>{status_badge}</td>
+                    <td>{notes_html}</td>
+                </tr>
+"""
+
+        html += """            </tbody>
+        </table>
+    </div>
+    
+    <div class="card">
+        <h2>Suspicious Pairs (Side-by-Side Comparison)</h2>
+"""
+
+        for pair in suspicious_pairs:
+            file_a = await self.db.get(FileModel, pair.file_a_id)
+            file_b = await self.db.get(FileModel, pair.file_b_id)
+
+            if not file_a or not file_b:
+                continue
+
+            sim = pair.ast_similarity or 0
+            if sim >= 0.8:
+                sim_class = "similarity-high"
+            elif sim >= 0.5:
+                sim_class = "similarity-medium"
+            else:
+                sim_class = "similarity-low"
+
+            content_a = await self._get_file_content(s3_client, bucket_name, file_a.file_path)
+            content_b = await self._get_file_content(s3_client, bucket_name, file_b.file_path)
+
+            matches = pair.matches or []
+            highlighted_a = self._highlight_matches(content_a, matches, "file_a")
+            highlighted_b = self._highlight_matches(content_b, matches, "file_b")
+
+            html += f"""        <div class="pair-section">
+            <div class="pair-header">
+                <div class="pair-files">
+                    <div class="pair-file">
+                        <span class="pair-file-name">{html.escape(file_a.filename)}</span>
+                    </div>
+                    <div class="pair-file">
+                        <span class="pair-file-name">{html.escape(file_b.filename)}</span>
+                    </div>
+                </div>
+                <span class="similarity {sim_class}">{sim * 100:.1f}%</span>
+            </div>
+            <div class="code-block">
+                <div style="display: flex;">
+                    <div style="flex: 1; border-right: 1px solid #444; margin-right: 15px; padding-right: 15px;">
+                        <div style="color: #6e7681; margin-bottom: 10px; font-size: 12px;">{html.escape(file_a.filename)}</div>
+                        {highlighted_a}
+                    </div>
+                    <div style="flex: 1;">
+                        <div style="color: #6e7681; margin-bottom: 10px; font-size: 12px;">{html.escape(file_b.filename)}</div>
+                        {highlighted_b}
+                    </div>
+                </div>
+            </div>
+        </div>
+"""
+
+        html += """    </div>
+</body>
+</html>"""
+
+        return html
+
+    async def _get_file_content(self, s3_client, bucket_name: str, file_path: str) -> str:
+        """Fetch file content from S3."""
+        try:
+            key = file_path.split(f"{bucket_name}/")[-1]
+            content = await s3_client.download_file_async(bucket_name=bucket_name, key=key)
+            if content:
+                return content.decode("utf-8")
+        except Exception:
+            pass
+        return "// Content not available"
+
+    def _highlight_matches(self, content: str, matches: list, file_key: str) -> str:
+        """Generate HTML with highlighted matches."""
+        if not matches:
+            lines = content.split("\n")
+            return "\n".join(
+                [
+                    f'<div class="code-line"><span class="line-number">{i + 1}</span><span class="line-content">{html.escape(line)}</span></div>'
+                    for i, line in enumerate(lines[:100])
+                ]
+            )
+
+        highlighted_lines = set()
+        start_key = f"{file_key}_start_line"
+        end_key = f"{file_key}_end_line"
+
+        for match in matches:
+            start = match.get(start_key, match.get("file1", {}).get("start_line", 1)) - 1
+            end = match.get(end_key, match.get("file1", {}).get("end_line", start + 1))
+            for i in range(start, end):
+                highlighted_lines.add(i)
+
+        lines = content.split("\n")
+        html_lines = []
+        for i, line in enumerate(lines[:100]):
+            if i in highlighted_lines:
+                html_lines.append(
+                    f'<div class="code-line highlight"><span class="line-number">{i + 1}</span><span class="line-content">{html.escape(line)}</span></div>'
+                )
+            else:
+                html_lines.append(
+                    f'<div class="code-line"><span class="line-number">{i + 1}</span><span class="line-content">{html.escape(line)}</span></div>'
+                )
+
+        return "\n".join(html_lines)

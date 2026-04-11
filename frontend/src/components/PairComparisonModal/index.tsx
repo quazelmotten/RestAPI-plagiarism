@@ -12,6 +12,16 @@ import {
   Button,
   Spinner,
   useColorModeValue,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  ModalCloseButton,
+  useDisclosure,
+  Input,
+  Textarea,
 } from '@chakra-ui/react';
 import {
   FiX,
@@ -24,6 +34,8 @@ import {
   FiBarChart2,
   FiFolder,
   FiFilter,
+  FiCheck,
+  FiFileText,
 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../../services/api';
@@ -38,6 +50,8 @@ import type {
 } from '../../types';
 import { PLAGIARISM_TYPE_COLORS } from '../../types';
 import ErrorBoundary from '../ErrorBoundary';
+import { useFileNotes, useAddNote, useDeleteNote } from '../../hooks/useGrading';
+import { useToast } from '@chakra-ui/react';
 
 type PlagiarismMatch = ApiPlagiarismMatch;
 
@@ -86,6 +100,7 @@ interface PairResult extends ApiPlagiarismResult {
 }
 
 interface OffenderPair {
+  id?: string;
   file_a: { id: string; filename: string };
   file_b: { id: string; filename: string };
   ast_similarity: number;
@@ -114,6 +129,7 @@ interface PairComparisonModalProps {
   pairs?: OffenderPair[];
   assignmentName?: string;
   onNavigatePair?: (pair: OffenderPair, index: number) => void;
+  onActionComplete?: () => void;
 }
 
 const getSimilarityGradient = (similarity: number): string => {
@@ -130,8 +146,10 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
   initialFileB,
   pairs = [],
   assignmentName,
+  onActionComplete,
 }) => {
   const { t } = useTranslation(['pairComparison', 'common']);
+  const toast = useToast();
 
   const [currentPair, setCurrentPair] = useState<PairResult | null>(null);
   const [selectedFileA, setSelectedFileA] = useState<FileInfo | null>(null);
@@ -147,6 +165,19 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
   const [syncScroll, setSyncScroll] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  // Notes
+  const { isOpen: isNoteOpen, onOpen: onNoteOpen, onClose: onNoteClose } = useDisclosure();
+  const [noteText, setNoteText] = useState('');
+  const [activeFileForNote, setActiveFileForNote] = useState<'file_a' | 'file_b' | null>(null);
+  
+  const addNote = useAddNote();
+  const deleteNote = useDeleteNote();
+  
+  const fileANotes = useFileNotes(selectedFileA?.id || '');
+  const fileBNotes = useFileNotes(selectedFileB?.id || '');
 
   const scrollSyncing = useRef(false);
 
@@ -385,27 +416,71 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+      // Get current result ID from currentPair or pairs
+      const resultId = currentPair?.id || (currentIndex >= 0 ? pairs[currentIndex]?.id : null);
+
+      // Helper to navigate to next pair
+      const goToNext = () => {
+        if (pairs.length > 0 && currentIndex >= 0 && currentIndex < pairs.length - 1) {
+          navigateToIndex(currentIndex + 1);
+        } else if (pairs.length > 0) {
+          navigateToIndex(0);
+        }
+      };
+
+      // Ctrl/Cmd + C = Confirm plagiarism
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        if (!resultId) return;
+        setConfirming(true);
+        api.post(API_ENDPOINTS.CONFIRM_PLAGIARISM(resultId)).then(() => {
+          toast({ title: 'Confirmed', description: 'Pair marked as plagiarism', status: 'success', duration: 1500 });
+          goToNext();
+          if (onActionComplete) onActionComplete();
+        }).catch(err => {
+          console.error('Error confirming:', err);
+          toast({ title: 'Error', description: 'Failed to confirm', status: 'error', duration: 3000 });
+        }).finally(() => setConfirming(false));
+        return;
+      }
+
+      // Ctrl/Cmd + X = Clear pair (not plagiarism)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') {
+        e.preventDefault();
+        if (!resultId) return;
+        setClearing(true);
+        api.post(API_ENDPOINTS.CLEAR_PAIR(resultId)).then(() => {
+          toast({ title: 'Cleared', description: 'Pair marked as not plagiarism', status: 'info', duration: 1500 });
+          goToNext();
+          if (onActionComplete) onActionComplete();
+        }).catch(err => {
+          console.error('Error clearing:', err);
+          toast({ title: 'Error', description: 'Failed to clear', status: 'error', duration: 3000 });
+        }).finally(() => setClearing(false));
+        return;
+      }
+
       switch (e.key) {
         case 'Escape':
           e.preventDefault();
           onClose();
           break;
-        case 'n': {
+        case 'ArrowRight':
+        case 'l':
           e.preventDefault();
           if (pairs.length > 0) {
             const nextIdx = currentIndex < pairs.length - 1 ? currentIndex + 1 : 0;
             navigateToIndex(nextIdx);
           }
           break;
-        }
-        case 'p': {
+        case 'ArrowLeft':
+        case 'h':
           e.preventDefault();
           if (pairs.length > 0) {
             const prevIdx = currentIndex > 0 ? currentIndex - 1 : pairs.length - 1;
             navigateToIndex(prevIdx);
           }
           break;
-        }
         case 'c':
           e.preventDefault();
           setFilterComments(f => !f);
@@ -418,7 +493,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isOpen, currentIndex, pairs, navigateToIndex, onClose]);
+  }, [isOpen, currentIndex, pairs, navigateToIndex, onClose, currentPair, onActionComplete]);
 
   const getLineRef = useCallback((fileA: boolean) => (lineIndex: number, el: HTMLDivElement | null) => {
     if (el) {
@@ -462,6 +537,98 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
     const scrollDelta = targetCurrentOffset - targetViewportOffset;
     targetContainer.scrollTo({ top: targetContainer.scrollTop + scrollDelta, behavior: 'smooth' });
   }, [currentPair]);
+
+  const handleConfirmPlagiarism = async () => {
+    const resultId = currentPair?.id || (currentIndex >= 0 ? pairs[currentIndex]?.id : null);
+    if (!resultId) {
+      toast({
+        title: 'Error',
+        description: 'Cannot confirm: result ID not found',
+        status: 'error',
+        duration: 3000,
+      });
+      return;
+    }
+    setConfirming(true);
+    try {
+      await api.post(API_ENDPOINTS.CONFIRM_PLAGIARISM(resultId));
+      toast({
+        title: 'Confirmed',
+        description: 'Pair marked as plagiarism',
+        status: 'success',
+        duration: 1500,
+      });
+      handleNextPair();
+      if (onActionComplete) {
+        onActionComplete();
+      }
+    } catch (error) {
+      console.error('Error confirming plagiarism:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to confirm plagiarism',
+        status: 'error',
+        duration: 3000,
+      });
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const handleClearPair = async () => {
+    const resultId = currentPair?.id || (currentIndex >= 0 ? pairs[currentIndex]?.id : null);
+    if (!resultId) {
+      toast({
+        title: 'Error',
+        description: 'Cannot clear: result ID not found',
+        status: 'error',
+        duration: 3000,
+      });
+      return;
+    }
+    setClearing(true);
+    try {
+      await api.post(API_ENDPOINTS.CLEAR_PAIR(resultId));
+      toast({
+        title: 'Cleared',
+        description: 'Pair marked as not plagiarism',
+        status: 'info',
+        duration: 1500,
+      });
+      handleNextPair();
+      if (onActionComplete) {
+        onActionComplete();
+      }
+    } catch (error) {
+      console.error('Error clearing pair:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to clear pair',
+        status: 'error',
+        duration: 3000,
+      });
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  const handleNextPair = () => {
+    if (pairs.length > 0 && currentIndex >= 0 && currentIndex < pairs.length - 1) {
+      navigateToIndex(currentIndex + 1);
+    } else if (pairs.length > 0) {
+      // Wrap around to first
+      navigateToIndex(0);
+    }
+  };
+
+  const handlePrevPair = () => {
+    if (pairs.length > 0 && currentIndex > 0) {
+      navigateToIndex(currentIndex - 1);
+    } else if (pairs.length > 0) {
+      // Wrap around to last
+      navigateToIndex(pairs.length - 1);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -594,6 +761,42 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
               onClick={() => setStatsOpen(!statsOpen)}
             />
           </Tooltip>
+          
+          {/* Add Note Button */}
+          <Tooltip label="Add note to file" placement="bottom">
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<FiFileText />}
+              onClick={() => {
+                if (selectedFileA && selectedFileB) {
+                  setActiveFileForNote('file_a');
+                  onNoteOpen();
+                }
+              }}
+              isDisabled={!selectedFileA || !selectedFileB}
+            >
+              Note
+            </Button>
+          </Tooltip>
+          
+          <Button
+            size="sm"
+            colorScheme="green"
+            leftIcon={<FiCheck />}
+            onClick={handleConfirmPlagiarism}
+            isLoading={confirming}
+          >
+            Confirm ✓
+          </Button>
+          <Button
+            size="sm"
+            colorScheme="gray"
+            onClick={handleClearPair}
+            isLoading={clearing}
+          >
+            Clear
+          </Button>
           <IconButton
             aria-label="Close"
             icon={<FiX />}
@@ -734,6 +937,77 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
         initialFileAId={selectedFileA?.id}
         initialFileBId={selectedFileB?.id}
       />
+
+      {/* Note Modal */}
+      <Modal isOpen={isNoteOpen} onClose={onNoteClose} size="lg">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>
+            {activeFileForNote === 'file_a' ? selectedFileA?.filename : selectedFileB?.filename} - Notes
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack align="stretch" spacing={4}>
+              {/* Existing Notes */}
+              {(activeFileForNote === 'file_a' ? fileANotes.data : fileBNotes.data)?.map(note => (
+                <Box key={note.id} p={3} bg="gray.50" borderRadius="md" position="relative">
+                  <Text fontSize="sm">{note.content}</Text>
+                  <Text fontSize="xs" color="gray.500" mt={1}>
+                    {new Date(note.created_at).toLocaleString()}
+                  </Text>
+                  <IconButton
+                    aria-label="Delete note"
+                    icon={<FiX />}
+                    size="xs"
+                    variant="ghost"
+                    position="absolute"
+                    top={2}
+                    right={2}
+                    onClick={() => deleteNote.mutate(note.id)}
+                    isLoading={deleteNote.isPending}
+                  />
+                </Box>
+              ))}
+
+              {/* Add Note */}
+              <Box>
+                <Text fontSize="sm" fontWeight="medium" mb={2}>Add new note:</Text>
+                <Textarea
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  placeholder="Enter note content..."
+                  rows={3}
+                />
+              </Box>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={onNoteClose}>
+              Close
+            </Button>
+            <Button
+              colorScheme="blue"
+              onClick={async () => {
+                const fileId = activeFileForNote === 'file_a' ? selectedFileA?.id : selectedFileB?.id;
+                if (fileId && noteText.trim()) {
+                  await addNote.mutateAsync({ fileId, content: noteText.trim() });
+                  setNoteText('');
+                  onNoteClose();
+                  if (activeFileForNote === 'file_a') {
+                    fileANotes.refetch();
+                  } else {
+                    fileBNotes.refetch();
+                  }
+                }
+              }}
+              isLoading={addNote.isPending}
+              isDisabled={!noteText.trim()}
+            >
+              Add Note
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 };

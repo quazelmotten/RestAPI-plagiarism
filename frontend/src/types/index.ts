@@ -49,15 +49,18 @@ export const PLAGIARISM_TYPE_LABELS: Record<number, string> = {
 };
 
 export interface PlagiarismResult {
+  id?: string;
   file_a: {
     id: string;
     filename: string;
     task_id?: string; // The task this file belongs to (may differ from selected task for cross-task)
+    is_confirmed?: boolean;
   };
   file_b: {
     id: string;
     filename: string;
     task_id?: string;
+    is_confirmed?: boolean;
   };
   ast_similarity: number;
   matches: PlagiarismMatch[];
@@ -211,4 +214,21 @@ export interface Assignment {
   created_at: string | null;
   tasks_count: number;
   files_count: number;
+}
+
+export interface ReviewQueueResponse {
+  assignment_id: string;
+  total_files: number;
+  confirmed_files: number;
+  remaining_files: number;
+  queue: PlagiarismResult[];
+  estimated_reviews: number;
+}
+
+export interface BulkConfirmResponse {
+  assignment_id: string;
+  threshold: number;
+  confirmed_pairs: number;
+  confirmed_files: number;
+  skipped_pairs: number;
 }

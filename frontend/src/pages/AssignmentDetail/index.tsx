@@ -64,6 +64,7 @@ import { getSimilarityColor, getStatusColorScheme } from '../../utils/statusColo
 import TaskProgress from '../../components/Results/TaskProgress';
 import SimilarityDistribution from '../../components/Results/SimilarityDistribution';
 import PairComparisonModal from '../../components/PairComparisonModal';
+import ReviewQueue from '../../components/Review/ReviewQueue';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024;
 const MAX_FILES = 1000;
@@ -150,6 +151,7 @@ const AssignmentDetail: React.FC = () => {
     file_b: { id: string; filename: string };
     ast_similarity: number;
   } | null>(null);
+  const [reviewQueuePairs, setReviewQueuePairs] = useState<PlagiarismResult[]>([]);
 
   // File viewer
   const { isOpen: isFileViewerOpen, onOpen: onFileViewerOpen, onClose: onFileViewerClose } = useDisclosure();
@@ -404,6 +406,7 @@ const AssignmentDetail: React.FC = () => {
   const tabLabels = [
     t('results:resultsList.topSimilarities'),
     t('results:distribution.title'),
+    'Files',
   ];
 
   const renderResizeHandle = (col: string) => (
@@ -649,7 +652,7 @@ const AssignmentDetail: React.FC = () => {
       )}
 
       {/* Results area */}
-      {totalPairsCount > 0 ? (
+      {totalPairsCount > 0 || true ? (
         <Box flex={1} minH={0} display="flex" flexDirection="column" overflow="hidden">
           {/* Tabs */}
           <HStack spacing={1} mb={3} flexShrink={0} flexWrap="wrap">
@@ -658,11 +661,10 @@ const AssignmentDetail: React.FC = () => {
                 {label}
               </Button>
             ))}
-            <Button size="sm" variant={activeTab === 2 ? 'solid' : 'ghost'} colorScheme={activeTab === 2 ? 'brand' : 'gray'} onClick={() => setActiveTab(2)} fontSize="xs">
+            <Button size="sm" variant={activeTab === 3 ? 'solid' : 'ghost'} colorScheme={activeTab === 3 ? 'brand' : 'gray'} onClick={() => setActiveTab(3)} fontSize="xs">
               <HStack spacing={1}>
-                <Icon as={FiFileText} boxSize={3} />
-                <Text>Files</Text>
-                <Badge size="sm" colorScheme="gray">{totalFiles}</Badge>
+                <Icon as={FiList} boxSize={3} />
+                <Text>Review</Text>
               </HStack>
             </Button>
           </HStack>
@@ -902,6 +904,20 @@ const AssignmentDetail: React.FC = () => {
                 )}
               </Box>
             )}
+
+            {/* Review */}
+            {activeTab === 3 && (
+              <Box flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
+                <ReviewQueue
+                  assignmentId={assignmentId!}
+                  onReviewPair={(pair, allPairs) => {
+                    setSelectedPair({ file_a: pair.file_a, file_b: pair.file_b, ast_similarity: pair.ast_similarity });
+                    setReviewQueuePairs(allPairs || []);
+                    setPairModalOpen(true);
+                  }}
+                />
+              </Box>
+            )}
           </Box>
         </Box>
       ) : (
@@ -917,7 +933,11 @@ const AssignmentDetail: React.FC = () => {
         onClose={() => { setPairModalOpen(false); setSelectedPair(null); }}
         initialFileA={selectedPair?.file_a}
         initialFileB={selectedPair?.file_b}
+        pairs={reviewQueuePairs}
         assignmentName={assignmentData.name}
+        onActionComplete={() => {
+          refreshData();
+        }}
       />
 
       <Modal isOpen={isFileViewerOpen} onClose={onFileViewerClose} size="4xl" scrollBehavior="inside">

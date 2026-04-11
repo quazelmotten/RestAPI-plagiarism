@@ -2,6 +2,7 @@
 Results domain repository - data access for similarity results using SQL-first approach.
 """
 
+import json
 import uuid
 
 from shared.models import File, PlagiarismTask, SimilarityResult
@@ -11,6 +12,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from results.schemas import FileInfo, ResultItem, ResultsListResponse, TaskResultsResponse
 from schemas.common import PaginatedResponse
 from tasks.schemas import TaskProgress
+
+
+def _normalize_matches(matches_value):
+    if matches_value is None:
+        return []
+    if isinstance(matches_value, list):
+        return matches_value
+    if isinstance(matches_value, str):
+        if matches_value == "[]" or matches_value == "":
+            return []
+        try:
+            parsed = json.loads(matches_value)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    return []
 
 
 class ResultRepository:
@@ -144,7 +161,7 @@ class ResultRepository:
                     "filename": file_map.get(str(r.file_b_id), "Unknown"),
                 },
                 ast_similarity=r.ast_similarity,
-                matches=r.matches or [],
+                matches=_normalize_matches(r.matches),
                 created_at=str(r.created_at) if r.created_at else None,
             )
             for r in results
@@ -304,7 +321,7 @@ class ResultRepository:
                     "filename": all_files_map.get(str(r.file_b_id), "Unknown"),
                 },
                 ast_similarity=r.ast_similarity,
-                matches=r.matches or [],
+                matches=_normalize_matches(r.matches),
                 created_at=str(r.created_at) if r.created_at else None,
             )
             for r in results
@@ -447,22 +464,30 @@ class ResultRepository:
 
         file_ids = [sr.file_a_id, sr.file_b_id]
         files_result = await self.db.execute(
-            select(File.id, File.filename).where(File.id.in_(file_ids))
+            select(File.id, File.filename, File.is_confirmed).where(File.id.in_(file_ids))
         )
         files = files_result.all()
-        file_map = {str(row.id): row.filename for row in files}
+        file_map = {
+            str(row.id): {
+                "filename": row.filename,
+                "is_confirmed": bool(row.is_confirmed) if row.is_confirmed else False,
+            }
+            for row in files
+        }
 
         return ResultItem(
             file_a={
                 "id": str(sr.file_a_id),
-                "filename": file_map.get(str(sr.file_a_id), "Unknown"),
+                "filename": file_map.get(str(sr.file_a_id), {}).get("filename", "Unknown"),
+                "is_confirmed": file_map.get(str(sr.file_a_id), {}).get("is_confirmed", False),
             },
             file_b={
                 "id": str(sr.file_b_id),
-                "filename": file_map.get(str(sr.file_b_id), "Unknown"),
+                "filename": file_map.get(str(sr.file_b_id), {}).get("filename", "Unknown"),
+                "is_confirmed": file_map.get(str(sr.file_b_id), {}).get("is_confirmed", False),
             },
             ast_similarity=sr.ast_similarity,
-            matches=sr.matches or [],
+            matches=_normalize_matches(sr.matches),
             created_at=sr.created_at.isoformat() if sr.created_at else None,
         )
 
@@ -502,3 +527,35 @@ class ResultRepository:
             histogram.append({"range": f"{lower_pct}-{upper_pct}%", "count": count})
 
         return {"histogram": histogram, "total": total, "bins": bins}
+
+    async def _map_to_result_item(self, sr: SimilarityResult) -> ResultItem:
+        """Map SimilarityResult to ResultItem with file info."""
+        file_ids = [sr.file_a_id, sr.file_b_id]
+        files_result = await self.db.execute(
+            select(File.id, File.filename, File.is_confirmed).where(File.id.in_(file_ids))
+        )
+        files = files_result.all()
+        file_map = {
+            str(row.id): {
+                "filename": row.filename,
+                "is_confirmed": bool(row.is_confirmed) if row.is_confirmed else False,
+            }
+            for row in files
+        }
+
+        return ResultItem(
+            id=str(sr.id),
+            file_a={
+                "id": str(sr.file_a_id),
+                "filename": file_map.get(str(sr.file_a_id), {}).get("filename", "Unknown"),
+                "is_confirmed": file_map.get(str(sr.file_a_id), {}).get("is_confirmed", False),
+            },
+            file_b={
+                "id": str(sr.file_b_id),
+                "filename": file_map.get(str(sr.file_b_id), {}).get("filename", "Unknown"),
+                "is_confirmed": file_map.get(str(sr.file_b_id), {}).get("is_confirmed", False),
+            },
+            ast_similarity=sr.ast_similarity,
+            matches=_normalize_matches(sr.matches),
+            created_at=sr.created_at.isoformat() if sr.created_at else None,
+        )

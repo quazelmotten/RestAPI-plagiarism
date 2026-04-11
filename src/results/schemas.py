@@ -32,9 +32,11 @@ class FileInfo(CustomBaseModel):
     filename: str
     task_id: str | None = None
     max_similarity: float | None = None
+    is_confirmed: bool = False
 
 
 class ResultItem(CustomBaseModel):
+    id: str | None = None
     file_a: FileInfo
     file_b: FileInfo
     ast_similarity: float | None = None
@@ -76,3 +78,31 @@ class HistogramResponse(CustomBaseModel):
 
     histogram: list[HistogramBin]
     total: int
+
+
+class ReviewQueueResponse(CustomBaseModel):
+    """Smart review queue for an assignment."""
+
+    assignment_id: str
+    total_files: int
+    confirmed_files: int
+    remaining_files: int
+    queue: list[ResultItem]
+    estimated_reviews: int
+
+
+class BulkConfirmResponse(CustomBaseModel):
+    """Response for bulk confirm operation."""
+
+    assignment_id: str
+    threshold: float
+    confirmed_pairs: int
+    confirmed_files: int
+    skipped_pairs: int
+
+
+class ReviewExportResponse(CustomBaseModel):
+    """Response for review export containing HTML content."""
+
+    html_content: str
+    filename: str
