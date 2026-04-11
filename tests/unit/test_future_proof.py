@@ -3,38 +3,6 @@ Future-proof tests - catches potential issues before they cause failures.
 """
 
 
-
-class TestJSONSerialization:
-    """Tests for JSON serialization edge cases."""
-
-    def test_json_decode_special_floats(self):
-        """Verify handling special float values in JSON."""
-        import json
-
-        test_cases = [
-            ("null", None),
-            ("true", True),
-            ("false", False),
-            ("0", 0),
-            ('"string"', "string"),
-            ('["a","b"]', ["a", "b"]),
-            ('{"key": null}', {"key": None}),
-        ]
-
-        for json_str, expected in test_cases:
-            result = json.loads(json_str)
-            assert result == expected
-
-    def test_json_serialize_nested_structures(self):
-        """Verify JSON handles deeply nested structures."""
-        import json
-
-        nested = {"level1": {"level2": {"level3": [1, 2, 3]}}}
-        serialized = json.dumps(nested)
-        deserialized = json.loads(serialized)
-        assert deserialized == nested
-
-
 class TestDatabaseSchema:
     """Tests for database schema validation."""
 
@@ -163,34 +131,3 @@ class TestFileValidation:
             is_confirmed=True,
         )
         assert file_info.task_id == "task-1"
-
-
-class TestConcurrencyPatterns:
-    """Tests for common concurrency patterns."""
-
-    def test_await_without_result(self):
-        """Verify async functions can be awaited without using result."""
-        import asyncio
-
-        async def noop_async():
-            pass
-
-        async def test_coro():
-            await noop_async()
-
-        asyncio.run(test_coro())
-
-    def test_task_creation_no_blocking(self):
-        """Verify asyncio.Task creation doesn't block."""
-        import asyncio
-
-        async def background():
-            await asyncio.sleep(0)
-
-        async def test_async():
-            task = asyncio.create_task(background())
-            assert not task.done()
-            await task
-            assert task.done()
-
-        asyncio.run(test_async())

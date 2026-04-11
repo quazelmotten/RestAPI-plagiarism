@@ -1,19 +1,22 @@
 import os
 import sys
-
 import pytest
 
-# Set up environment variables before importing
-os.environ.setdefault("STORAGE_LOCAL_PATH", "/tmp/test_s3_storage")
-os.environ.setdefault("DB_HOST", "localhost")
-os.environ.setdefault("DB_PORT", "5432")
-os.environ.setdefault("DB_NAME", "test_db")
-os.environ.setdefault("DB_USER", "test_user")
-os.environ.setdefault("DB_PASS", "test_password_12345678")
-os.environ.setdefault("RMQ_HOST", "localhost")
-os.environ.setdefault("RMQ_PORT", "5672")
-os.environ.setdefault("RMQ_USER", "test_mq_user")
-os.environ.setdefault("RMQ_PASS", "test_mq_password_12345678")
+# Check if running integration tests - if so, skip autouse fixtures
+RUNNING_INTEGRATION_TESTS = "INTEGRATION_TESTS" in os.environ
+
+# Only set DB defaults if not already set AND not in integration tests
+if not RUNNING_INTEGRATION_TESTS:
+    os.environ.setdefault("STORAGE_LOCAL_PATH", "/tmp/test_s3_storage")
+    os.environ.setdefault("DB_HOST", "localhost")
+    os.environ.setdefault("DB_PORT", "5432")
+    os.environ.setdefault("DB_NAME", "test_db")
+    os.environ.setdefault("DB_USER", "test_user")
+    os.environ.setdefault("DB_PASS", "test_password_12345678")
+    os.environ.setdefault("RMQ_HOST", "localhost")
+    os.environ.setdefault("RMQ_PORT", "5672")
+    os.environ.setdefault("RMQ_USER", "test_mq_user")
+    os.environ.setdefault("RMQ_PASS", "test_mq_password_12345678")
 
 # Resolve src path relative to project root (parent of tests/)
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,7 +46,7 @@ if "models" not in sys.modules:
     spec.loader.exec_module(models_pkg)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=not RUNNING_INTEGRATION_TESTS)
 def mock_rabbit(monkeypatch):
     """Mock RabbitMQ publish_message."""
     from unittest.mock import AsyncMock
@@ -55,7 +58,7 @@ def mock_rabbit(monkeypatch):
         pass
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=not RUNNING_INTEGRATION_TESTS)
 def mock_database():
     """Mock database session and domain dependencies via FastAPI dependency_overrides."""
     from unittest.mock import AsyncMock, MagicMock
@@ -174,3 +177,21 @@ def mock_database():
 
     # Clean up overrides after test
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def sample_assignment_payload():
+    """Returns a minimal valid assignment payload."""
+    return {"name": "Test Assignment", "description": "Test description"}
+
+
+@pytest.fixture
+def sample_task_payload():
+    """Returns a minimal valid task payload."""
+    return {"language": "python"}
+
+
+@pytest.fixture
+def sample_subject_payload():
+    """Returns a minimal valid subject payload."""
+    return {"name": "Test Subject", "description": "Test subject description"}

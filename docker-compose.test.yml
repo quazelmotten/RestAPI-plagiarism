@@ -1,0 +1,82 @@
+services:
+  postgres-test:
+    container_name: plagiarism-db-test
+    hostname: db-test
+    image: postgres:15
+    environment:
+      POSTGRES_DB: plagiarism_db
+      POSTGRES_USER: plagiarism_user
+      POSTGRES_PASSWORD: iNseUMJMuFlX1Q5Sr6yPwjUDPprX4VMP
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    networks:
+      - plagiarism-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plagiarism_user -d plagiarism_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  redis-test:
+    container_name: plagiarism-redis-test
+    hostname: redis-test
+    image: redis:8.6.1-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-test-data:/data
+    networks:
+      - plagiarism-test-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  rabbitmq-test:
+    container_name: plagiarism-rabbitmq-test
+    hostname: rabbitmq-test
+    image: rabbitmq:4.2.4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: plagiarism_mq_user
+      RABBITMQ_DEFAULT_PASS: 06l6of6Shsz9n11Is5nWAGO9oJsEXrcI
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    volumes:
+      - rabbitmq-test-data:/var/lib/rabbitmq
+    networks:
+      - plagiarism-test-network
+    healthcheck:
+      test: rabbitmq-diagnostics -q status
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  postgres-test-data:
+    driver: local
+  redis-test-data:
+    driver: local
+  rabbitmq-test-data:
+    driver: local
+
+networks:
+  plagiarism-test-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
