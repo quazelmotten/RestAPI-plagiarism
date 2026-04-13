@@ -21,6 +21,7 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { FiMoon, FiSun, FiClock, FiChevronDown } from 'react-icons/fi';
 import { FiCheckCircle, FiAlertCircle, FiActivity, FiLayers } from 'react-icons/fi';
 import { useViewMode } from '../contexts/ViewModeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { SIDEBAR_WIDTH_PX } from '../constants/layout';
 import { useTasksList } from '../hooks/useTaskQueries';
 import { getStatusColorScheme } from '../utils/statusColors';
@@ -59,6 +60,7 @@ const getStatusIcon = (status: string) => {
 };
 
 const Header: React.FC = () => {
+  const { logout } = useAuth();
   const { colorMode, toggleColorMode } = useColorMode();
   const { t } = useTranslation('navigation');
   const { mode, setMode } = useViewMode();
@@ -232,6 +234,16 @@ const Header: React.FC = () => {
             variant="ghost"
             size="md"
           />
+          {/* Logout button */}
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={async () => {
+              await logout();
+            }}
+          >
+            Logout
+          </Button>
         </Flex>
       </Flex>
     </Box>

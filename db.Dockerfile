@@ -12,6 +12,7 @@ RUN pip install -r requirements.txt
 COPY database ./
 COPY shared /app/shared
 COPY src /app/src
+COPY --chown=postgres:postgres .env ./
 
 ENV PYTHONPATH=/app
 

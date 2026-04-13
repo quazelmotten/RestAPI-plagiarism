@@ -174,6 +174,8 @@ class PostgresRepository(TaskRepository):
     def _update_file_max_similarity(self, session, results: list[dict[str, Any]]) -> None:
         """Update cached max_similarity on files affected by the inserted results."""
         from sqlalchemy import text
+        from sqlalchemy.dialects.postgresql import UUID
+        from sqlalchemy import cast, ARRAY
 
         file_ids = set()
         for r in results:
@@ -182,8 +184,14 @@ class PostgresRepository(TaskRepository):
         if not file_ids:
             return
 
-        file_ids_list = ",".join(f"'{fid}'" for fid in file_ids)
-        stmt = text(f"""
+        file_ids_list = list(file_ids)
+
+        # Convert string IDs to UUID objects for proper typing
+        from uuid import UUID as PyUUID
+
+        file_ids_uuid = [PyUUID(fid) for fid in file_ids_list]
+
+        stmt = text("""
             UPDATE files
             SET max_similarity = sub.max_sim
             FROM (
@@ -194,11 +202,11 @@ class PostgresRepository(TaskRepository):
                 FROM files f
                 LEFT JOIN similarity_results sr
                     ON (sr.file_a_id = f.id OR sr.file_b_id = f.id)
-                WHERE f.id IN ({file_ids_list})
+                WHERE f.id = ANY(:file_ids)
                 GROUP BY f.id
             ) sub
             WHERE files.id = sub.id
-        """)
+        """).bindparams(file_ids=file_ids_uuid)
         session.execute(stmt)
 
     def get_max_similarity(self, task_id: str) -> float:

@@ -31,6 +31,9 @@ class PlagiarismConfig(BaseSettings):
     # File size limits
     max_file_size: int = Field(default=1048576, validation_alias="MAX_FILE_SIZE")  # 1MB
     max_files_per_batch: int = Field(default=100, validation_alias="MAX_FILES_PER_BATCH")
+    max_upload_request_size: int = Field(
+        default=52428800, validation_alias="MAX_UPLOAD_REQUEST_SIZE"
+    )  # 50MB
 
     @field_validator("default_threshold")
     @classmethod

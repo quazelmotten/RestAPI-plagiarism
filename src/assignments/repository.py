@@ -48,38 +48,11 @@ class SubjectRepository:
             created_at=subject.created_at.isoformat() if subject.created_at else None,
             assignments_count=assignments_count,
         )
-        assignments_count = assignments_count_result.scalar_one()
-
-        return SubjectResponse(
-            id=str(subject.id),
-            name=subject.name,
-            description=subject.description,
-            created_at=subject.created_at.isoformat() if subject.created_at else None,
-            assignments_count=assignments_count,
-        )
 
     async def get_subject_by_name(self, name: str) -> SubjectResponse | None:
         """Get a subject by name with assignment count."""
         result = await self.db.execute(
             select(Subject).where(Subject.name == name, Subject.deleted_at.is_(None))
-        )
-        subject = result.scalar_one_or_none()
-        if not subject:
-            return None
-
-        assignments_count_result = await self.db.execute(
-            select(func.count())
-            .select_from(Assignment)
-            .where(Assignment.subject_id == subject.id, Assignment.deleted_at.is_(None))
-        )
-        assignments_count = assignments_count_result.scalar_one()
-
-        return SubjectResponse(
-            id=str(subject.id),
-            name=subject.name,
-            description=subject.description,
-            created_at=subject.created_at.isoformat() if subject.created_at else None,
-            assignments_count=assignments_count,
         )
         subject = result.scalar_one_or_none()
         if not subject:
@@ -300,8 +273,15 @@ class SubjectRepository:
         limit: int = 50,
         offset: int = 0,
         assignment_limit: int = 100,
+        user_id: str | None = None,
     ) -> list[SubjectWithAssignments]:
-        """Get all subjects with their nested assignments."""
+        """Get all subjects with their nested assignments.
+
+        If user_id is provided, filters to only subjects the user has access to
+        (unless they're a global admin).
+        """
+        from shared.models import SubjectAccess
+
         assignments_count_subq = (
             select(
                 Assignment.subject_id,
@@ -345,10 +325,15 @@ class SubjectRepository:
             )
             .outerjoin(assignments_count_subq, Subject.id == assignments_count_subq.c.subject_id)
             .where(Subject.deleted_at.is_(None))
-            .order_by(Subject.created_at.desc())
-            .limit(limit)
-            .offset(offset)
         )
+
+        if user_id:
+            user_access_subq = (
+                select(SubjectAccess.subject_id).where(SubjectAccess.user_id == user_id).subquery()
+            )
+            query = query.where(Subject.id.in_(user_access_subq))
+
+        query = query.order_by(Subject.created_at.desc()).limit(limit).offset(offset)
 
         result = await self.db.execute(query)
         subject_rows = result.all()
@@ -403,69 +388,6 @@ class SubjectRepository:
             )
 
         return subjects_with_assignments
-
-    async def get_uncategorized_assignments(
-        self,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[AssignmentResponse]:
-        """Get assignments without a subject or whose subject is soft-deleted."""
-        tasks_count_subq = (
-            select(
-                PlagiarismTask.assignment_id,
-                func.count().label("tasks_count"),
-            )
-            .where(PlagiarismTask.assignment_id.isnot(None))
-            .where(PlagiarismTask.deleted_at.is_(None))  # Filter out deleted tasks
-            .group_by(PlagiarismTask.assignment_id)
-            .subquery()
-        )
-
-        files_count_subq = (
-            select(
-                PlagiarismTask.assignment_id,
-                func.count(File.id).label("files_count"),
-            )
-            .join(File, File.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id.isnot(None))
-            .where(File.deleted_at.is_(None))  # Filter out deleted files
-            .group_by(PlagiarismTask.assignment_id)
-            .subquery()
-        )
-
-        query = (
-            select(
-                Assignment,
-                func.coalesce(tasks_count_subq.c.tasks_count, 0).label("tasks_count"),
-                func.coalesce(files_count_subq.c.files_count, 0).label("files_count"),
-            )
-            .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
-            .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
-            .outerjoin(Subject, Assignment.subject_id == Subject.id)
-            .where((Assignment.subject_id.is_(None)) | (Subject.deleted_at.isnot(None)))
-            .where(Assignment.deleted_at.is_(None))  # Filter out deleted assignments
-            .order_by(Assignment.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-
-        result = await self.db.execute(query)
-        rows = result.all()
-
-        return [
-            AssignmentResponse(
-                id=str(row.Assignment.id),
-                name=row.Assignment.name,
-                description=row.Assignment.description,
-                subject_id=None,
-                created_at=row.Assignment.created_at.isoformat()
-                if row.Assignment.created_at
-                else None,
-                tasks_count=row.tasks_count,
-                files_count=row.files_count,
-            )
-            for row in rows
-        ]
 
     async def create_subject(
         self, subject_id: str, name: str, description: str | None
@@ -536,6 +458,74 @@ class AssignmentRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def get_uncategorized_assignments(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[AssignmentResponse]:
+        """Get assignments without a subject or whose subject is soft-deleted."""
+        tasks_count_subq = (
+            select(
+                PlagiarismTask.assignment_id,
+                func.count().label("tasks_count"),
+            )
+            .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(PlagiarismTask.deleted_at.is_(None))  # Filter out deleted tasks
+            .group_by(PlagiarismTask.assignment_id)
+            .subquery()
+        )
+
+        files_count_subq = (
+            select(
+                PlagiarismTask.assignment_id,
+                func.count(File.id).label("files_count"),
+            )
+            .join(File, File.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(File.deleted_at.is_(None))  # Filter out deleted files
+            .group_by(PlagiarismTask.assignment_id)
+            .subquery()
+        )
+
+        query = (
+            select(
+                Assignment,
+                func.coalesce(tasks_count_subq.c.tasks_count, 0).label("tasks_count"),
+                func.coalesce(files_count_subq.c.files_count, 0).label("files_count"),
+            )
+            .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
+            .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
+            .outerjoin(Subject, Assignment.subject_id == Subject.id)
+            .where((Assignment.subject_id.is_(None)) | (Subject.deleted_at.isnot(None)))
+            .where(Assignment.deleted_at.is_(None))  # Filter out deleted assignments
+            .order_by(Assignment.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        return [
+            AssignmentResponse(
+                id=str(row.Assignment.id),
+                name=row.Assignment.name,
+                description=row.Assignment.description,
+                subject_id=None,
+                created_at=row.Assignment.created_at.isoformat()
+                if row.Assignment.created_at
+                else None,
+                tasks_count=row.tasks_count,
+                files_count=row.files_count,
+            )
+            for row in rows
+        ]
+
+    """Repository for assignment-related database operations."""
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
     async def get_assignment(
         self, assignment_id: str, include_deleted: bool = False
     ) -> AssignmentResponse | None:
@@ -560,25 +550,6 @@ class AssignmentRepository:
             .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
             .where(PlagiarismTask.assignment_id == assignment_id)
             .where(File.deleted_at.is_(None))  # Filter out deleted files
-        )
-        files_count = files_count_result.scalar_one()
-
-        return AssignmentResponse(
-            id=str(assignment.id),
-            name=assignment.name,
-            description=assignment.description,
-            subject_id=str(assignment.subject_id) if assignment.subject_id else None,
-            created_at=assignment.created_at.isoformat() if assignment.created_at else None,
-            tasks_count=tasks_count,
-            files_count=files_count,
-        )
-        tasks_count = tasks_count_result.scalar_one()
-
-        files_count_result = await self.db.execute(
-            select(func.count())
-            .select_from(File)
-            .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id == assignment_id)
         )
         files_count = files_count_result.scalar_one()
 

@@ -10,6 +10,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .app import AppConfig
+from .auth import AuthConfig
 from .database import DatabaseConfig
 from .logging import LoggingConfig
 from .monitoring import MonitoringConfig
@@ -22,6 +23,7 @@ from .worker import WorkerConfig
 
 __all__ = [
     "AppConfig",
+    "AuthConfig",
     "DatabaseConfig",
     "RedisConfig",
     "RabbitMQConfig",
@@ -51,6 +53,7 @@ class Settings(BaseSettings):
 
     # Initialize all configs
     app: AppConfig = Field(default_factory=AppConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     redis: RedisConfig = Field(default_factory=RedisConfig)
     rabbitmq: RabbitMQConfig = Field(default_factory=RabbitMQConfig)
@@ -107,6 +110,22 @@ class Settings(BaseSettings):
         return self.app.subpath_normalized
 
     @property
+    def secret_key(self) -> str:
+        return self.app.secret_key
+
+    @property
+    def jwt_algorithm(self) -> str:
+        return self.app.jwt_algorithm
+
+    @property
+    def access_token_expire_minutes(self) -> int:
+        return self.app.access_token_expire_minutes
+
+    @property
+    def refresh_token_expire_days(self) -> int:
+        return self.auth.refresh_token_expire_days
+
+    @property
     def db_sync_url(self) -> str:
         return self.database.sync_url
 
@@ -141,6 +160,10 @@ class Settings(BaseSettings):
     @property
     def max_files_per_batch(self) -> int:
         return self.plagiarism.max_files_per_batch
+
+    @property
+    def max_upload_request_size(self) -> int:
+        return self.plagiarism.max_upload_request_size
 
     @property
     def rate_limit_enabled(self) -> bool:

@@ -82,3 +82,16 @@ class RedisClient:
             self._sync_client.close()
             self._sync_client = None
             logger.info("Sync Redis connection closed")
+
+    async def get(self, key: str) -> str | None:
+        """Async get value by key."""
+        client = self.get_async_client()
+        return await client.get(key)
+
+    async def set(self, key: str, value: str, ttl: int | None = None) -> None:
+        """Async set key with optional TTL."""
+        client = self.get_async_client()
+        if ttl:
+            await client.set(key, value, ex=ttl)
+        else:
+            await client.set(key, value)

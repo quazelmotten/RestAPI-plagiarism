@@ -170,3 +170,19 @@ class ReviewNote(SharedBase):
 
     # Relationship to file
     file: Mapped["File"] = relationship("File", back_populates="review_notes")
+
+
+class SubjectAccess(SharedBase):
+    """Tracks which users have access to which subjects."""
+
+    __tablename__ = "subject_access"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    subject_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("subjects.id"), nullable=False
+    )
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    granted_by: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )

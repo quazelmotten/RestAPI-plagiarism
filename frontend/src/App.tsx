@@ -1,8 +1,15 @@
-import { ChakraProvider, extendTheme, ColorModeScript } from '@chakra-ui/react';
+import { ChakraProvider, extendTheme, ColorModeScript, CSSReset } from '@chakra-ui/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router';
 import Dashboard from './pages/Dashboard';
+import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import Profile from './pages/Profile';
+import Users from './pages/Users';
 import { getBasePath } from './utils/subpath';
+import { isAuthenticated } from './services/api';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,19 +51,66 @@ const theme = extendTheme({
 
 const BASE = getBasePath();
 
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+  if (!user?.is_global_admin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <>
       <ColorModeScript initialColorMode={theme.config.initialColorMode} />
+      <CSSReset />
       <ChakraProvider theme={theme}>
-        <QueryClientProvider client={queryClient}>
-          <Router basename={BASE}>
-            <Routes>
-              <Route path="/dashboard/*" element={<Dashboard />} />
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-          </Router>
-        </QueryClientProvider>
+<QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <Router basename={BASE}>
+                <Routes>
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
+                  <Route
+                    path="/dashboard/*"
+                    element={
+                      <ProtectedRoute>
+                        <Dashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/profile"
+                    element={
+                      <ProtectedRoute>
+                        <Profile />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/dashboard/users"
+                    element={
+                      <AdminRoute>
+                        <Users />
+                      </AdminRoute>
+                    }
+                  />
+                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                </Routes>
+              </Router>
+            </AuthProvider>
+          </QueryClientProvider>
       </ChakraProvider>
     </>
   );

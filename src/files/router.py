@@ -7,6 +7,8 @@ import uuid
 
 from fastapi import APIRouter, Depends, Path, Query, status
 
+from auth.dependencies import get_current_user
+from auth.models import User
 from dependencies import get_s3_storage
 from exceptions.exceptions import NotFoundError
 from files.dependencies import get_file_service, valid_file_id
@@ -57,6 +59,7 @@ async def get_files(
     submitted_before: str | None = Query(
         default=None, description="Filter by submission date (YYYY-MM-DD)"
     ),
+    current_user: User = Depends(get_current_user),
 ):
     """Get paginated list of files with optional filters."""
     return await file_service.get_files(
@@ -91,6 +94,7 @@ async def get_file_list(
     file_service: FileService = Depends(get_file_service),
     limit: int = Query(default=50, ge=1, le=500, description="Number of files to return"),
     offset: int = Query(default=0, ge=0, description="Number of files to skip"),
+    current_user: User = Depends(get_current_user),
 ):
     """Get minimal file list for dropdowns (id, filename, language)."""
     return await file_service.get_all_file_info()
@@ -117,6 +121,7 @@ async def get_file_similarities(
     file_service: FileService = Depends(get_file_service),
     limit: int = Query(default=50, ge=1, le=500, description="Number of results to return"),
     offset: int = Query(default=0, ge=0, description="Number of results to skip"),
+    current_user: User = Depends(get_current_user),
 ):
     """Get all similarity results involving this file, with details of the other file."""
     return await file_service.get_file_similarities(str(file_id))
@@ -142,6 +147,7 @@ async def get_file_content(
     file: FileResponse = Depends(valid_file_id),
     storage=Depends(get_s3_storage),
     file_service: FileService = Depends(get_file_service),
+    current_user: User = Depends(get_current_user),
 ):
     """Get file content by file ID. Uses dependency validation to ensure file exists."""
     content = await file_service.get_file_content(str(file.id), storage)
@@ -169,8 +175,9 @@ async def get_file_content(
 async def unconfirm_file(
     file_id: uuid.UUID,
     file_service: FileService = Depends(get_file_service),
+    current_user: User = Depends(get_current_user),
 ):
-    """Remove confirmed status from a file."""
+    """Remove confirmed status from a file. Requires reviewer or higher role."""
     return await file_service.unconfirm_file(str(file_id))
 
 
@@ -193,6 +200,7 @@ async def unconfirm_file(
 async def get_file_notes(
     file_id: uuid.UUID,
     file_service: FileService = Depends(get_file_service),
+    current_user: User = Depends(get_current_user),
 ):
     """Get all notes for a file."""
     return await file_service.get_file_notes(str(file_id))
@@ -218,8 +226,9 @@ async def add_file_note(
     file_id: uuid.UUID,
     note: ReviewNoteCreate,
     file_service: FileService = Depends(get_file_service),
+    current_user: User = Depends(get_current_user),
 ):
-    """Add a note to a file."""
+    """Add a note to a file. Requires reviewer or higher role."""
     return await file_service.add_file_note(str(file_id), note.content)
 
 
@@ -241,6 +250,7 @@ async def add_file_note(
 async def delete_note(
     note_id: uuid.UUID,
     file_service: FileService = Depends(get_file_service),
+    current_user: User = Depends(get_current_user),
 ):
-    """Delete a note."""
+    """Delete a note. Requires reviewer or higher role."""
     await file_service.delete_note(str(note_id))

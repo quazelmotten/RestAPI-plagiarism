@@ -7,6 +7,8 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query, status
 
+from auth.dependencies import get_current_user
+from auth.models import User
 from dependencies import get_fingerprint_cache
 from exceptions.exceptions import NotFoundError
 from results.dependencies import get_result_service
@@ -47,6 +49,7 @@ async def get_plagiarism_results(
     result_service: ResultService = Depends(get_result_service),
     limit: int = Query(default=50, ge=1, le=500, description="Number of results to return"),
     offset: int = Query(default=0, ge=0, description="Number of results to skip for pagination"),
+    current_user: User = Depends(get_current_user),
 ):
     """Get detailed similarity results for all file pairs in a task with progress."""
     result = await result_service.get_task_results(str(task_id), limit=limit, offset=offset)
@@ -75,6 +78,7 @@ async def get_task_histogram(
     task_id: uuid.UUID,
     bins: int = Query(200, ge=5, le=1000, description="Number of histogram bins (5-1000)"),
     result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
 ):
     """Get histogram data for a task's similarity distribution using SQL GROUP BY."""
     return await result_service.get_task_histogram(str(task_id), bins)
@@ -96,6 +100,7 @@ async def get_all_results(
     result_service: ResultService = Depends(get_result_service),
     limit: int = Query(default=50, ge=1, le=500, description="Number of results to return"),
     offset: int = Query(default=0, ge=0, description="Number of results to skip"),
+    current_user: User = Depends(get_current_user),
 ):
     """Get all similarity results across all tasks with file details and progress."""
     return await result_service.get_all_results(limit=limit, offset=offset)
@@ -121,6 +126,7 @@ async def get_file_pair(
     file_a: uuid.UUID = Query(..., description="UUID of first file"),
     file_b: uuid.UUID = Query(..., description="UUID of second file"),
     result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
 ):
     """Get a specific file comparison result."""
     result = await result_service.get_file_pair(str(file_a), str(file_b))
@@ -150,6 +156,7 @@ async def analyze_file_pair(
     file_b: uuid.UUID = Query(..., description="UUID of second file"),
     result_service: ResultService = Depends(get_result_service),
     cache=Depends(get_fingerprint_cache),
+    current_user: User = Depends(get_current_user),
 ):
     """Run full plagiarism analysis on-demand for a file pair. Updates DB with matches."""
     return await result_service.analyze_file_pair(str(file_a), str(file_b), cache)
@@ -174,6 +181,7 @@ async def analyze_file_pair(
 async def confirm_plagiarism(
     result_id: uuid.UUID,
     result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
 ):
     """Confirm plagiarism for a pair - marks both files as confirmed."""
     return await result_service.confirm_plagiarism(str(result_id))
@@ -198,6 +206,7 @@ async def confirm_plagiarism(
 async def skip_pair(
     result_id: uuid.UUID,
     result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
 ):
     """Skip a pair - marks as reviewed but not confirmed."""
     return await result_service.skip_pair(str(result_id))
@@ -207,7 +216,7 @@ async def skip_pair(
     "/assignments/{assignment_id}/bulk-confirm",
     response_model=BulkConfirmResponse,
     summary="Bulk confirm pairs above threshold",
-    description="Confirm all pairs with similarity above a threshold.",
+    description="Confirm all pairs with similarity above a threshold. Admin only.",
     responses={
         status.HTTP_200_OK: {
             "model": BulkConfirmResponse,
@@ -223,8 +232,9 @@ async def bulk_confirm(
     assignment_id: uuid.UUID,
     threshold: float = Query(..., ge=0.0, le=1.0, description="Similarity threshold (0.0-1.0)"),
     result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
 ):
-    """Bulk confirm all pairs above threshold."""
+    """Bulk confirm all pairs above threshold. Admin only."""
     return await result_service.bulk_confirm(str(assignment_id), threshold)
 
 
@@ -232,7 +242,7 @@ async def bulk_confirm(
     "/assignments/{assignment_id}/bulk-clear",
     response_model=BulkConfirmResponse,
     summary="Bulk clear pairs",
-    description="Clear all pairs (set as not plagiarized) above threshold.",
+    description="Clear all pairs (set as not plagiarized) above threshold. Admin only.",
     responses={
         status.HTTP_200_OK: {
             "model": BulkConfirmResponse,
@@ -246,8 +256,9 @@ async def bulk_clear(
         default=0.0, ge=0.0, le=1.0, description="Similarity threshold (0.0-1.0)"
     ),
     result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
 ):
-    """Bulk clear all pairs above threshold."""
+    """Bulk clear all pairs above threshold. Admin only."""
     return await result_service.bulk_clear(str(assignment_id), threshold)
 
 
@@ -271,6 +282,7 @@ async def get_review_queue(
     assignment_id: uuid.UUID,
     result_service: ResultService = Depends(get_result_service),
     limit: int = Query(default=50, ge=1, le=500),
+    current_user: User = Depends(get_current_user),
 ):
     """Get smart review queue prioritized by unconfirmed files."""
     return await result_service.get_review_queue(str(assignment_id), limit)
@@ -295,6 +307,7 @@ async def get_review_queue(
 async def get_review_status(
     assignment_id: uuid.UUID,
     result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
 ):
     """Get review status summary for an assignment."""
     return await result_service.get_review_status(str(assignment_id))
@@ -320,6 +333,7 @@ async def get_top_similar_pairs(
     file_id: uuid.UUID,
     result_service: ResultService = Depends(get_result_service),
     limit: int = Query(default=5, ge=1, le=10),
+    current_user: User = Depends(get_current_user),
 ):
     """Get top similar pairs for a file."""
     return await result_service.get_top_similar_pairs(str(file_id), limit)
@@ -347,6 +361,7 @@ async def export_review(
     threshold: float = Query(
         default=0.3, ge=0.0, le=1.0, description="Similarity threshold for suspicious pairs"
     ),
+    current_user: User = Depends(get_current_user),
 ):
     """Export review data as HTML."""
     return await result_service.export_review_html(str(assignment_id), threshold)
@@ -371,6 +386,7 @@ async def export_review(
 async def clear_pair(
     result_id: uuid.UUID,
     result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
 ):
     """Clear a pair - marks as reviewed but not plagiarism."""
     return await result_service.clear_pair(str(result_id))
@@ -395,6 +411,7 @@ async def clear_pair(
 async def undo_review(
     result_id: uuid.UUID,
     result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
 ):
     """Undo review - reset pair to unreviewed."""
     return await result_service.undo_review(str(result_id))
@@ -411,6 +428,7 @@ async def get_cleared_pairs(
     result_service: ResultService = Depends(get_result_service),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
 ):
     """Get cleared pairs for an assignment."""
     return await result_service.get_cleared_pairs(str(assignment_id), limit, offset)
@@ -427,6 +445,7 @@ async def get_plagiarism_pairs(
     result_service: ResultService = Depends(get_result_service),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
 ):
     """Get plagiarism pairs for an assignment."""
     return await result_service.get_plagiarism_pairs(str(assignment_id), limit, offset)
@@ -447,6 +466,7 @@ async def get_pairs_by_status(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
 ):
     """Get pairs by status for an assignment."""
     return await result_service.get_pairs_by_status(str(assignment_id), status, limit, offset)

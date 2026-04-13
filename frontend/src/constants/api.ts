@@ -49,7 +49,10 @@ export const API_ENDPOINTS = {
   // Subjects
   SUBJECTS: '/plagiarism/subjects',
   SUBJECT_WITH_ASSIGNMENTS: (id: string) => `/plagiarism/subjects/${id}/assignments`,
-  UNCATEGORIZED_ASSIGNMENTS: '/plagiarism/subjects/uncategorized',
+  SUBJECT_GRANT: (id: string) => `/plagiarism/subjects/${id}/grant`,
+  SUBJECT_MEMBERS: (id: string) => `/plagiarism/subjects/${id}/members`,
+  SUBJECT_REVOKE: (id: string, userId: string) => `/plagiarism/subjects/${id}/access/${userId}`,
+  UNCATEGORIZED_ASSIGNMENTS: '/plagiarism/assignments/uncategorized',
   SUBJECT_RESTORE: (id: string) => `/plagiarism/subjects/${id}/restore`,
 
   // Health & version

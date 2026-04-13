@@ -3,6 +3,17 @@ import api, { API_ENDPOINTS } from '../services/api';
 import type { Subject, SubjectWithAssignments, Assignment } from '../types';
 import { restoreSubject, restoreAssignment } from '../services/api';
 
+interface SubjectMember {
+  user_id: string;
+  email: string;
+  granted_at: string;
+  granted_by: string | null;
+}
+
+interface SubjectMembersResponse {
+  members: SubjectMember[];
+}
+
 interface SubjectsResponse {
   items: Subject[];
   total: number;
@@ -15,7 +26,7 @@ export function useSubjects() {
     queryKey: ['subjects'],
     queryFn: async () => {
       const res = await api.get(API_ENDPOINTS.SUBJECTS);
-      return res.data;
+      return res.data.subjects;
     },
   });
 }
@@ -25,7 +36,7 @@ export function useSubjectsWithAssignments() {
     queryKey: ['subjects', 'with-assignments'],
     queryFn: async () => {
       const res = await api.get(API_ENDPOINTS.SUBJECTS);
-      return res.data;
+      return res.data.subjects;
     },
   });
 }
@@ -49,6 +60,7 @@ export function useCreateSubject() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects', 'with-uncategorized'] });
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
     },
   });
@@ -63,6 +75,7 @@ export function useUpdateSubject() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects', 'with-uncategorized'] });
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
     },
   });
@@ -76,6 +89,7 @@ export function useDeleteSubject() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects', 'with-uncategorized'] });
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
     },
   });
@@ -90,6 +104,7 @@ export function useRestoreSubject() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
+      queryClient.invalidateQueries({ queryKey: ['subjects', 'with-uncategorized'] });
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
     },
   });
@@ -105,6 +120,42 @@ export function useRestoreAssignment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
       queryClient.invalidateQueries({ queryKey: ['subjects'] });
+    },
+  });
+}
+
+export function useSubjectMembers(subjectId: string) {
+  return useQuery<SubjectMember[]>({
+    queryKey: ['subject-members', subjectId],
+    queryFn: async () => {
+      const res = await api.get(API_ENDPOINTS.SUBJECT_MEMBERS(subjectId));
+      return res.data.members;
+    },
+    enabled: !!subjectId,
+  });
+}
+
+export function useGrantSubjectAccess() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ subjectId, userEmail }: { subjectId: string; userEmail: string }) => {
+      const res = await api.post(API_ENDPOINTS.SUBJECT_GRANT(subjectId), { user_email: userEmail });
+      return res.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['subject-members', variables.subjectId] });
+    },
+  });
+}
+
+export function useRevokeSubjectAccess() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ subjectId, userId }: { subjectId: string; userId: string }) => {
+      await api.delete(API_ENDPOINTS.SUBJECT_REVOKE(subjectId, userId));
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['subject-members', variables.subjectId] });
     },
   });
 }

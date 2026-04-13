@@ -47,6 +47,13 @@ class AppConfig(BaseSettings):
     # Subpath for routing (e.g., /plagitype)
     subpath: str = Field(default="", validation_alias="SUBPATH")
 
+    # JWT
+    secret_key: str = Field(default="", validation_alias="SECRET_KEY")
+    jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
+    access_token_expire_minutes: int = Field(
+        default=480, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES"
+    )  # 8 hours
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS origins into list."""

@@ -4,7 +4,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from config import settings
-from exceptions.exceptions import NotFoundError, PlagiarismValidationError
+from exceptions.exceptions import (
+    ForbiddenError,
+    NotFoundError,
+    NoAccessError,
+    PlagiarismValidationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,5 +40,19 @@ def add_exception_handler(app: FastAPI) -> None:
     async def validation_exception_handler(request: Request, err: PlagiarismValidationError):
         return JSONResponse(
             status_code=400,
+            content={"status": "error", "error_details": err.message},
+        )
+
+    @app.exception_handler(ForbiddenError)
+    async def forbidden_exception_handler(request: Request, err: ForbiddenError):
+        return JSONResponse(
+            status_code=403,
+            content={"status": "error", "error_details": err.message},
+        )
+
+    @app.exception_handler(NoAccessError)
+    async def no_access_exception_handler(request: Request, err: NoAccessError):
+        return JSONResponse(
+            status_code=403,
             content={"status": "error", "error_details": err.message},
         )

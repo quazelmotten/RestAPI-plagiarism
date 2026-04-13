@@ -59,21 +59,13 @@ class SubjectService:
         limit: int = 50,
         offset: int = 0,
         assignment_limit: int = 100,
+        user_id: str | None = None,
     ) -> list[SubjectWithAssignments]:
         return await self.repo.get_all_subjects_with_assignments(
             limit=limit,
             offset=offset,
             assignment_limit=assignment_limit,
-        )
-
-    async def get_uncategorized_assignments(
-        self,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[AssignmentResponse]:
-        return await self.repo.get_uncategorized_assignments(
-            limit=limit,
-            offset=offset,
+            user_id=user_id,
         )
 
     async def update_subject(self, subject_id: str, data: SubjectUpdate) -> SubjectResponse | None:
@@ -140,3 +132,13 @@ class AssignmentService:
 
     async def restore_assignment(self, assignment_id: str) -> bool:
         return await self.repo.restore_assignment(assignment_id)
+
+    async def get_uncategorized_assignments(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[AssignmentResponse]:
+        return await self.repo.get_uncategorized_assignments(
+            limit=limit,
+            offset=offset,
+        )

@@ -71,12 +71,30 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
 )
 
 # Add security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
+
+
+# Add request size limit middleware
+@app.middleware("http")
+async def request_size_limit(request: Request, call_next):
+    """Limit upload request size to configured maximum."""
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > settings.max_upload_request_size:
+        from starlette.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=413,
+            content={
+                "detail": f"Request too large. Maximum size is {settings.max_upload_request_size} bytes."
+            },
+        )
+    return await call_next(request)
+
 
 # Add rate limiting middleware (if enabled)
 if settings.rate_limit_enabled:
@@ -162,6 +180,11 @@ async def on_startup():
     ws_manager = ConnectionManager()
     await ws_manager.start()
     app.state.ws_manager = ws_manager
+
+    # Create initial admin user from env vars if configured
+    from startup.create_initial_admin import create_initial_admin
+
+    await create_initial_admin()
 
 
 @app.on_event("shutdown")

@@ -14,7 +14,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app, *, content_security_policy: str = None, hsts_max_age: int = 31536000):
         super().__init__(app)
-        self.content_security_policy = content_security_policy or self._default_csp()
+        self.content_security_policy = (
+            content_security_policy if content_security_policy else self._strict_csp()
+        )
         self.hsts_max_age = hsts_max_age
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -26,8 +28,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 f"max-age={self.hsts_max_age}; includeSubDomains; preload"
             )
 
-        # Content Security Policy
-        response.headers["Content-Security-Policy"] = self.content_security_policy
+        # Content Security Policy - vary by path
+        csp = self._get_csp_for_path(request.url.path)
+        response.headers["Content-Security-Policy"] = csp
 
         # X-Content-Type-Options
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -47,14 +50,40 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    def _default_csp(self) -> str:
-        """Default Content Security Policy."""
+    def _get_csp_for_path(self, path: str) -> str:
+        """Get CSP based on request path."""
+        if (
+            path in ("/docs", "/redoc", "/openapi.json")
+            or path.startswith("/docs")
+            or path.startswith("/redoc")
+        ):
+            return self._relaxed_csp()
+        return self._strict_csp()
+
+    def _strict_csp(self) -> str:
+        """Strict CSP for production use."""
         return (
             "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https:; "
+            "font-src 'self' data: https://cdn.jsdelivr.net; "
+            "connect-src 'self' ws: wss:; "
+            "frame-ancestors 'none';"
+        )
+
+    def _relaxed_csp(self) -> str:
+        """Relaxed CSP for Swagger UI and ReDoc."""
+        return (
+            "default-src 'self' 'unsafe-inline'; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "img-src 'self' data: https:; "
             "font-src 'self' data: https://cdn.jsdelivr.net; "
-            "connect-src 'self'; "
+            "connect-src 'self' ws: wss:; "
             "frame-ancestors 'none';"
         )
+
+    def _default_csp(self) -> str:
+        """Default CSP - alias for strict_csp for backward compatibility."""
+        return self._strict_csp()

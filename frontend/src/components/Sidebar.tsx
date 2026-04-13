@@ -46,7 +46,9 @@ import {
   FiFolder,
   FiList,
   FiGlobe,
+  FiUsers,
 } from 'react-icons/fi';
+import { useAuth } from '../contexts/AuthContext';
 import { MdDragIndicator } from 'react-icons/md';
 import api, { API_ENDPOINTS } from '../services/api';
 import { useViewMode } from '../contexts/ViewModeContext';
@@ -68,6 +70,20 @@ interface Assignment {
 
 interface AssignmentsResponse {
   items: Assignment[];
+}
+
+interface SubjectWithAssignments {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string | null;
+  assignments_count: number;
+  assignments: Assignment[];
+}
+
+interface SubjectsWithAssignmentsResponse {
+  subjects: SubjectWithAssignments[];
+  uncategorized: Assignment[];
 }
 
 interface SubjectGroup {
@@ -159,6 +175,7 @@ const Sidebar: React.FC = () => {
   const { t } = useTranslation('navigation');
   const location = useLocation();
   const { mode } = useViewMode();
+  const { user } = useAuth();
   const [assignmentsExpanded, setAssignmentsExpanded] = useState(true);
   const [isBlinking, setIsBlinking] = useState(false);
   const [collapsedSubjects, setCollapsedSubjects] = useState<Set<string>>(() => {
@@ -189,14 +206,19 @@ const Sidebar: React.FC = () => {
 
   const assignments = assignmentsData?.items || [];
 
-  const { data: subjects } = useQuery({
-    queryKey: ['subjects'],
+  const { data: subjectsData, isLoading: subjectsLoading } = useQuery<SubjectsWithAssignmentsResponse>({
+    queryKey: ['subjects', 'with-uncategorized'],
     queryFn: async () => {
       const res = await api.get(API_ENDPOINTS.SUBJECTS);
-      return res.data as { id: string; name: string; description: string | null; created_at: string | null; assignments_count: number }[];
+      return res.data;
     },
     staleTime: 60_000,
   });
+
+  const subjects = subjectsData?.subjects || [];
+  const uncategorizedAssignments = subjectsData?.uncategorized || [];
+
+  const isLoading = assignmentsLoading || subjectsLoading;
 
   const isActive = (path: string) => location.pathname === path || location.pathname === `${path}/`;
 
@@ -219,18 +241,11 @@ const Sidebar: React.FC = () => {
     const subjectMap = new Map<string, Assignment[]>();
     if (subjects) {
       for (const s of subjects) {
-        subjectMap.set(s.id, []);
+        subjectMap.set(s.id, s.assignments || []);
       }
     }
-    const uncategorized: Assignment[] = [];
-
-    for (const a of assignments) {
-      if (a.subject_id && subjectMap.has(a.subject_id)) {
-        subjectMap.get(a.subject_id)!.push(a);
-      } else {
-        uncategorized.push(a);
-      }
-    }
+    // Use uncategorized from the API response, not from assignments
+    const uncategorized = uncategorizedAssignments || [];
 
     const sortAssignments = (groupId: string, arr: Assignment[]) => {
       try {
@@ -366,6 +381,25 @@ const Sidebar: React.FC = () => {
               </Flex>
             </NavLink>
           ))}
+          {user?.is_global_admin && (
+            <NavLink to="/dashboard/users" style={{ textDecoration: 'none' }}>
+              <Flex
+                align="center"
+                px={4}
+                py={3}
+                borderRadius="md"
+                bg={isActive('/dashboard/users') ? 'brand.500' : 'transparent'}
+                color={isActive('/dashboard/users') ? 'white' : 'inherit'}
+                _hover={{
+                  bg: isActive('/dashboard/users') ? 'brand.600' : hoverBg,
+                }}
+                transition="all 0.2s"
+              >
+                <Icon as={FiUsers} boxSize={5} mr={3} />
+                <Text fontWeight="medium">Users</Text>
+              </Flex>
+            </NavLink>
+          )}
         </VStack>
       ) : (
         <DndContext
@@ -434,7 +468,7 @@ const Sidebar: React.FC = () => {
               '&::-webkit-scrollbar': { width: '4px' },
               '&::-webkit-scrollbar-thumb': { bg: scrollbarBg, borderRadius: '2px' },
             }}>
-              {assignmentsLoading ? (
+              {isLoading ? (
                 <Flex justify="center" py={4}>
                   <Spinner size="sm" />
                 </Flex>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
@@ -160,8 +160,9 @@ const AssignmentDetail: React.FC = () => {
   const [loadingFileContent, setLoadingFileContent] = useState(false);
 
   // Fetch full assignment data (server-side paginated results and files)
-  const { data: assignmentData, isLoading, refetch, isFetching } = useQuery<AssignmentFullResponse>({
+const { data: assignmentData, isLoading, refetch, isFetching, error: queryError } = useQuery<AssignmentFullResponse>({
     queryKey: ['assignmentFull', assignmentId, selectedTaskId, pairsPage, filesPage],
+    retry: 0,
     queryFn: async () => {
       const params: Record<string, string> = {};
       if (selectedTaskId) params.task_id = selectedTaskId;
@@ -169,11 +170,24 @@ const AssignmentDetail: React.FC = () => {
       params.offset = String(pairsPage * PAIRS_PER_PAGE);
       params.file_limit = String(FILES_PER_PAGE);
       params.file_offset = String(filesPage * FILES_PER_PAGE);
-      const res = await api.get<AssignmentFullResponse>(API_ENDPOINTS.ASSIGNMENT_FULL(assignmentId!), { params });
-      return res.data;
+      try {
+        const res = await api.get<AssignmentFullResponse>(API_ENDPOINTS.ASSIGNMENT_FULL(assignmentId!), { params });
+        return res.data;
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { data?: { error_details?: string } } };
+        const msg = axiosErr.response?.data?.error_details || 'No access to this assignment';
+        throw new Error(msg);
+      }
     },
     enabled: !!assignmentId,
   });
+
+  useEffect(() => {
+    if (queryError) {
+      const msg = queryError instanceof Error ? queryError.message : 'No access to this assignment';
+      toast({ title: t('common:error'), description: msg, status: 'error', duration: 5000 });
+    }
+  }, [queryError, toast, t]);
 
   // Files are server-paginated, with client-side filter/sort on the current page
   const displayedFiles = useMemo((): AssignmentFullFile[] => {
@@ -391,9 +405,10 @@ const AssignmentDetail: React.FC = () => {
   }
 
   if (!assignmentData) {
+    const errorMessage = queryError instanceof Error ? queryError.message : (t('common:noAccess') || 'No access to this assignment');
     return (
       <Box textAlign="center" py={12}>
-        <Text fontSize="lg" color="red.500">Assignment not found</Text>
+        <Text fontSize="lg" color="red.500">{errorMessage}</Text>
       </Box>
     );
   }

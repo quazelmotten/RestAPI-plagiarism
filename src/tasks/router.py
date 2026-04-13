@@ -15,6 +15,8 @@ from fastapi import (
     status,
 )
 
+from auth.dependencies import get_current_user
+from auth.models import User
 from config import settings
 from dependencies import get_publisher, get_s3_storage
 from exceptions.exceptions import PlagiarismValidationError
@@ -64,8 +66,9 @@ async def check_plagiarism(
     task_service: TaskService = Depends(get_task_service),
     storage=Depends(get_s3_storage),
     publish=Depends(get_publisher),
+    current_user: User = Depends(get_current_user),
 ):
-    """Check files for plagiarism."""
+    """Check files for plagiarism. Requires reviewer or higher role."""
     for upload_file in files:
         if upload_file.size and upload_file.size > settings.max_file_size:
             raise PlagiarismValidationError(
@@ -105,6 +108,7 @@ async def get_all_tasks(
     limit: int = Query(default=50, ge=1, le=500, description="Number of tasks to return (1-500)"),
     offset: int = Query(default=0, ge=0, description="Number of tasks to skip for pagination"),
     assignment_id: str | None = Query(default=None, description="Filter tasks by assignment UUID"),
+    current_user: User = Depends(get_current_user),
 ):
     """Get all plagiarism tasks with their results and progress."""
     return await task_service.get_all_tasks(limit=limit, offset=offset, assignment_id=assignment_id)
@@ -128,6 +132,7 @@ async def get_all_tasks(
 )
 async def get_plagiarism_result(
     task: TaskResponse = Depends(valid_task_id),
+    current_user: User = Depends(get_current_user),
 ):
     """Get plagiarism task by ID. Uses dependency validation to ensure task exists."""
     return task

@@ -48,6 +48,8 @@ import {
   FiSearch,
   FiEdit2,
   FiTrash2,
+  FiUsers,
+  FiUserPlus,
   FiFolder,
   FiChevronDown,
   FiChevronRight,
@@ -78,6 +80,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../services/api';
 import { useSubjects, useUncategorizedAssignments, useCreateSubject, useUpdateSubject, useDeleteSubject, useRestoreSubject, useRestoreAssignment } from '../hooks/useSubjects';
+import { SubjectMembersDialog } from '../components/SubjectMembersDialog';
 
 interface Assignment {
   id: string;
@@ -226,6 +229,7 @@ const Assignments: React.FC = () => {
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
   const [deletingAssignment, setDeletingAssignment] = useState<Assignment | null>(null);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
+  const [managingSubject, setManagingSubject] = useState<Subject | null>(null);
   const [deletingSubject, setDeletingSubject] = useState<Subject | null>(null);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -272,9 +276,10 @@ const Assignments: React.FC = () => {
         const res = await api.post(API_ENDPOINTS.ASSIGNMENTS, payload);
         return res.data;
       },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['assignments'] });
-        queryClient.invalidateQueries({ queryKey: ['subjects'] });
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    queryClient.invalidateQueries({ queryKey: ['subjects'] });
+    queryClient.invalidateQueries({ queryKey: ['subjects', 'with-uncategorized'] });
         toast({ title: t('toasts.created'), status: 'success', duration: 3000 });
         closeAssignmentModal();
       },
@@ -291,9 +296,10 @@ const Assignments: React.FC = () => {
         const res = await api.patch(`${API_ENDPOINTS.ASSIGNMENTS}/${id}`, payload);
         return res.data;
       },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['assignments'] });
-        queryClient.invalidateQueries({ queryKey: ['subjects'] });
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['assignments'] });
+    queryClient.invalidateQueries({ queryKey: ['subjects'] });
+    queryClient.invalidateQueries({ queryKey: ['subjects', 'with-uncategorized'] });
         toast({ title: t('toasts.updated'), status: 'success', duration: 3000 });
         closeAssignmentModal();
       },
@@ -617,6 +623,13 @@ const Assignments: React.FC = () => {
                             size="xs"
                             variant="ghost"
                             onClick={() => openEditSubject(subject)}
+                          />
+                          <IconButton
+                            aria-label="Manage members"
+                            icon={<FiUsers />}
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => setManagingSubject(subject)}
                           />
                           <IconButton
                             aria-label="Delete subject"
@@ -969,6 +982,12 @@ const Assignments: React.FC = () => {
         ) : null}
         </DragOverlay>
       </Box>
+
+      <SubjectMembersDialog
+        isOpen={!!managingSubject}
+        onClose={() => setManagingSubject(null)}
+        subject={managingSubject}
+      />
     </DndContext>
   );
 };

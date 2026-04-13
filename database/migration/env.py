@@ -11,15 +11,15 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-# Add project root to Python path to enable imports
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+# Add /app to Python path to enable imports (where shared and src are copied)
+app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "app"))
+if app_path not in sys.path:
+    sys.path.insert(0, app_path)
 
 # Import models and database-only config (avoids pulling in full app config with RabbitMQ/Redis deps)
 from shared.models import SharedBase  # noqa: E402
 
-from config import settings  # noqa: E402
+from src.config import settings  # noqa: E402
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

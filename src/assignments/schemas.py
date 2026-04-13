@@ -2,6 +2,8 @@
 Assignments domain schemas - Pydantic models for assignment request/response.
 """
 
+from datetime import datetime
+
 from results.schemas import FileInfo, ResultItem
 from schemas.base import CustomBaseModel
 from tasks.schemas import TaskListResponse
@@ -16,7 +18,7 @@ class SubjectResponse(CustomBaseModel):
     id: str
     name: str
     description: str | None = None
-    created_at: str | None = None
+    created_at: datetime | None = None
     assignments_count: int = 0
 
 
@@ -31,6 +33,13 @@ class SubjectWithAssignments(SubjectResponse):
     assignments: list["AssignmentResponse"] = []
 
 
+class SubjectsWithAssignmentsResponse(CustomBaseModel):
+    """Response containing both subjects with assignments and uncategorized assignments."""
+
+    subjects: list[SubjectWithAssignments]
+    uncategorized: list["AssignmentResponse"]
+
+
 class AssignmentCreate(CustomBaseModel):
     name: str
     description: str | None = None
@@ -42,7 +51,7 @@ class AssignmentResponse(CustomBaseModel):
     name: str
     description: str | None = None
     subject_id: str | None = None
-    created_at: str | None = None
+    created_at: datetime | None = None
     tasks_count: int = 0
     files_count: int = 0
 

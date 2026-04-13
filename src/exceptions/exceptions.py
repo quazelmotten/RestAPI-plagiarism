@@ -16,6 +16,19 @@ class PlagiarismValidationError(Exception):
         return self.message
 
 
-class ExchangeNotFoundError(Exception):
+class ForbiddenError(Exception):
+    def __init__(self, message: str = "Access forbidden"):
+        self.message = message
+        super().__init__(self.message)
+
     def __str__(self):
-        return "exchange not found"
+        return self.message
+
+
+class NoAccessError(Exception):
+    def __init__(self, message: str = "You don't have access to this resource"):
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        return self.message
