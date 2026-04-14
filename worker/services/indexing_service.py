@@ -9,14 +9,14 @@ Responsible for:
 
 import logging
 import time
-from collections.abc import Callable
-from typing import Any
+from typing import Dict, List, Optional, Any, Callable
 
 from shared.interfaces import CandidateIndex, FingerprintCache
-
 from worker.services.fingerprint_service import FingerprintService
 
 logger = logging.getLogger(__name__)
+# Ensure logs propagate to root logger for pytest caplog capture
+logger.propagate = True
 
 
 class IndexingService:

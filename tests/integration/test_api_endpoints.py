@@ -104,11 +104,14 @@ class TestAssignmentEndpoints:
 class TestTaskEndpoints:
     """Test task management endpoints."""
 
-    async def test_create_task(self, client: AsyncClient, sample_task_data: dict):
-        """Test creating a task without assignment."""
+    async def test_create_task(self, client: AsyncClient, sample_file_content: bytes):
+        """Test creating a new plagiarism check task."""
+        files = {"files": ("test.py", sample_file_content, "text/plain")}
+        data = {"language": "python"}
         response = await client.post(
-            "/plagitype/plagiarism/tasks",
-            json=sample_task_data,
+            "/plagitype/plagiarism/check",
+            files=files,
+            data=data,
         )
         assert response.status_code == 201, f"Failed to create task: {response.text}"
         data = response.json()
@@ -153,10 +156,10 @@ class TestSubjectEndpoints:
 
     async def test_get_uncategorized_assignments(self, client: AsyncClient):
         """Test getting uncategorized assignments."""
-        response = await client.get("/plagitype/plagiarism/subjects/uncategorized")
+        response = await client.get("/plagitype/plagiarism/assignments/uncategorized")
         assert response.status_code == 200, f"Failed to get uncategorized: {response.text}"
         data = response.json()
-        assert isinstance(data, dict)
+        assert isinstance(data, list)
 
 
 class TestEdgeCases:

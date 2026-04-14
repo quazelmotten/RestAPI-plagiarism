@@ -1,10 +1,10 @@
 from collections.abc import AsyncGenerator
 
+from shared.models import metadata
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from config import settings
-from shared.models import metadata
 
 engine = create_async_engine(
     settings.db_async_url,
@@ -32,10 +32,6 @@ def override_session_maker(new_maker):
     """Override session maker - useful for testing."""
     global async_session_maker
     async_session_maker = new_maker
-
-
-# Create a Base class for models in src/ (uses shared metadata)
-from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):

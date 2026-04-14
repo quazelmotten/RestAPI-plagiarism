@@ -4,14 +4,13 @@ Create initial admin user on startup.
 
 import logging
 import os
-from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from database import async_session_maker
 from auth.models import User
 from auth.password_validation import validate_password
 from auth.service import get_password_hash
+from database import async_session_maker
 
 logger = logging.getLogger(__name__)
 

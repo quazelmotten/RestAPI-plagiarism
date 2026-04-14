@@ -3,7 +3,8 @@ User models for authentication.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from enum import StrEnum
 
 from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -12,18 +13,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
 
 
-from enum import Enum
-
-
-class UserRole(str, Enum):
-    """Roles for users. Extend as needed."""
+class UserRole(StrEnum):
+    """Roles for users.
+    Currently used: VIEWER, REVIEWER, ADMIN.
+    Hierarchy: VIEWER (1) < REVIEWER (2) < ADMIN (3).
+    """
 
     VIEWER = "viewer"
     REVIEWER = "reviewer"
     ADMIN = "admin"
-    # Legacy roles kept for backward compatibility
-    STUDENT = "student"
-    INSTRUCTOR = "instructor"
 
 
 class User(Base):
@@ -53,16 +51,15 @@ class User(Base):
 
     # Logical role derived from is_global_admin; not persisted in DB
     @property
-    def role(self) -> str:
-        """Return role string based on is_global_admin flag.
-        Admins map to 'admin', others default to 'viewer'."""
+    def role(self) -> "UserRole":
+        """Return role enum based on is_global_admin flag.
+        Admins map to ADMIN, others default to VIEWER."""
         if self.is_global_admin:
-            return UserRole.ADMIN.value
-        # Default role for non-admins; can be extended later
-        return UserRole.VIEWER.value
+            return UserRole.ADMIN
+        return UserRole.VIEWER
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

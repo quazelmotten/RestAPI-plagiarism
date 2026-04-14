@@ -8,7 +8,18 @@ with their respective database connections.
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, MetaData, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    MetaData,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -134,17 +145,17 @@ class SimilarityResult(SharedBase):
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
     task_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("plagiarism_tasks.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("plagiarism_tasks.id"), nullable=False, index=True
     )
     file_a_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("files.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("files.id"), nullable=False, index=True
     )
     file_b_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("files.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("files.id"), nullable=False, index=True
     )
-    ast_similarity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ast_similarity: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     matches: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    review_disposition: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    review_disposition: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -154,6 +165,16 @@ class SimilarityResult(SharedBase):
     )
     file_b: Mapped["File"] = relationship(
         "File", foreign_keys=[file_b_id], back_populates="similarity_results_b"
+    )
+
+    __table_args__ = (
+        # Composite index for review queue query optimization
+        Index(
+            "ix_similarity_results_task_review_ast",
+            task_id,
+            review_disposition,
+            ast_similarity.desc(),
+        ),
     )
 
 

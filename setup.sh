@@ -23,7 +23,7 @@ generate_password() {
 
 # Function to generate secret key
 generate_secret() {
-    openssl rand -base64 48
+    openssl rand -hex 32
 }
 
 # Check if .env already exists
@@ -48,9 +48,10 @@ fi
 echo -e "${GREEN}🔧 Generating secure configuration...${NC}"
 echo
 
-# Generate secure passwords
+# Generate secure passwords and keys
 DB_PASS=$(generate_password)
 RMQ_PASS=$(generate_password)
+SECRET_KEY=$(generate_secret)
 
 echo "Creating .env file with secure passwords..."
 
@@ -96,6 +97,15 @@ CORS_ORIGINS=http://localhost:3000
 SUBPATH=plagitype
 
 # =============================================================================
+# AUTHENTICATION CONFIGURATION
+# =============================================================================
+# JWT secret key - REQUIRED (auto-generated)
+SECRET_KEY=${SECRET_KEY}
+
+# Token expiration
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+
+# =============================================================================
 # PLAGIARISM DETECTION SETTINGS
 # =============================================================================
 DEFAULT_PLAGIARISM_THRESHOLD=0.75
@@ -108,6 +118,15 @@ MAX_FILES_PER_BATCH=100
 # =============================================================================
 WORKER_CONCURRENCY=4
 WORKER_PREFETCH_COUNT=1
+
+# =============================================================================
+# REDIS CONFIGURATION
+# =============================================================================
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=
+REDIS_USE_SSL=false
 
 # =============================================================================
 # LOGGING
@@ -137,6 +156,9 @@ echo
 echo "Your configuration has been generated with:"
 echo "  • Strong database password (32 chars)"
 echo "  • Strong RabbitMQ password (32 chars)"
+echo "  • JWT secret key (64 chars hex)"
+echo ""
+echo "The JWT SECRET_KEY has been auto-generated and is ready to use."
 echo
 echo -e "${YELLOW}Next steps:${NC}"
 echo "  1. Review the .env file and adjust settings if needed"

@@ -91,18 +91,15 @@ async def require_global_admin(current_user: User = Depends(get_current_user)) -
 def require_role(minimum_role: UserRole):
     """Dependency generator that enforces a minimum role.
     Roles hierarchy: VIEWER < REVIEWER < ADMIN.
-    Legacy roles (student/instructor) are mapped to VIEWER/REVIEWER.
     """
 
     async def dependency(current_user: User = Depends(get_current_user)) -> User:
-        # Convert string role to enum if needed
-        if isinstance(minimum_role, str):
-            minimum_role = UserRole(minimum_role)
+        required_role = UserRole(minimum_role) if isinstance(minimum_role, str) else minimum_role
 
-        if not AuthService.has_minimum_role(current_user.role, minimum_role):
+        if not AuthService.has_minimum_role(current_user.role, required_role):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Requires {minimum_role.value} role",
+                detail=f"Requires {required_role.value} role",
             )
         return current_user
 

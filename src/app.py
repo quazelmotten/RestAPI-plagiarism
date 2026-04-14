@@ -195,9 +195,8 @@ async def on_shutdown():
     await app.state.ws_manager.stop()
 
 
-@app.get("/health")
-async def health(request: Request, redis_client=Depends(get_redis_client)):
-    """Health check endpoint — verifies all dependency connectivity."""
+async def _health_check(request: Request, redis_client):
+    """Internal health check logic — reusable for all health endpoints."""
     from database import engine
 
     checks = {}
@@ -247,6 +246,12 @@ async def health(request: Request, redis_client=Depends(get_redis_client)):
     )
 
 
+@app.get("/health")
+async def health(request: Request, redis_client=Depends(get_redis_client)):
+    """Health check endpoint — verifies all dependency connectivity."""
+    return await _health_check(request, redis_client)
+
+
 @app.get("/version")
 async def version():
     """API version endpoint"""
@@ -264,9 +269,9 @@ async def root(request: Request):
 if subpath_for_routes:
 
     @app.get(f"/{subpath_for_routes}/health")
-    async def health_subpath():
+    async def health_subpath(request: Request, redis_client=Depends(get_redis_client)):
         """Health check endpoint — delegates to /health."""
-        return await health()
+        return await _health_check(request, redis_client)
 
     @app.get(f"/{subpath_for_routes}/version")
     async def version_subpath():

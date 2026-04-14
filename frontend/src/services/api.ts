@@ -8,7 +8,6 @@ const API_URL = import.meta.env.VITE_API_URL || (() => {
 })();
 
 const TOKEN_KEY = 'auth_token';
-const REFRESH_TOKEN_KEY = 'refresh_token';
 
 export const setToken = (token: string): void => {
   localStorage.setItem(TOKEN_KEY, token);
@@ -20,15 +19,6 @@ export const getToken = (): string | null => {
 
 export const removeToken = (): void => {
   localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-};
-
-export const setRefreshToken = (token: string): void => {
-  localStorage.setItem(REFRESH_TOKEN_KEY, token);
-};
-
-export const getRefreshToken = (): string | null => {
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
 };
 
 export const isAuthenticated = (): boolean => {
@@ -129,8 +119,6 @@ export const logout = async () => {
     // ignore errors, still clear local tokens
   }
   removeToken();
-  // Clear any old refresh token that might still be in localStorage
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
 };
 
 // Admin user management functions

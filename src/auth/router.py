@@ -3,7 +3,6 @@ Authentication router.
 """
 
 import logging
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -11,19 +10,19 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from auth.blacklist_service import blacklist_service
 from auth.dependencies import get_current_user, require_global_admin
 from auth.models import User
-from auth.rate_limit import login_rate_limit, register_rate_limit, forgot_password_rate_limit
+from auth.rate_limit import forgot_password_rate_limit, login_rate_limit, register_rate_limit
 from auth.schemas import (
+    AdminChangePasswordRequest,
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    GlobalRoleUpdate,
     LoginRequest,
+    RefreshTokenRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserResponse,
     UsersListResponse,
-    GlobalRoleUpdate,
-    RefreshTokenRequest,
-    ForgotPasswordRequest,
-    ResetPasswordRequest,
-    ChangePasswordRequest,
-    AdminChangePasswordRequest,
 )
 from auth.service import AuthService, get_token_expiry, get_token_jti
 from config import settings
@@ -41,15 +40,19 @@ security = HTTPBearer(auto_error=False)
     dependencies=[Depends(register_rate_limit)],
 )
 async def register(request: RegisterRequest) -> UserResponse:
-    """
-    Register a new user.
-    Anyone can register - they start with no subject access.
+    """Register a new user.
+    For security, always returns success regardless of whether email existed.
+    In production, this would send a verification email.
     """
     existing_user = await AuthService.get_user_by_email(request.email)
     if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="User with this email already exists",
+        return UserResponse(
+            id=str(existing_user.id),
+            email=existing_user.email,
+            is_global_admin=existing_user.is_global_admin,
+            role=existing_user.role.value if existing_user.role else None,
+            created_at=existing_user.created_at,
+            last_login=existing_user.last_login,
         )
 
     new_user = await AuthService.create_user(
@@ -57,7 +60,7 @@ async def register(request: RegisterRequest) -> UserResponse:
         password=request.password,
         is_global_admin=False,
     )
-    logger.info(f"User registered: {new_user.email}")
+    logger.info("User registered: %s", new_user.email)
     return AuthService.user_to_response(new_user)
 
 
@@ -80,7 +83,7 @@ async def login(request: LoginRequest, response: Response) -> TokenResponse:
         )
 
     await AuthService.update_last_login(user.id)
-    logger.info(f"User logged in: {user.email}")
+    logger.info("User logged in: %s", user.email)
     token_response = AuthService.create_token_response(user)
 
     # Set refresh token in HttpOnly Secure cookie
@@ -126,7 +129,7 @@ async def refresh_token(
             detail="Invalid or expired refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    logger.info(f"Token refreshed for user")
+    logger.info("Token refreshed for user")
 
     # Set new refresh token in HttpOnly Secure cookie (rotation)
     if token_response.refresh_token:
@@ -162,12 +165,11 @@ async def logout(
         if expiry:
             await blacklist_service.blacklist_token(jti, expiry)
 
-    logger.info(f"User logged out: {current_user.email}")
+    logger.info("User logged out: %s", current_user.email)
 
-    # Clear refresh token cookie
     response.delete_cookie(
         key="refresh_token",
-        path="/api/auth",
+        path="/",
     )
 
     return {"message": "Successfully logged out"}
@@ -187,13 +189,15 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)) 
     dependencies=[Depends(forgot_password_rate_limit)],
 )
 async def forgot_password(request: ForgotPasswordRequest) -> dict:
-    """Initiate password reset, returns a token (in dev, token is returned; in prod you would email)."""
+    """Initiate password reset.
+
+    For security, always returns the same message regardless of whether
+    the email exists. In production, the reset token would be sent via email.
+    """
     token = await AuthService.initiate_password_reset(request.email)
-    if not token:
-        # For security, do not reveal whether email exists
-        return {"message": "If the email exists, a reset link has been sent"}
-    # In dev you might return the token directly for testing
-    return {"reset_token": token}
+    if token:
+        logger.info("Password reset token generated for email (check logs in dev)")
+    return {"message": "If this email is registered, you will receive a reset link shortly"}
 
 
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
@@ -249,7 +253,12 @@ async def get_user(
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(user_id: str, current_user: User = Depends(require_global_admin)) -> None:
-    """Delete a user by ID. Global admin only."""
+    """Delete a user by ID. Global admin only. Cannot delete yourself."""
+    if str(user_id) == str(current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account",
+        )
     deleted = await AuthService.delete_user(user_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -272,7 +281,7 @@ async def update_global_role(
             detail="User not found",
         )
 
-    logger.info(f"Global admin status updated for {user.email}: {update.is_global_admin}")
+    logger.info("Global admin status updated for %s: %s", user.email, update.is_global_admin)
     return AuthService.user_to_response(user)
 
 

@@ -6,8 +6,8 @@ from fastapi.responses import JSONResponse
 from config import settings
 from exceptions.exceptions import (
     ForbiddenError,
-    NotFoundError,
     NoAccessError,
+    NotFoundError,
     PlagiarismValidationError,
 )
 

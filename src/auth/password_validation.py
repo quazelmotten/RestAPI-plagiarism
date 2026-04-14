@@ -1,12 +1,11 @@
 """Password validation utilities."""
 
 import re
-from typing import List
 
 from config.auth import auth_config
 
 
-def validate_password(password: str) -> List[str]:
+def validate_password(password: str) -> list[str]:
     """
     Validate password against configured rules.
 

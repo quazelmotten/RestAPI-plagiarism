@@ -330,9 +330,21 @@ async def delete_assignment(
 async def restore_assignment(
     assignment: AssignmentResponse = Depends(valid_deleted_assignment_id),
     assignment_service: AssignmentService = Depends(get_assignment_service),
-    current_user: User = Depends(require_subject_access),
+    current_user: User = Depends(get_current_user),
 ):
     """Restore an assignment. Requires subject access."""
+    # Global admins can restore anything
+    if not current_user.is_global_admin:
+        # Check subject access for non-admins
+        if not assignment.subject_id:
+            raise ForbiddenError("You don't have access to this assignment")
+
+        has_access = await SubjectAccessService.has_access(
+            str(current_user.id), assignment.subject_id
+        )
+        if not has_access:
+            raise ForbiddenError("You don't have access to this assignment")
+
     success = await assignment_service.restore_assignment(assignment.id)
     if not success:
         raise NotFoundError("Assignment not found or was not deleted")

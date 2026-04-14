@@ -18,7 +18,6 @@ if app_path not in sys.path:
 
 # Import models and database-only config (avoids pulling in full app config with RabbitMQ/Redis deps)
 from shared.models import SharedBase  # noqa: E402
-
 from src.config import settings  # noqa: E402
 
 # this is the Alembic Config object, which provides

@@ -13,6 +13,8 @@ import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
+# Ensure logs propagate to root logger for pytest caplog capture
+logger.propagate = True
 
 
 class TaskService:

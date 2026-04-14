@@ -3,7 +3,6 @@ Pydantic schemas for authentication.
 """
 
 from datetime import datetime
-from typing import List
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -12,14 +11,14 @@ class LoginRequest(BaseModel):
     """Login request schema."""
 
     email: EmailStr
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=1, max_length=128)
 
 
 class RegisterRequest(BaseModel):
     """Registration request schema."""
 
     email: EmailStr
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=1, max_length=128)
 
 
 class TokenResponse(BaseModel):
@@ -48,20 +47,20 @@ class ResetPasswordRequest(BaseModel):
     """Reset password request schema."""
 
     token: str
-    new_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=1, max_length=128)
 
 
 class ChangePasswordRequest(BaseModel):
     """Change password request schema."""
 
-    current_password: str
-    new_password: str = Field(min_length=1)
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=1, max_length=128)
 
 
 class AdminChangePasswordRequest(BaseModel):
     """Admin change password request schema."""
 
-    new_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=1, max_length=128)
 
 
 class UserResponse(BaseModel):
@@ -78,7 +77,7 @@ class UserResponse(BaseModel):
 class UsersListResponse(BaseModel):
     """List of users response."""
 
-    users: List[UserResponse]
+    users: list[UserResponse]
     total: int
 
 
@@ -112,7 +111,7 @@ class SubjectMember(BaseModel):
 class SubjectMembersResponse(BaseModel):
     """Subject members list response."""
 
-    members: List[SubjectMember]
+    members: list[SubjectMember]
     total: int
 
 

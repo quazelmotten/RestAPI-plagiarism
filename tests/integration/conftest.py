@@ -6,7 +6,7 @@ Uses real services (PostgreSQL, Redis, RabbitMQ) via docker-compose.test.yml.
 import os
 import sys
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -21,7 +21,7 @@ if src_path not in sys.path:
 
 os.environ["INTEGRATION_TESTS"] = "1"
 os.environ["DB_HOST"] = "localhost"
-os.environ["DB_PORT"] = "5432"
+os.environ["DB_PORT"] = "5433"
 os.environ["DB_NAME"] = "plagiarism_db"
 os.environ["DB_USER"] = "plagiarism_user"
 os.environ["DB_PASS"] = "iNseUMJMuFlX1Q5Sr6yPwjUDPprX4VMP"
@@ -34,15 +34,14 @@ os.environ["RMQ_PASS"] = "06l6of6Shsz9n11Is5nWAGO9oJsEXrcI"
 os.environ["STORAGE_LOCAL_PATH"] = "/tmp/test_plagiarism_storage"
 os.environ["ENVIRONMENT"] = "development"
 os.environ["LOG_LEVEL"] = "ERROR"
-os.environ["RATE_LIMIT_ENABLED"] = "false"
+# RATE_LIMIT_ENABLED is now set in the session fixture
 
-os.makedirs("/tmp/test_plagiarism_storage", exist_ok=True)
-
-TEST_DB_URL = "postgresql+asyncpg://plagiarism_user:iNseUMJMuFlX1Q5Sr6yPwjUDPprX4VMP@localhost:5432/plagiarism_db"
+TEST_DB_URL = "postgresql+asyncpg://plagiarism_user:iNseUMJMuFlX1Q5Sr6yPwjUDPprX4VMP@localhost:5433/plagiarism_db"
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_db_schema():
+    os.environ["RATE_LIMIT_ENABLED"] = "false"
     import asyncio
 
     from alembic import command
@@ -51,6 +50,7 @@ def setup_db_schema():
     engine = create_async_engine(TEST_DB_URL, echo=False)
 
     alembic_cfg = Config("database/alembic.ini")
+    alembic_cfg.set_main_option("script_location", "database/migration")
     alembic_cfg.set_main_option("sqlalchemy.url", TEST_DB_URL)
 
     async def _ensure():
@@ -70,8 +70,11 @@ def setup_db_schema():
             print(f"Tables in database: {tables}")
 
     asyncio.run(_ensure())
-    asyncio.run(engine.dispose())
-    yield
+    try:
+        yield
+    finally:
+        del os.environ["RATE_LIMIT_ENABLED"]
+        asyncio.run(engine.dispose())
 
 
 @pytest_asyncio.fixture
@@ -138,7 +141,9 @@ class MockRedisClient:
         pass
 
     def get_async_client(self):
-        return MagicMock()
+        mock = MagicMock()
+        mock.ping = AsyncMock(return_value=True)
+        return mock
 
     def get_sync_client(self):
         return MagicMock()
@@ -149,7 +154,10 @@ class MockRedisClient:
 
 class MockS3Storage:
     async def upload_file(self, *args, **kwargs):
-        return "s3://test/file"
+        return {"path": "s3://test/file", "hash": "d41d8cd98f00b204e9800998ecf8427e"}
+
+    async def upload_file_async(self, *args, **kwargs):
+        return {"path": "s3://test/file", "hash": "d41d8cd98f00b204e9800998ecf8427e"}
 
     async def download_file(self, *args, **kwargs):
         return b"test content"
@@ -171,6 +179,23 @@ async def client(db_clean):
 
     # Clear any dependency overrides from parent conftest.py
     app.dependency_overrides.clear()
+
+    # Mock authentication
+    from auth.dependencies import get_current_user
+    from auth.models import User
+
+    mock_user = User(
+        id="test-user-id",
+        email="test@example.com",
+        hashed_password="test",
+        is_global_admin=True,
+        session_version=1,
+    )
+
+    async def mock_get_current_user():
+        return mock_user
+
+    app.dependency_overrides[get_current_user] = mock_get_current_user
 
     # Save the original for reference
     original_maker = db_module.async_session_maker

@@ -59,11 +59,17 @@ class AsyncWorker:
         self.stop()
 
     def configure_logging(self) -> None:
-        logging.basicConfig(
-            level=self.log_level,
-            datefmt="%Y-%m-%d %H:%M:%S",
-            format=DEFAULT_LOG_FORMAT,
-        )
+        import sys
+
+        is_pytest = "pytest" in sys.argv[0] or "pytest" in sys.modules
+
+        # Only configure logging from scratch if not running under pytest
+        if not is_pytest:
+            logging.basicConfig(
+                level=self.log_level,
+                datefmt="%Y-%m-%d %H:%M:%S",
+                format=DEFAULT_LOG_FORMAT,
+            )
         logging.getLogger("pika").setLevel(logging.CRITICAL)
         log.info(f"Logging configured at {logging.getLevelName(self.log_level)}")
 

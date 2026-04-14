@@ -19,32 +19,33 @@ if not RUNNING_INTEGRATION_TESTS:
     os.environ.setdefault("RMQ_USER", "test_mq_user")
     os.environ.setdefault("RMQ_PASS", "test_mq_password_12345678")
 
-# Resolve src path relative to project root (parent of tests/)
-_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-src_path = os.path.join(_project_root, "src")
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
+    # Clear rate limit env vars that might leak from integration tests
+    for key in list(os.environ.keys()):
+        if key.startswith("RATE_LIMIT_"):
+            try:
+                del os.environ[key]
+            except KeyError:
+                pass
 
-# Ensure src/database is loaded as the 'database' module before worker/database shadows it
-import importlib  # noqa: E402
-import importlib.util  # noqa: E402
 
-if "database" not in sys.modules:
-    spec = importlib.util.spec_from_file_location("database", os.path.join(src_path, "database.py"))
-    database_mod = importlib.util.module_from_spec(spec)
-    sys.modules["database"] = database_mod
-    spec.loader.exec_module(database_mod)
+# Preserve pytest logging handlers before configure_logging() overwrites them
+import logging
 
-# Pre-load src/models to prevent worker/models.py from shadowing it
-if "models" not in sys.modules:
-    spec = importlib.util.spec_from_file_location(
-        "models",
-        os.path.join(src_path, "models", "__init__.py"),
-        submodule_search_locations=[os.path.join(src_path, "models")],
-    )
-    models_pkg = importlib.util.module_from_spec(spec)
-    sys.modules["models"] = models_pkg
-    spec.loader.exec_module(models_pkg)
+
+@pytest.fixture(scope="session", autouse=True)
+def preserve_pytest_logging_handlers():
+    """Save pytest's logging handlers before any configure_logging() calls."""
+    original_handlers = logging.root.handlers.copy()
+    original_level = logging.root.level
+
+    yield
+
+    # Restore after all tests complete
+    logging.root.handlers = original_handlers
+    logging.root.setLevel(original_level)
+
+
+# Remove the problematic caplog autouse fixture
 
 
 @pytest.fixture(autouse=not RUNNING_INTEGRATION_TESTS)
@@ -152,32 +153,40 @@ def mock_database():
     async def mock_get_result_repo():
         return mock_result_repo
 
-    # Use FastAPI's dependency_overrides
-    from app import app
-    from assignments.dependencies import get_assignment_repository, get_assignment_service
-    from database import get_async_session
-    from dependencies import get_s3_storage
-    from files.dependencies import get_file_repository, get_file_service
-    from results.dependencies import get_result_repository, get_result_service
-    from tasks.dependencies import get_task_repository, get_task_service
+    # Only import app and setup FastAPI dependency overrides if needed
+    try:
+        from src.app import app
+        from assignments.dependencies import get_assignment_repository, get_assignment_service
+        from database import get_async_session
+        from dependencies import get_s3_storage
+        from files.dependencies import get_file_repository, get_file_service
+        from results.dependencies import get_result_repository, get_result_service
+        from tasks.dependencies import get_task_repository, get_task_service
+        from auth.dependencies import get_current_user
+        from auth.models import User, UserRole
 
-    mock_storage = MagicMock()
+        mock_storage = MagicMock()
+        mock_user = User(id="test-user-id", email="test@example.com", is_global_admin=True)
 
-    app.dependency_overrides[get_async_session] = mock_get_async_session
-    app.dependency_overrides[get_s3_storage] = lambda: mock_storage
-    app.dependency_overrides[get_task_repository] = mock_get_task_repo
-    app.dependency_overrides[get_assignment_repository] = mock_get_assignment_repo
-    app.dependency_overrides[get_file_repository] = mock_get_file_repo
-    app.dependency_overrides[get_result_repository] = mock_get_result_repo
-    app.dependency_overrides[get_task_service] = mock_get_task_service
-    app.dependency_overrides[get_assignment_service] = mock_get_assignment_service
-    app.dependency_overrides[get_file_service] = mock_get_file_service
-    app.dependency_overrides[get_result_service] = mock_get_result_service
+        app.dependency_overrides[get_async_session] = mock_get_async_session
+        app.dependency_overrides[get_s3_storage] = lambda: mock_storage
+        app.dependency_overrides[get_task_repository] = mock_get_task_repo
+        app.dependency_overrides[get_assignment_repository] = mock_get_assignment_repo
+        app.dependency_overrides[get_file_repository] = mock_get_file_repo
+        app.dependency_overrides[get_result_repository] = mock_get_result_repo
+        app.dependency_overrides[get_task_service] = mock_get_task_service
+        app.dependency_overrides[get_assignment_service] = mock_get_assignment_service
+        app.dependency_overrides[get_file_service] = mock_get_file_service
+        app.dependency_overrides[get_result_service] = mock_get_result_service
+        app.dependency_overrides[get_current_user] = lambda: mock_user
 
-    yield
+        yield
 
-    # Clean up overrides after test
-    app.dependency_overrides.clear()
+        # Clean up overrides after test
+        app.dependency_overrides.clear()
+    except ImportError:
+        # Skip FastAPI dependency setup for pure worker unit tests that don't need it
+        yield
 
 
 @pytest.fixture

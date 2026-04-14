@@ -4,16 +4,15 @@ Authentication service.
 
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from datetime import UTC, datetime, timedelta
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from database import async_session_maker
+
 from .blacklist_service import blacklist_service
 from .models import User, UserRole
 from .password_validation import validate_password
@@ -42,9 +41,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     expire_minutes = settings.access_token_expire_minutes
 
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=expire_minutes)
+        expire = datetime.now(UTC) + timedelta(minutes=expire_minutes)
 
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "jti": jti, "type": "access"})
@@ -56,7 +55,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 def create_refresh_token(user_id: str, email: str, session_version: int = 1) -> str:
     """Create a JWT refresh token."""
     to_encode = {"sub": str(user_id), "email": email, "type": "refresh", "sv": session_version}
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
+    expire = datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "jti": jti})
 
@@ -67,7 +66,7 @@ def create_refresh_token(user_id: str, email: str, session_version: int = 1) -> 
 def create_password_reset_token(user_id: str, email: str) -> str:
     """Create a password reset token."""
     to_encode = {"sub": str(user_id), "email": email, "type": "password_reset"}
-    expire = datetime.now(timezone.utc) + timedelta(hours=1)
+    expire = datetime.now(UTC) + timedelta(hours=1)
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "jti": jti})
 
@@ -93,7 +92,7 @@ def get_token_expiry(token: str) -> datetime | None:
         )
         exp_timestamp = payload.get("exp")
         if exp_timestamp:
-            return datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+            return datetime.fromtimestamp(exp_timestamp, tz=UTC)
         return None
     except JWTError:
         return None
@@ -123,7 +122,7 @@ class AuthService:
                 return None
 
             # Check if account is locked
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if user.lockout_until and user.lockout_until > now:
                 return None
 
@@ -151,7 +150,6 @@ class AuthService:
     @staticmethod
     async def create_user(email: str, password: str, is_global_admin: bool = False) -> User:
         """Create a new user with password validation."""
-        # Validate password
         validation_errors = validate_password(password)
         if validation_errors:
             from fastapi import HTTPException, status
@@ -161,10 +159,14 @@ class AuthService:
                 detail=f"Invalid password: {', '.join(validation_errors)}",
             )
 
+        email_normalized = email.lower().strip()
+
         async with async_session_maker() as session:
             hashed_password = get_password_hash(password)
             user = User(
-                email=email, hashed_password=hashed_password, is_global_admin=is_global_admin
+                email=email_normalized,
+                hashed_password=hashed_password,
+                is_global_admin=is_global_admin,
             )
             session.add(user)
             await session.commit()
@@ -173,9 +175,10 @@ class AuthService:
 
     @staticmethod
     async def get_user_by_email(email: str) -> User | None:
-        """Get a user by email."""
+        """Get a user by email (case-insensitive)."""
+        email_normalized = email.lower().strip()
         async with async_session_maker() as session:
-            result = await session.execute(select(User).where(User.email == email))
+            result = await session.execute(select(User).where(User.email == email_normalized))
             return result.scalar_one_or_none()
 
     @staticmethod
@@ -192,7 +195,7 @@ class AuthService:
             result = await session.execute(select(User).where(User.id == user_id))
             user = result.scalar_one_or_none()
             if user:
-                user.last_login = datetime.now(timezone.utc)
+                user.last_login = datetime.now(UTC)
                 await session.commit()
 
     @staticmethod
@@ -237,7 +240,14 @@ class AuthService:
 
     @staticmethod
     def has_minimum_role(user_role: UserRole, required_role: UserRole) -> bool:
-        """Check if `user_role` meets or exceeds `required_role` based on hierarchy."""
+        """Check if `user_role` meets or exceeds `required_role` based on hierarchy.
+        Handles both UserRole enum and string values.
+        """
+        if isinstance(user_role, str):
+            user_role = UserRole(user_role)
+        if isinstance(required_role, str):
+            required_role = UserRole(required_role)
+
         hierarchy = AuthService.get_user_role_hierarchy()
         return hierarchy.get(user_role, 0) >= hierarchy.get(required_role, 0)
 
@@ -281,7 +291,7 @@ class AuthService:
             id=str(user.id),
             email=user.email,
             is_global_admin=user.is_global_admin,
-            role=user.role,
+            role=user.role.value if user.role else None,
             created_at=user.created_at,
             last_login=user.last_login,
         )
@@ -309,9 +319,9 @@ class AuthService:
             # Blacklist old refresh token before issuing new one (rotation)
             exp_timestamp = payload.get("exp")
             if exp_timestamp:
-                from datetime import datetime, timezone
+                from datetime import datetime
 
-                expiry = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+                expiry = datetime.fromtimestamp(exp_timestamp, tz=UTC)
                 await blacklist_service.blacklist_token(jti, expiry)
 
         user_id = payload.get("sub")
@@ -354,7 +364,6 @@ class AuthService:
         if not user_id:
             return False
 
-        # Check if token is already blacklisted
         if jti:
             is_blacklisted = await blacklist_service.is_token_blacklisted(jti)
             if is_blacklisted:
@@ -364,22 +373,21 @@ class AuthService:
         if validation_errors:
             return False
 
-        user = await AuthService.get_user_by_id(user_id)
-        if not user:
-            return False
-
-        user.hashed_password = get_password_hash(new_password)
         async with async_session_maker() as session:
-            session.add(user)
+            result = await session.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return False
+
+            user.hashed_password = get_password_hash(new_password)
             await session.commit()
 
-        # Blacklist reset token after successful use
         if jti:
             exp_timestamp = payload.get("exp")
             if exp_timestamp:
-                from datetime import datetime, timezone
+                from datetime import datetime
 
-                expiry = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+                expiry = datetime.fromtimestamp(exp_timestamp, tz=UTC)
                 await blacklist_service.blacklist_token(jti, expiry)
 
         return True
@@ -389,45 +397,42 @@ class AuthService:
         """Change password for a logged-in user.
         Invalidates all existing user sessions by incrementing session version.
         """
-        user = await AuthService.get_user_by_id(user_id)
-        if not user:
-            return False
-
-        if not verify_password(current_password, user.hashed_password):
-            return False
-
         validation_errors = validate_password(new_password)
         if validation_errors:
             return False
 
-        user.hashed_password = get_password_hash(new_password)
-
-        # Invalidate all existing sessions by incrementing session version
-        # This effectively revokes all previously issued tokens
-        if hasattr(user, "session_version"):
-            user.session_version += 1
-        else:
-            # For existing users without session_version
-            setattr(user, "session_version", 1)
-
         async with async_session_maker() as session:
-            session.add(user)
+            result = await session.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return False
+
+            if not verify_password(current_password, user.hashed_password):
+                return False
+
+            user.hashed_password = get_password_hash(new_password)
+
+            if hasattr(user, "session_version"):
+                user.session_version += 1
+            else:
+                user.session_version = 1
+
             await session.commit()
         return True
 
     @staticmethod
     async def reset_password_for_user(user_id: str, new_password: str) -> bool:
         """Reset password for any user (admin only, no current password required)."""
-        user = await AuthService.get_user_by_id(user_id)
-        if not user:
-            return False
-
         validation_errors = validate_password(new_password)
         if validation_errors:
             return False
 
-        user.hashed_password = get_password_hash(new_password)
         async with async_session_maker() as session:
-            session.add(user)
+            result = await session.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return False
+
+            user.hashed_password = get_password_hash(new_password)
             await session.commit()
         return True

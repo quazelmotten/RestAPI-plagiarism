@@ -44,6 +44,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Permissions Policy (formerly Feature Policy)
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
 
+        # Cross-Origin headers
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+
         # Remove server header if present (FastApi/Starlette adds it by default)
         if "server" in response.headers:
             del response.headers["server"]
@@ -56,6 +61,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             path in ("/docs", "/redoc", "/openapi.json")
             or path.startswith("/docs")
             or path.startswith("/redoc")
+            or "/docs" in path
+            or "/redoc" in path
         ):
             return self._relaxed_csp()
         return self._strict_csp()
@@ -66,10 +73,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "default-src 'self'; "
             "script-src 'self'; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "img-src 'self' data: https:; "
+            "img-src 'self' data: https://cdn.jsdelivr.net; "
             "font-src 'self' data: https://cdn.jsdelivr.net; "
             "connect-src 'self' ws: wss:; "
-            "frame-ancestors 'none';"
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self';"
         )
 
     def _relaxed_csp(self) -> str:
@@ -78,10 +87,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "default-src 'self' 'unsafe-inline'; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "img-src 'self' data: https:; "
+            "img-src 'self' data: https://cdn.jsdelivr.net; "
             "font-src 'self' data: https://cdn.jsdelivr.net; "
             "connect-src 'self' ws: wss:; "
-            "frame-ancestors 'none';"
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self';"
         )
 
     def _default_csp(self) -> str:

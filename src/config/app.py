@@ -48,11 +48,8 @@ class AppConfig(BaseSettings):
     subpath: str = Field(default="", validation_alias="SUBPATH")
 
     # JWT
-    secret_key: str = Field(default="", validation_alias="SECRET_KEY")
+    secret_key: str = Field(validation_alias="SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
-    access_token_expire_minutes: int = Field(
-        default=480, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES"
-    )  # 8 hours
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -65,6 +62,16 @@ class AppConfig(BaseSettings):
         """Ensure CORS origins is non-empty."""
         if not v or not v.strip():
             raise ValueError("CORS_ORIGINS must not be empty")
+        return v
+
+    @field_validator("secret_key")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        """Ensure SECRET_KEY is at least 32 characters."""
+        if not v or len(v) < 32:
+            raise ValueError(
+                "SECRET_KEY must be at least 32 characters. Generate with: openssl rand -hex 32"
+            )
         return v
 
     @property

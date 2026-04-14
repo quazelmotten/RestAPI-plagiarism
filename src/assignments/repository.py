@@ -521,11 +521,6 @@ class AssignmentRepository:
             for row in rows
         ]
 
-    """Repository for assignment-related database operations."""
-
-    def __init__(self, db: AsyncSession):
-        self.db = db
-
     async def get_assignment(
         self, assignment_id: str, include_deleted: bool = False
     ) -> AssignmentResponse | None:

@@ -3,7 +3,7 @@ Token blacklist service using Redis.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from clients.redis_client import RedisClient
 
@@ -25,16 +25,15 @@ class TokenBlacklistService:
             expires_at: When the token naturally expires (for TTL calculation)
         """
         try:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             ttl_seconds = int((expires_at - now).total_seconds())
 
             if ttl_seconds > 0:
                 key = f"token_blacklist:{jti}"
                 await self.redis.set(key, "1", ttl=ttl_seconds)
-                logger.debug(f"Token {jti} blacklisted for {ttl_seconds} seconds")
+                logger.debug("Token %s blacklisted for %s seconds", jti, ttl_seconds)
         except Exception as e:
-            logger.error(f"Failed to blacklist token: {e}")
-            # Don't raise - logout should succeed even if blacklist fails
+            logger.error("Failed to blacklist token: %s", e)
 
     async def is_token_blacklisted(self, jti: str) -> bool:
         """
@@ -45,14 +44,18 @@ class TokenBlacklistService:
 
         Returns:
             True if blacklisted, False otherwise
+
+        Note: This method fails open - if Redis is unavailable, it returns False
+        (allowing the token). This avoids locking users out when Redis has issues.
+        In high-security deployments, consider failing closed or implementing
+        a circuit breaker that degrades to short-lived tokens only.
         """
         try:
             key = f"token_blacklist:{jti}"
             result = await self.redis.get(key)
             return result is not None
         except Exception as e:
-            logger.error(f"Failed to check token blacklist: {e}")
-            # If we can't check, assume not blacklisted to avoid locking users out
+            logger.error("Failed to check token blacklist: %s", e)
             return False
 
 

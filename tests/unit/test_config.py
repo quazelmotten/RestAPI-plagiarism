@@ -2,10 +2,18 @@
 Tests for configuration system.
 """
 
+import os
 import pytest
 from pydantic import ValidationError
 
-from config import AppConfig, DatabaseConfig, RabbitMQConfig, RedisConfig, Settings, get_settings
+from src.config import (
+    AppConfig,
+    DatabaseConfig,
+    RabbitMQConfig,
+    RedisConfig,
+    Settings,
+    get_settings,
+)
 
 
 def test_settings_can_be_instantiated():
@@ -108,7 +116,7 @@ def test_rabbitmq_config_url():
 
 def test_rate_limit_validation():
     """Test rate limit config defaults and validation behavior."""
-    from config import RateLimitConfig
+    from src.config import RateLimitConfig
 
     config = RateLimitConfig()
     assert config.enabled is True
@@ -118,7 +126,7 @@ def test_rate_limit_validation():
 
 def test_logging_config_validation():
     """Test logging level validation."""
-    from config import LoggingConfig
+    from src.config import LoggingConfig
 
     config = LoggingConfig()
     assert config.level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
@@ -126,7 +134,7 @@ def test_logging_config_validation():
 
 def test_worker_config_validation():
     """Test worker config defaults."""
-    from config import WorkerConfig
+    from src.config import WorkerConfig
 
     config = WorkerConfig()
     assert config.concurrency > 0
@@ -143,13 +151,34 @@ def test_settings_caching():
 
 def test_settings_from_different_env_vars(monkeypatch):
     """Test that settings load from environment variables correctly."""
-    monkeypatch.setenv("APP_NAME", "Test App")
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
+    # Save original values first
+    original_app_name = os.environ.get("APP_NAME")
+    original_env = os.environ.get("ENVIRONMENT")
+    original_rate_limit = os.environ.get("RATE_LIMIT_ENABLED")
 
-    get_settings.cache_clear()
-    settings = get_settings()
+    try:
+        monkeypatch.setenv("APP_NAME", "Test App")
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
 
-    assert settings.app_name == "Test App"
-    assert settings.environment == "production"
-    assert settings.rate_limit_enabled is False
+        get_settings.cache_clear()
+        settings = get_settings()
+
+        assert settings.app_name == "Test App"
+        assert settings.environment == "production"
+        assert settings.rate_limit_enabled is False
+    finally:
+        # Properly restore original environment values
+        for key, original in [
+            ("APP_NAME", original_app_name),
+            ("ENVIRONMENT", original_env),
+            ("RATE_LIMIT_ENABLED", original_rate_limit),
+        ]:
+            try:
+                if original is None:
+                    if key in os.environ:
+                        del os.environ[key]
+                else:
+                    os.environ[key] = original
+            except KeyError:
+                pass

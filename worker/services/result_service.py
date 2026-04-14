@@ -12,6 +12,8 @@ import logging
 from shared.interfaces import TaskRepository
 
 logger = logging.getLogger(__name__)
+# Ensure logs propagate to root logger for pytest caplog capture
+logger.propagate = True
 
 
 class ResultService:

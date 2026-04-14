@@ -104,9 +104,22 @@ class TestPostgresRepository:
 
     def test_bulk_insert_results_creates_all_rows(self, repo, mock_session):
         """Test bulk_insert_results inserts multiple result rows."""
+        import uuid
+
+        task_id = str(uuid.uuid4())
         results = [
-            {"task_id": "t1", "file_a_id": "a1", "file_b_id": "b1", "ast_similarity": 0.8},
-            {"task_id": "t1", "file_a_id": "a2", "file_b_id": "b2", "ast_similarity": 0.6},
+            {
+                "task_id": task_id,
+                "file_a_id": str(uuid.uuid4()),
+                "file_b_id": str(uuid.uuid4()),
+                "ast_similarity": 0.8,
+            },
+            {
+                "task_id": task_id,
+                "file_a_id": str(uuid.uuid4()),
+                "file_b_id": str(uuid.uuid4()),
+                "ast_similarity": 0.6,
+            },
         ]
 
         repo.bulk_insert_results(results)
@@ -118,9 +131,22 @@ class TestPostgresRepository:
 
     def test_bulk_insert_results_handles_integrity_error_fallback(self, repo, mock_session):
         """Test that bulk_insert_results falls back to individual inserts on integrity error."""
+        import uuid
+
+        task_id = str(uuid.uuid4())
         results = [
-            {"task_id": "t1", "file_a_id": "a1", "file_b_id": "b1", "ast_similarity": 0.8},
-            {"task_id": "t1", "file_a_id": "a2", "file_b_id": "b2", "ast_similarity": 0.6},
+            {
+                "task_id": task_id,
+                "file_a_id": str(uuid.uuid4()),
+                "file_b_id": str(uuid.uuid4()),
+                "ast_similarity": 0.8,
+            },
+            {
+                "task_id": task_id,
+                "file_a_id": str(uuid.uuid4()),
+                "file_b_id": str(uuid.uuid4()),
+                "ast_similarity": 0.6,
+            },
         ]
         # First bulk insert raises IntegrityError
         mock_session.bulk_insert_mappings.side_effect = [

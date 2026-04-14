@@ -5,9 +5,8 @@ Revises: update_auth_simple_subject_access
 Create Date: 2026-04-13
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "add_user_lockout_session_version"

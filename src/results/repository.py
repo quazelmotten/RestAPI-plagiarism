@@ -559,3 +559,24 @@ class ResultRepository:
             matches=_normalize_matches(sr.matches),
             created_at=sr.created_at.isoformat() if sr.created_at else None,
         )
+
+    async def _map_to_result_item_with_map(
+        self, sr: SimilarityResult, file_map: dict
+    ) -> ResultItem:
+        """Map SimilarityResult to ResultItem using pre-fetched file map to avoid N+1 queries."""
+        return ResultItem(
+            id=str(sr.id),
+            file_a={
+                "id": str(sr.file_a_id),
+                "filename": file_map.get(str(sr.file_a_id), {}).get("filename", "Unknown"),
+                "is_confirmed": file_map.get(str(sr.file_a_id), {}).get("is_confirmed", False),
+            },
+            file_b={
+                "id": str(sr.file_b_id),
+                "filename": file_map.get(str(sr.file_b_id), {}).get("filename", "Unknown"),
+                "is_confirmed": file_map.get(str(sr.file_b_id), {}).get("is_confirmed", False),
+            },
+            ast_similarity=sr.ast_similarity,
+            matches=_normalize_matches(sr.matches),
+            created_at=sr.created_at.isoformat() if sr.created_at else None,
+        )

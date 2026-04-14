@@ -41,14 +41,13 @@ class TestTaskValidation:
 
     async def test_create_task_empty_body(self, client: AsyncClient):
         """Test creating task with empty body returns 422."""
-        response = await client.post("/plagitype/plagiarism/tasks", json={})
+        response = await client.post("/plagitype/plagiarism/check", data={}, files=[])
         assert response.status_code == 422, f"Expected 422: {response.text}"
 
     async def test_create_task_invalid_language(self, client: AsyncClient):
         """Test creating task with invalid language returns 422."""
         response = await client.post(
-            "/plagitype/plagiarism/tasks",
-            json={"language": "not-a-language"},
+            "/plagitype/plagiarism/check", data={"language": "not-a-language"}, files=[]
         )
         assert response.status_code == 422, f"Expected 422: {response.text}"
 

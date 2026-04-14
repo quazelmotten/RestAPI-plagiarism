@@ -8,7 +8,7 @@ from uuid import UUID
 
 from shared.models import Assignment, PlagiarismTask, ReviewNote, SimilarityResult
 from shared.models import File as FileModel
-from sqlalchemy import or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from exceptions.exceptions import NotFoundError
@@ -283,12 +283,14 @@ class ResultService:
         confirmed_files = {f.id for f in all_files if f.is_confirmed}
         total_files = len(all_files)
 
+        # First get enough results to account for filtering (get 2x limit to be safe)
         results_query = (
             select(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
             .where(PlagiarismTask.assignment_id == UUID(assignment_id))
             .where(SimilarityResult.review_disposition.is_(None))
             .order_by(SimilarityResult.ast_similarity.desc())
+            .limit(limit * 2)  # Get enough to ensure we have at least `limit` after filtering
         )
         result = await self.db.execute(results_query)
         all_results = result.scalars().all()
@@ -308,30 +310,57 @@ class ResultService:
         queue = priority_queue + secondary_queue
         queue = queue[:limit]
 
+        # Pre-fetch all file info for queue items in ONE query
+        file_ids = set()
+        for r in queue:
+            file_ids.add(r.file_a_id)
+            file_ids.add(r.file_b_id)
+
+        file_map = {}
+        if file_ids:
+            files_result = await self.db.execute(
+                select(FileModel.id, FileModel.filename, FileModel.is_confirmed).where(
+                    FileModel.id.in_(file_ids)
+                )
+            )
+            for row in files_result.all():
+                file_map[str(row.id)] = {
+                    "filename": row.filename,
+                    "is_confirmed": bool(row.is_confirmed) if row.is_confirmed else False,
+                }
+
+        # Use optimized mapping with pre-fetched file map
+        mapped_queue = []
+        for r in queue:
+            mapped_queue.append(await self.repo._map_to_result_item_with_map(r, file_map))
+
+        # Fix count queries to use SQL COUNT() instead of fetching all rows
         cleared_count_query = (
-            select(SimilarityResult)
+            select(func.count())
+            .select_from(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
             .where(PlagiarismTask.assignment_id == UUID(assignment_id))
             .where(SimilarityResult.review_disposition == "clear")
         )
         cleared_result = await self.db.execute(cleared_count_query)
-        _cleared_count = len(cleared_result.scalars().all())
+        _cleared_count = cleared_result.scalar_one()
 
         plagiarism_count_query = (
-            select(SimilarityResult)
+            select(func.count())
+            .select_from(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
             .where(PlagiarismTask.assignment_id == UUID(assignment_id))
             .where(SimilarityResult.review_disposition == "plagiarism")
         )
         plagiarism_result = await self.db.execute(plagiarism_count_query)
-        _plagiarism_count = len(plagiarism_result.scalars().all())
+        _plagiarism_count = plagiarism_result.scalar_one()
 
         return ReviewQueueResponse(
             assignment_id=assignment_id,
             total_files=total_files,
             confirmed_files=len(confirmed_files),
             remaining_files=total_files - len(confirmed_files),
-            queue=[await self.repo._map_to_result_item(r) for r in queue],
+            queue=mapped_queue,
             estimated_reviews=len(queue),
         )
 
@@ -385,48 +414,50 @@ class ResultService:
 
     async def get_review_status(self, assignment_id: str) -> ReviewStatusSummary:
         """Get summary of review status for an assignment."""
-        query = (
-            select(SimilarityResult)
+        assignment_uuid = UUID(assignment_id)
+
+        # Use SQL aggregation to get counts directly in database (no rows fetched)
+        status_query = (
+            select(
+                func.count().label("total"),
+                func.sum(case((SimilarityResult.review_disposition.is_(None), 1), else_=0)).label(
+                    "unreviewed"
+                ),
+                func.sum(
+                    case((SimilarityResult.review_disposition == "plagiarism", 1), else_=0)
+                ).label("confirmed"),
+                func.sum(
+                    case((SimilarityResult.review_disposition == "bulk_confirmed", 1), else_=0)
+                ).label("bulk_confirmed"),
+                func.sum(case((SimilarityResult.review_disposition == "clear", 1), else_=0)).label(
+                    "cleared"
+                ),
+            )
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
-            .distinct()
+            .where(PlagiarismTask.assignment_id == assignment_uuid)
         )
-        result = await self.db.execute(query)
-        all_results = result.scalars().all()
 
-        unreviewed = 0
-        confirmed = 0
-        bulk_confirmed = 0
-        cleared = 0
-
-        for r in all_results:
-            if r.review_disposition is None:
-                unreviewed += 1
-            elif r.review_disposition == "plagiarism":
-                confirmed += 1
-            elif r.review_disposition == "bulk_confirmed":
-                bulk_confirmed += 1
-            elif r.review_disposition == "clear":
-                cleared += 1
+        result = await self.db.execute(status_query)
+        row = result.first()
 
         return ReviewStatusSummary(
             assignment_id=assignment_id,
-            total_pairs=len(all_results),
-            unreviewed=unreviewed,
-            confirmed=confirmed,
-            bulk_confirmed=bulk_confirmed,
-            cleared=cleared,
+            total_pairs=row.total or 0,
+            unreviewed=row.unreviewed or 0,
+            confirmed=row.confirmed or 0,
+            bulk_confirmed=row.bulk_confirmed or 0,
+            cleared=row.cleared or 0,
         )
 
     async def get_pairs_by_status(
         self, assignment_id: str, status: str, limit: int = 100, offset: int = 0
     ) -> PaginatedResponse:
         """Get all pairs for an assignment filtered by review status."""
+        assignment_uuid = UUID(assignment_id)
         base_query = (
             select(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
-            .distinct()
+            .where(PlagiarismTask.assignment_id == assignment_uuid)
         )
 
         if status == "unreviewed" or status == "all":
@@ -440,16 +471,43 @@ class ResultService:
         else:
             query = base_query
 
+        # Get total count first
+        count_query = select(func.count()).select_from(query.subquery())
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar_one()
+
+        # Add pagination and ordering
         query = query.order_by(SimilarityResult.ast_similarity.desc())
-
+        query = query.limit(limit).offset(offset)
         result = await self.db.execute(query)
-        all_results = result.scalars().all()
+        paginated_results = result.scalars().all()
 
-        total = len(all_results)
-        paginated_results = all_results[offset : offset + limit]
+        # Pre-fetch file info for all results in one query
+        file_ids = set()
+        for r in paginated_results:
+            file_ids.add(r.file_a_id)
+            file_ids.add(r.file_b_id)
+
+        file_map = {}
+        if file_ids:
+            files_result = await self.db.execute(
+                select(FileModel.id, FileModel.filename, FileModel.is_confirmed).where(
+                    FileModel.id.in_(file_ids)
+                )
+            )
+            for row in files_result.all():
+                file_map[str(row.id)] = {
+                    "filename": row.filename,
+                    "is_confirmed": bool(row.is_confirmed) if row.is_confirmed else False,
+                }
+
+        # Use optimized mapping with pre-fetched file map
+        mapped_results = []
+        for r in paginated_results:
+            mapped_results.append(await self.repo._map_to_result_item_with_map(r, file_map))
 
         return PaginatedResponse(
-            items=[await self.repo._map_to_result_item(r) for r in paginated_results],
+            items=mapped_results,
             total=total,
             limit=limit,
             offset=offset,

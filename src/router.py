@@ -9,21 +9,22 @@ import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-router = APIRouter()
-logger = logging.getLogger(__name__)
-
-
-# Import and include domain routers
 from assignments.router import (
     router as assignments_router,
+)
+from assignments.router import (
     subject_router as assignments_subject_router,
-)  # noqa: E402
+)
 from auth.router import router as auth_router
+from auth.service import decode_token
 from files.router import router as files_router
 from results.router import router as results_router
 from tasks.router import router as tasks_router
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
 
 router.include_router(auth_router)
 router.include_router(tasks_router)
@@ -33,14 +34,16 @@ router.include_router(assignments_router)
 router.include_router(assignments_subject_router)
 
 
-# WebSocket endpoint lives at the global level since it crosses domains
 @router.websocket("/plagiarism/ws/tasks/{task_id}")
 async def websocket_task_progress(
     websocket: WebSocket,
     task_id: str,
+    token: str = Query(..., description="JWT access token for authentication"),
 ):
     """
     WebSocket endpoint for real-time task progress updates.
+
+    Requires authentication via token query parameter.
 
     Connects to a specific task and receives progress events:
     - type: "progress"
@@ -54,7 +57,17 @@ async def websocket_task_progress(
     Clients should send periodic pings to keep connection alive.
     Connection auto-closes when task completes or on error.
     """
-    logger.info("WebSocket connection attempt for task %s", task_id)
+    payload = decode_token(token)
+    if not payload:
+        await websocket.close(code=4001, reason="Invalid or expired token")
+        return
+
+    user_id = payload.get("sub")
+    if not user_id:
+        await websocket.close(code=4001, reason="Invalid token payload")
+        return
+
+    logger.info("WebSocket authenticated connection for task %s by user %s", task_id, user_id)
 
     manager = websocket.app.state.ws_manager
     await manager.connect(websocket, task_id)

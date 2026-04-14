@@ -119,7 +119,7 @@ class Settings(BaseSettings):
 
     @property
     def access_token_expire_minutes(self) -> int:
-        return self.app.access_token_expire_minutes
+        return self.auth.access_token_expire_minutes
 
     @property
     def refresh_token_expire_days(self) -> int:

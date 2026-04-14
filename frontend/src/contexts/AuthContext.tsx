@@ -8,7 +8,6 @@ import {
   changePassword as apiChangePassword,
   isAuthenticated as apiIsAuthenticated,
   getToken,
-  getRefreshToken,
 } from '../services/api';
 
 export interface User {

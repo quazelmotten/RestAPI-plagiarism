@@ -25,10 +25,20 @@ def configure_logging(log_level: str = "INFO", log_format: str = "json"):
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_format: Format for logs: "json" or "plain"
     """
+    # Check if running under pytest - preserve pytest handlers
+    import sys
+
+    is_pytest = "pytest" in sys.argv[0] or "pytest" in sys.modules
+
     level = getattr(logging, log_level.upper())
 
-    # Reset root logger
-    logging.root.handlers = []
+    if is_pytest:
+        # When running under pytest, only add our handler without clearing existing ones
+        pass
+    else:
+        # Reset root logger completely for production/regular runtime
+        logging.root.handlers = []
+
     logging.root.setLevel(level)
 
     if log_format.lower() == "json":

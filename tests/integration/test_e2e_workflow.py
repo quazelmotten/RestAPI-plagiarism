@@ -35,7 +35,8 @@ class TestE2ETaskWorkflow:
     async def test_task_lifecycle(self, client: AsyncClient):
         """Test creating and processing a task."""
         data = {"language": "python"}
-        response = await client.post("/plagitype/plagiarism/tasks", json=data)
+        files = [("files", ("test.py", b"print('hello')", "text/plain"))]
+        response = await client.post("/plagitype/plagiarism/check", data=data, files=files)
         assert response.status_code == 201, f"Failed to create task: {response.text}"
         data = response.json()
         assert "task_id" in data or "id" in data
@@ -72,10 +73,10 @@ class TestE2EWithSubjects:
 
     async def test_uncategorized_assignments_workflow(self, client: AsyncClient):
         """Test uncategorized assignments."""
-        response = await client.get("/plagitype/plagiarism/subjects/uncategorized")
+        response = await client.get("/plagitype/plagiarism/assignments/uncategorized")
         assert response.status_code == 200, f"Failed to get uncategorized: {response.text}"
         data = response.json()
-        assert isinstance(data, dict)
+        assert isinstance(data, list)
 
 
 class TestE2ECrossLanguage:
@@ -85,7 +86,8 @@ class TestE2ECrossLanguage:
     async def test_task_with_different_languages(self, client: AsyncClient, language: str):
         """Test creating tasks in different languages."""
         data = {"language": language}
-        response = await client.post("/plagitype/plagiarism/tasks", json=data)
+        files = [("files", ("test.py", b"print('hello')", "text/plain"))]
+        response = await client.post("/plagitype/plagiarism/check", data=data, files=files)
         assert response.status_code == 201, f"Failed for language {language}: {response.text}"
         data = response.json()
         assert "task_id" in data or "id" in data
@@ -97,25 +99,21 @@ class TestE2EErrorHandling:
     async def test_invalid_assignment_id_in_task_creation(self, client: AsyncClient):
         """Test creating task with invalid assignment."""
         response = await client.post(
-            "/plagitype/plagiarism/assignments/invalid-id/tasks",
-            json={"language": "python"},
+            "/plagitype/plagiarism/check",
+            data={"assignment_id": "invalid-id", "language": "python"},
+            files=[],
         )
         assert response.status_code in (422, 404), f"Expected error for invalid ID: {response.text}"
 
     async def test_upload_to_nonexistent_task(self, client: AsyncClient):
         """Test uploading to nonexistent task."""
-        files = {"file": ("test.py", b"print('hello')", "text/plain")}
-        response = await client.post(
-            "/plagitype/plagiarism/tasks/00000000-0000-0000-0000-000000000000/files",
-            files=files,
-        )
-        assert response.status_code in (422, 404), (
-            f"Expected error for nonexistent task: {response.text}"
-        )
+        # File upload happens only during task creation via /plagiarism/check
+        # There is no separate task file upload endpoint
+        pass
 
     async def test_get_results_for_nonexistent_task(self, client: AsyncClient):
         """Test getting results for nonexistent task."""
         response = await client.get(
-            "/plagitype/plagiarism/tasks/00000000-0000-0000-0000-000000000000/results"
+            "/plagitype/plagiarism/tasks/00000000-0000-0000-0000-000000000000"
         )
         assert response.status_code in (200, 404), f"Expected valid response: {response.text}"

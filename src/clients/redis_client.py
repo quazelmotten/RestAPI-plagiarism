@@ -95,3 +95,23 @@ class RedisClient:
             await client.set(key, value, ex=ttl)
         else:
             await client.set(key, value)
+
+    async def setex(self, key: str, ttl: int, value: str) -> None:
+        """Async set key with TTL (setex equivalent)."""
+        client = self.get_async_client()
+        await client.setex(key, ttl, value)
+
+    async def incr(self, key: str) -> int:
+        """Async increment key value."""
+        client = self.get_async_client()
+        return await client.incr(key)
+
+    async def expire(self, key: str, ttl: int) -> bool:
+        """Async set expiration on key."""
+        client = self.get_async_client()
+        return await client.expire(key, ttl)
+
+    async def pipeline(self):
+        """Get a pipeline for atomic operations."""
+        client = self.get_async_client()
+        return client.pipeline()
