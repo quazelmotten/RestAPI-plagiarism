@@ -20,7 +20,7 @@ import {
   Icon,
 } from '@chakra-ui/react';
 import { FiGlobe } from 'react-icons/fi';
-import { login, isAuthenticated } from '../services/api';
+import { login, register, isAuthenticated } from '../services/api';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 
@@ -42,19 +42,28 @@ function Login() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await login(email, password);
-      toast({
-        title: t('loginSuccessful'),
-        status: 'success',
-        duration: 3000,
-      });
-      navigate('/dashboard');
+      if (viewMode === 'signup') {
+        await register(email, password);
+        toast({
+          title: t('registrationSuccessful'),
+          status: 'success',
+          duration: 3000,
+        });
+      } else {
+        await login(email, password);
+        toast({
+          title: t('loginSuccessful'),
+          status: 'success',
+          duration: 3000,
+        });
+      }
+      // Navigation is handled automatically at the top of the component
     } catch (error: unknown) {
       const message = error instanceof Error 
         ? error.message 
-        : t('loginFailedCheckCredentials');
+        : t(viewMode === 'signup' ? 'registrationFailed' : 'loginFailedCheckCredentials');
       toast({
-        title: t('loginFailed'),
+        title: t(viewMode === 'signup' ? 'registrationFailed' : 'loginFailed'),
         description: message,
         status: 'error',
         duration: 5000,

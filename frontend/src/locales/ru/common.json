@@ -47,6 +47,8 @@
   "loginSuccessful": "Вход выполнен успешно",
   "loginFailed": "Ошибка входа",
   "loginFailedCheckCredentials": "Ошибка входа. Проверьте свои данные.",
+  "registrationSuccessful": "Регистрация выполнена успешно",
+  "registrationFailed": "Ошибка регистрации",
   "enterCredentialsSignIn": "Введите свои данные для доступа к системе проверки плагиата",
   "createAccountSignUp": "Создайте новую учетную запись, чтобы начать работу",
   "forgotPassword": "Забыли пароль?",

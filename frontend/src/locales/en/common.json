@@ -47,6 +47,8 @@
   "loginSuccessful": "Login successful",
   "loginFailed": "Login failed",
   "loginFailedCheckCredentials": "Login failed. Please check your credentials.",
+  "registrationSuccessful": "Registration successful",
+  "registrationFailed": "Registration failed",
   "enterCredentialsSignIn": "Enter your credentials to access the plagiarism detection system",
   "createAccountSignUp": "Create a new account to get started",
   "forgotPassword": "Forgot Password",

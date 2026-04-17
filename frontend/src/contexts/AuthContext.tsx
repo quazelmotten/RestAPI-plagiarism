@@ -73,7 +73,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (email: string, password: string) => {
     await apiRegister(email, password);
     // optional: auto‑login after registration
-    await login(email, password);
+    try {
+      await login(email, password);
+    } catch (e) {
+      // ignore login errors, let user login manually if needed
+      console.warn('Auto-login after registration failed', e);
+    }
   };
 
   const forgotPassword = async (email: string) => {
