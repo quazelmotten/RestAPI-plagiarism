@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Button, FormControl, FormLabel, Input, Heading, Alert, AlertIcon, VStack, Text } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 const Profile: React.FC = () => {
   const { user, changePassword, logout } = useAuth();
@@ -9,6 +10,7 @@ const Profile: React.FC = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,11 +19,11 @@ const Profile: React.FC = () => {
     setLoading(true);
     try {
       await changePassword(currentPassword, newPassword);
-      setMessage('Password changed successfully');
+      setMessage(t('passwordChangedSuccessfully'));
       setCurrentPassword('');
       setNewPassword('');
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Failed to change password');
+      setError(err.response?.data?.detail || err.message || t('failedToChangePassword'));
     } finally {
       setLoading(false);
     }
@@ -36,12 +38,12 @@ const Profile: React.FC = () => {
 
   return (
     <Box maxW="md" mx="auto" mt={8} p={4}>
-      <Heading mb={6}>Profile</Heading>
+      <Heading mb={6}>{t('profile')}</Heading>
       <Text mb={4}>Email: {user.email}</Text>
       <form onSubmit={handleChangePassword}>
         <VStack spacing={4} align="stretch">
           <FormControl isRequired>
-            <FormLabel>Current Password</FormLabel>
+            <FormLabel>{t('currentPassword')}</FormLabel>
             <Input
               type="password"
               value={currentPassword}
@@ -49,7 +51,7 @@ const Profile: React.FC = () => {
             />
           </FormControl>
           <FormControl isRequired>
-            <FormLabel>New Password</FormLabel>
+            <FormLabel>{t('newPassword')}</FormLabel>
             <Input
               type="password"
               value={newPassword}
@@ -57,7 +59,7 @@ const Profile: React.FC = () => {
             />
           </FormControl>
           <Button type="submit" colorScheme="brand" isLoading={loading}>
-            Change Password
+            {t('changePassword')}
           </Button>
         </VStack>
       </form>
@@ -74,7 +76,7 @@ const Profile: React.FC = () => {
         </Alert>
       )}
       <Button mt={6} variant="outline" onClick={handleLogout} colorScheme="red">
-        Logout
+        {t('logout')}
       </Button>
     </Box>
   );

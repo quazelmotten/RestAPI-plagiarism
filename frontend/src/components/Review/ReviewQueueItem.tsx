@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   HStack, Text, Badge, Button, useToast, IconButton, Tooltip
 } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import { FiCheck, FiX, FiEye } from 'react-icons/fi';
 import api, { API_ENDPOINTS } from '../../services/api';
 import type { PlagiarismResult } from '../../types';
@@ -16,6 +17,7 @@ interface ReviewQueueItemProps {
 const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({ 
   item, index, onReview, onAction 
 }) => {
+  const { t } = useTranslation(['review']);
   const [confirming, setConfirming] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const toast = useToast();
@@ -114,7 +116,16 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
           />
         </Tooltip>
         
-        <Tooltip label="Confirm plagiarism">
+        <Tooltip label={t('review:reviewInDetail')}>
+          <IconButton
+            size="sm"
+            icon={<FiEye />}
+            aria-label="Review"
+            onClick={() => onReview(item)}
+          />
+        </Tooltip>
+        
+        <Tooltip label={t('review:confirmPlagiarism')}>
           <Button
             size="sm"
             colorScheme="green"
@@ -122,18 +133,18 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
             onClick={handleConfirm}
             isLoading={confirming}
           >
-            Confirm
+            {t('review:confirm')}
           </Button>
         </Tooltip>
         
-        <Tooltip label="Clear (no plagiarism) - press X key">
+        <Tooltip label={t('review:clearNoPlagiarism')}>
           <Button
             size="sm"
             colorScheme="gray"
             onClick={handleSkip}
             isLoading={skipping}
           >
-            Clear
+            {t('review:clear')}
           </Button>
         </Tooltip>
       </HStack>

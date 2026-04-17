@@ -15,5 +15,8 @@
   "modeAssignments": "By Assignment",
   "modeClassic": "Classic View",
   "uncategorized": "Uncategorized",
-  "viewAllAssignments": "View All Assignments"
+  "viewAllAssignments": "View All Assignments",
+  "users": "Users",
+  "recent": "Recent",
+  "detail": "Detail"
 }

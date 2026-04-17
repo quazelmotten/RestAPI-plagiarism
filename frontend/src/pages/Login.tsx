@@ -44,7 +44,7 @@ function Login() {
     try {
       await login(email, password);
       toast({
-        title: 'Login successful',
+        title: t('loginSuccessful'),
         status: 'success',
         duration: 3000,
       });
@@ -52,9 +52,9 @@ function Login() {
     } catch (error: unknown) {
       const message = error instanceof Error 
         ? error.message 
-        : 'Login failed. Please check your credentials.';
+        : t('loginFailedCheckCredentials');
       toast({
-        title: 'Login failed',
+        title: t('loginFailed'),
         description: message,
         status: 'error',
         duration: 5000,
@@ -85,7 +85,7 @@ function Login() {
       <Card>
         <CardBody>
           <VStack spacing={6} as="form" onSubmit={handleSubmit}>
-            <Heading size="lg">{viewMode === 'signin' ? 'Sign In' : 'Sign Up'}</Heading>
+            <Heading size="lg">{viewMode === 'signin' ? t('signIn') : t('signUp')}</Heading>
             
             {/* View Toggle - Classic/Assignment style */}
             <Box 
@@ -103,7 +103,7 @@ function Login() {
                   onClick={() => setViewMode('signin')}
                   flex={1}
                 >
-                  Sign In
+                  {t('signIn')}
                 </Button>
                 <Button
                   size="sm"
@@ -112,19 +112,19 @@ function Login() {
                   onClick={() => setViewMode('signup')}
                   flex={1}
                 >
-                  Sign Up
+                  {t('signUp')}
                 </Button>
               </HStack>
             </Box>
 
             <Text color="gray.600">
               {viewMode === 'signin' 
-                ? 'Enter your credentials to access the plagiarism detection system' 
-                : 'Create a new account to get started'
+                ? t('enterCredentialsSignIn') 
+                : t('createAccountSignUp')
               }
             </Text>
             <FormControl isRequired>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>{t('email')}</FormLabel>
               <Input
                 type="email"
                 value={email}
@@ -133,7 +133,7 @@ function Login() {
               />
             </FormControl>
             <FormControl isRequired>
-              <FormLabel>Password</FormLabel>
+              <FormLabel>{t('password')}</FormLabel>
               <Input
                 type="password"
                 value={password}
@@ -147,7 +147,7 @@ function Login() {
               width="full"
               isLoading={isLoading}
             >
-              {viewMode === 'signin' ? 'Sign In' : 'Sign Up'}
+              {viewMode === 'signin' ? t('signIn') : t('signUp')}
             </Button>
           </VStack>
         </CardBody>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router';
 import { Box, Button, FormControl, FormLabel, Input, Heading, Alert, AlertIcon, VStack } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -12,6 +13,7 @@ const ResetPassword: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { resetPassword } = useAuth();
+  const { t } = useTranslation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,10 +22,10 @@ const ResetPassword: React.FC = () => {
     setLoading(true);
     try {
       await resetPassword(token, newPassword);
-      setMessage('Password reset successful. You can now log in.');
+      setMessage(t('resetSuccessful'));
       setTimeout(() => navigate('/login'), 2000);
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Reset failed');
+      setError(err.response?.data?.detail || err.message || t('resetFailed'));
     } finally {
       setLoading(false);
     }
@@ -31,7 +33,7 @@ const ResetPassword: React.FC = () => {
 
   return (
     <Box maxW="md" mx="auto" mt={8} p={4}>
-      <Heading mb={6}>Reset Password</Heading>
+      <Heading mb={6}>{t('resetPassword')}</Heading>
       {error && (
         <Alert status="error" mb={4}>
           <AlertIcon />
@@ -47,7 +49,7 @@ const ResetPassword: React.FC = () => {
       <form onSubmit={handleSubmit}>
         <VStack spacing={4} align="stretch">
           <FormControl isRequired>
-            <FormLabel>New Password</FormLabel>
+            <FormLabel>{t('newPassword')}</FormLabel>
             <Input
               type="password"
               value={newPassword}
@@ -55,7 +57,7 @@ const ResetPassword: React.FC = () => {
             />
           </FormControl>
           <Button type="submit" colorScheme="brand" isLoading={loading}>
-            Reset Password
+            {t('resetPassword')}
           </Button>
         </VStack>
       </form>

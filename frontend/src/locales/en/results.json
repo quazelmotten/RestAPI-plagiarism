@@ -1,8 +1,9 @@
 {
-  "selectTask": "Select Task:",
+   "selectTask": "Select Task:",
   "refresh": "Refresh",
   "view": "View:",
-   "cards": "Cards",
+  "cards": "Cards",
+  "exportCSV": "Export CSV",
    "noChecks": "No plagiarism checks found. Upload files to get started!",
   "selectTaskPrompt": "Select a task",
   "failedToFetchTasks": "Failed to fetch plagiarism tasks",

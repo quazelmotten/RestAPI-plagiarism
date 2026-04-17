@@ -8,19 +8,21 @@
     "similarity": "Сходство (напр. >50% или 0.5)",
     "similarityPlaceholder": ">50%, <0.3, и т.д.",
     "submittedDate": "Дата отправки",
-    "taskId": "ID задачи"
+    "taskId": "ID проверки"
   },
-  "table": {
-    "fileName": "Имя файла",
-    "language": "Язык",
-    "status": "Статус",
-    "similarity": "Сходство",
-    "submittedAt": "Отправлено",
-    "taskId": "ID задачи",
-    "actions": "Действия",
-    "goToTask": "Перейти к задаче"
-  },
-  "noMatches": "Нет посылок соответствующих текущим фильтрам",
+   "table": {
+     "fileName": "Имя файла",
+     "language": "Язык",
+     "status": "Статус",
+     "similarity": "Сходство",
+     "submittedAt": "Отправлено",
+     "taskId": "ID проверки",
+     "assignment": "Задание",
+     "subject": "Предмет",
+     "actions": "Действия",
+     "goToTask": "Перейти к задаче"
+   },
+  "noMatches": "Нету файлов соответствующих текущим фильтрам",
   "loading": "Загрузка...",
   "pagination": {
     "previous": "Назад",

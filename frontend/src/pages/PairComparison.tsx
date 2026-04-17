@@ -513,9 +513,9 @@ const PairComparison: React.FC = () => {
                   onClick={() => setStatsOpen(!statsOpen)}
                 />
               </Tooltip>
-               <Tooltip label="Keyboard shortcuts" placement="bottom">
-                 <IconButton
-                   aria-label="Keyboard shortcuts"
+<Tooltip label={t('common:keyboardShortcuts')} placement="bottom">
+                  <IconButton
+                    aria-label={t('common:keyboardShortcuts')}
                    icon={<FiHelpCircle />}
                    size="sm"
                    variant={shortcutsOpen ? 'solid' : 'ghost'}
@@ -571,10 +571,10 @@ const PairComparison: React.FC = () => {
             <Modal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} size="md">
               <ModalOverlay />
               <ModalContent>
-                <ModalHeader>
-                  <HStack>
-                    <FiHelpCircle />
-                    <Text>Keyboard Shortcuts</Text>
+                 <ModalHeader>
+                   <HStack>
+                     <FiHelpCircle />
+                     <Text>{t('common:keyboardShortcuts')}</Text>
                   </HStack>
                 </ModalHeader>
                 <ModalCloseButton />
@@ -596,10 +596,10 @@ const PairComparison: React.FC = () => {
                       <Text fontWeight="medium">Ctrl/Cmd + S</Text>
                       <Text color="gray.500">Toggle scroll sync</Text>
                     </HStack>
-                    <HStack justify="space-between">
-                      <Text fontWeight="medium">Escape</Text>
-                      <Text color="gray.500">Close modal (or file picker)</Text>
-                    </HStack>
+                     <HStack justify="space-between">
+                       <Text fontWeight="medium">{t('escape')}</Text>
+                       <Text color="gray.500">Close modal (or file picker)</Text>
+                     </HStack>
                   </VStack>
                 </ModalBody>
               </ModalContent>

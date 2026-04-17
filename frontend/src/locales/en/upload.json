@@ -19,6 +19,7 @@
   "duplicateSkipped": "duplicate file(s) skipped",
   "rejected": "file(s) rejected",
   "filesCount": "{{count}} files",
+  "addFiles": "Add files",
   "toasts": {
     "noFilesSelected": "No files selected",
     "success": "Upload successful",

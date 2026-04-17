@@ -251,9 +251,9 @@ const Results: React.FC = () => {
                             link.click();
                             URL.revokeObjectURL(url);
                           }}
-                        >
-                          Export CSV
-                        </Button>
+                         >
+                           {t('exportCSV')}
+                         </Button>
                       )}
                   </HStack>
 

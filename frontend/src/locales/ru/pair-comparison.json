@@ -22,13 +22,15 @@
     "similarity": "{{percent}}% сходства",
     "showHeader": "Показать заголовок",
     "hideHeader": "Скрыть заголовок",
-    "tooltip": {
-      "showComments": "Показать комментарии (c)",
-      "hideComments": "Скрыть комментарии (c)",
-      "unlockScrollSync": "Синхронизация прокрутки (s)",
-      "lockScrollSync": "Синхронизация прокрутки (s)",
-      "matchStatistics": "Статистика совпадений"
-    },
+     "tooltip": {
+       "showComments": "Показать комментарии (c)",
+       "hideComments": "Скрыть комментарии (c)",
+       "showEmptyLines": "Показать пустые строки",
+       "hideEmptyLines": "Скрыть пустые строки",
+       "unlockScrollSync": "Синхронизация прокрутки (s)",
+       "lockScrollSync": "Синхронизация прокрутки (s)",
+       "matchStatistics": "Статистика совпадений"
+     },
     "aria": {
       "showComments": "Показать комментарии",
       "hideComments": "Скрыть комментарии",
@@ -49,6 +51,7 @@
       "3": "Перетаскивание кусков кода",
       "4": "Семантическое переписывание"
     },
-    "match": "Совпадение"
-  }
+   "match": "Совпадение"
+ },
+ "keyboardShortcuts": "Горячие клавиши"
 }

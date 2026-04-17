@@ -421,7 +421,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
   const tabLabels = [
     t('results:resultsList.topSimilarities'),
     t('results:distribution.title'),
-    'Files',
+    t('assignments:files'),
   ];
 
   const renderResizeHandle = (col: string) => (
@@ -457,7 +457,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
           <HStack spacing={3} align="center">
             <Text fontSize="2xl" fontWeight="bold">{assignmentData.name}</Text>
             <Badge colorScheme="blue" fontSize="sm">{assignmentData.files_count} {t('common:files')}</Badge>
-            <Badge colorScheme="purple" fontSize="sm">{assignmentData.tasks_count} tasks</Badge>
+            <Badge colorScheme="purple" fontSize="sm">{assignmentData.tasks_count} {t('common:tasks')}</Badge>
           </HStack>
           {assignmentData.description && (
             <Text fontSize="sm" color={mutedColor} mt={1}>{assignmentData.description}</Text>
@@ -540,15 +540,15 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
               <Box overflowX="auto">
                 <Table size="sm" variant="simple">
                   <Thead>
-                    <Tr>
-                      <Th fontSize="xs" w="30px"></Th>
-                      <Th fontSize="xs">Task ID</Th>
-                      <Th fontSize="xs">Status</Th>
-                      <Th fontSize="xs" isNumeric>Files</Th>
-                      <Th fontSize="xs" isNumeric>Pairs</Th>
-                      <Th fontSize="xs" isNumeric>High</Th>
-                      <Th fontSize="xs" isNumeric>Avg Sim</Th>
-                    </Tr>
+                     <Tr>
+                       <Th fontSize="xs" w="30px"></Th>
+                       <Th fontSize="xs">{t('assignments:taskId')}</Th>
+                       <Th fontSize="xs">{t('assignments:status')}</Th>
+                       <Th fontSize="xs" isNumeric>{t('assignments:files')}</Th>
+                       <Th fontSize="xs" isNumeric>{t('assignments:pairs')}</Th>
+                       <Th fontSize="xs" isNumeric>{t('assignments:high')}</Th>
+                       <Th fontSize="xs" isNumeric>{t('assignments:avgSim')}</Th>
+                     </Tr>
                   </Thead>
                   <Tbody>
                     <Tr
@@ -558,9 +558,9 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                       _hover={{ bg: selectedTaskId === '' ? selectedRowHoverBg : hoverBg }}
                       fontWeight={selectedTaskId === '' ? 'semibold' : 'normal'}
                     >
-                      <Td px={2}>{selectedTaskId === '' && <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />}</Td>
-                      <Td fontSize="sm">All tasks (aggregated)</Td>
-                      <Td><Badge colorScheme="blue" fontSize="xs">combined</Badge></Td>
+                       <Td px={2}>{selectedTaskId === '' && <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />}</Td>
+                       <Td fontSize="sm">{t('assignments:allTasksAggregated')}</Td>
+                       <Td><Badge colorScheme="blue" fontSize="xs">{t(`status:combined`)}</Badge></Td>
                       <Td fontSize="sm" isNumeric>{aggFilesCount}</Td>
                       <Td fontSize="sm" isNumeric>{assignmentData.total_pairs}</Td>
                       <Td fontSize="sm" isNumeric color={aggHighCount > 0 ? 'red.500' : undefined}>{aggHighCount}</Td>
@@ -579,12 +579,12 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                       >
                         <Td px={2}>{selectedTaskId === task.task_id && <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />}</Td>
                         <Td fontSize="xs" fontFamily="monospace">{task.task_id.substring(0, 12)}...</Td>
-                        <Td>
-                          <HStack spacing={1}>
-                            {getStatusIcon(task.status)}
-                            <Badge colorScheme={getStatusColorScheme(task.status)} fontSize="xs">{task.status}</Badge>
-                          </HStack>
-                        </Td>
+                         <Td>
+                           <HStack spacing={1}>
+                             {getStatusIcon(task.status)}
+                             <Badge colorScheme={getStatusColorScheme(task.status)} fontSize="xs">{t(`status:${task.status}`)}</Badge>
+                           </HStack>
+                         </Td>
                         <Td fontSize="sm" isNumeric>{task.files_count ?? '-'}</Td>
                         <Td fontSize="sm" isNumeric>{task.total_pairs ?? 0}</Td>
                         <Td fontSize="sm" isNumeric color={(task.high_similarity_count ?? 0) > 0 ? 'red.500' : undefined}>
@@ -612,9 +612,9 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                 <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />
                 {selectedTaskId === '' ? (
                   <>
-                    <Text fontSize="sm" fontWeight="semibold">All tasks</Text>
-                    <Badge colorScheme="blue" fontSize="xs">{aggFilesCount} files</Badge>
-                    <Badge fontSize="xs">{assignmentData.total_pairs} pairs</Badge>
+                    <Text fontSize="sm" fontWeight="semibold">{t('common:all')} {t('common:tasks')}</Text>
+                    <Badge colorScheme="blue" fontSize="xs">{aggFilesCount} {t('common:files')}</Badge>
+                    <Badge fontSize="xs">{assignmentData.total_pairs} {t('common:pairs')}</Badge>
                     {aggHighCount > 0 && <Badge colorScheme="red" fontSize="xs">{aggHighCount} high</Badge>}
                     <Badge colorScheme={getSimilarityColor(aggAvgSim)} fontSize="xs">{(aggAvgSim * 100).toFixed(1)}% avg</Badge>
                   </>
@@ -623,14 +623,14 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                     <Text fontSize="xs" fontFamily="monospace" fontWeight="medium">{selectedTaskId.substring(0, 12)}...</Text>
                     {selectedTask && (
                       <>
-                        <Badge colorScheme={getStatusColorScheme(selectedTask.status)} fontSize="xs">{selectedTask.status}</Badge>
-                        <Badge fontSize="xs">{selectedTask.files_count ?? '-'} files</Badge>
-                        <Badge fontSize="xs">{selectedTask.total_pairs ?? 0} pairs</Badge>
+                        <Badge colorScheme={getStatusColorScheme(selectedTask.status)} fontSize="xs">{t(`status:${selectedTask.status}`)}</Badge>
+                        <Badge fontSize="xs">{selectedTask.files_count ?? '-'} {t('common:files')}</Badge>
+                        <Badge fontSize="xs">{selectedTask.total_pairs ?? 0} {t('common:pairs')}</Badge>
                         {(selectedTask.high_similarity_count ?? 0) > 0 && (
-                          <Badge colorScheme="red" fontSize="xs">{selectedTask.high_similarity_count} high</Badge>
+                          <Badge colorScheme="red" fontSize="xs">{selectedTask.high_similarity_count} {t('assignments:high')}</Badge>
                         )}
                         <Badge colorScheme={getSimilarityColor(selectedTask.avg_similarity ?? 0)} fontSize="xs">
-                          {((selectedTask.avg_similarity ?? 0) * 100).toFixed(1)}% avg
+                          {((selectedTask.avg_similarity ?? 0) * 100).toFixed(1)}% {t('assignments:avgSim')}
                         </Badge>
                       </>
                     )}
@@ -643,7 +643,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                 leftIcon={<FiUploadCloud />}
                 onClick={() => setCollapsed(false)}
               >
-                Add files
+                {t('upload:addFiles')}
               </Button>
             </HStack>
           </Box>
@@ -676,12 +676,12 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                 {label}
               </Button>
             ))}
-            <Button size="sm" variant={activeTab === 3 ? 'solid' : 'ghost'} colorScheme={activeTab === 3 ? 'brand' : 'gray'} onClick={() => setActiveTab(3)} fontSize="xs">
-              <HStack spacing={1}>
-                <Icon as={FiList} boxSize={3} />
-                <Text>Review</Text>
-              </HStack>
-            </Button>
+             <Button size="sm" variant={activeTab === 3 ? 'solid' : 'ghost'} colorScheme={activeTab === 3 ? 'brand' : 'gray'} onClick={() => setActiveTab(3)} fontSize="xs">
+               <HStack spacing={1}>
+                 <Icon as={FiList} boxSize={3} />
+                 <Text>{t('assignments:review')}</Text>
+               </HStack>
+             </Button>
           </HStack>
 
           {/* Tab content */}
@@ -709,11 +709,11 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                   <TableContainer>
                     <Table variant="simple" size="sm">
                       <Thead position="sticky" top={0} bg={cardBg} zIndex={1}>
-                        <Tr>
-                          <Th>{t('results:resultsList.topSimilarities')}</Th>
-                          <Th isNumeric>Similarity</Th>
-                          <Th w="100px"></Th>
-                        </Tr>
+                         <Tr>
+                           <Th>{t('results:resultsList.topSimilarities')}</Th>
+                           <Th isNumeric>{t('assignments:similarity')}</Th>
+                           <Th w="100px"></Th>
+                         </Tr>
                       </Thead>
                       <Tbody>
                         {filteredResults.map((result, idx) => (
@@ -732,7 +732,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                             </Td>
                             <Td>
                               <Button size="xs" rightIcon={<FiArrowRight />} variant="outline" colorScheme={getSimilarityColor(result.ast_similarity || 0)} onClick={() => handleCompare(result)}>
-                                Review
+                                {t('review:reviewInDetail')}
                               </Button>
                             </Td>
                           </Tr>
@@ -823,12 +823,12 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                     <Input placeholder="Filter by filename..." value={fileFilterName} onChange={(e) => setFileFilterName(e.target.value)} />
                   </InputGroup>
                   <Select size="sm" w="180px" value={fileFilterTask} onChange={(e) => { setFileFilterTask(e.target.value); setFilesPage(0); }}>
-                    <option value="">All tasks</option>
+                    <option value="">{t('review:allTasks')}</option>
                     {assignmentData.tasks.map((task) => (
                       <option key={task.task_id} value={task.task_id}>{task.task_id.substring(0, 8)}...</option>
                     ))}
                   </Select>
-                  <Text fontSize="xs" color={mutedColor}>{totalFiles} files</Text>
+                  <Text fontSize="xs" color={mutedColor}>{totalFiles} {t('common:files')}</Text>
                 </HStack>
 
                 <Box flex={1} overflowY="auto">
@@ -841,27 +841,27 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                         <col style={{ width: '80px' }} />
                       </colgroup>
                       <Thead position="sticky" top={0} bg={cardBg} zIndex={1}>
-                        <Tr>
-                          <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('filename')} pr="20px">
-                            <HStack spacing={1}>
-                              <Text as="span">Filename</Text>
-                              {fileSortCol === 'filename' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
-                            </HStack>
-                            {renderResizeHandle('filename')}
-                          </Th>
-                          <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('task_id')} pr="20px">
-                            <HStack spacing={1}>
-                              <Text as="span">Task</Text>
-                              {fileSortCol === 'task_id' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
-                            </HStack>
-                            {renderResizeHandle('task')}
-                          </Th>
-                          <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('max_similarity')} pr="20px">
-                            <HStack spacing={1}>
-                              <Text as="span">Max Sim</Text>
-                              {fileSortCol === 'max_similarity' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
-                            </HStack>
-                            {renderResizeHandle('maxSim')}
+                         <Tr>
+                           <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('filename')} pr="20px">
+                             <HStack spacing={1}>
+                               <Text as="span">{t('assignments:filename')}</Text>
+                               {fileSortCol === 'filename' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
+                             </HStack>
+                             {renderResizeHandle('filename')}
+                           </Th>
+                           <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('task_id')} pr="20px">
+                             <HStack spacing={1}>
+                               <Text as="span">{t('assignments:task')}</Text>
+                               {fileSortCol === 'task_id' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
+                             </HStack>
+                             {renderResizeHandle('task')}
+                           </Th>
+                           <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('max_similarity')} pr="20px">
+                             <HStack spacing={1}>
+                               <Text as="span">{t('assignments:maxSim')}</Text>
+                               {fileSortCol === 'max_similarity' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
+                             </HStack>
+                             {renderResizeHandle('maxSim')}
                           </Th>
                           <Th></Th>
                         </Tr>
@@ -879,7 +879,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                               </Badge>
                             </Td>
                             <Td>
-                              <Button size="xs" leftIcon={<FiEye />} variant="ghost" onClick={() => handleViewFile(file.id, file.filename)}>View</Button>
+                               <Button size="xs" leftIcon={<FiEye />} variant="ghost" onClick={() => handleViewFile(file.id, file.filename)}>{t('common:view')}</Button>
                             </Td>
                           </Tr>
                         ))}
@@ -887,32 +887,32 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                     </Table>
                   </TableContainer>
                   {displayedFiles.length === 0 && (
-                    <Box textAlign="center" py={8} color={mutedColor}><Text>No files in this assignment</Text></Box>
+                    <Box textAlign="center" py={8} color={mutedColor}><Text>{t('review:noFilesInAssignment')}</Text></Box>
                   )}
                 </Box>
 
                 {totalFilePages > 1 && (
                   <HStack spacing={2} mt={3} flexShrink={0} justifyContent="center">
                     <Button size="xs" leftIcon={<FiChevronLeft />} onClick={() => setFilesPage(p => Math.max(0, p - 1))} isDisabled={filesPage === 0}>
-                      Previous
+                      {t('common:prev')}
                     </Button>
                     <Text fontSize="xs" color={mutedColor}>
-                      Page {filesPage + 1} of {totalFilePages}
+                      {t('common:pageOf', { current: filesPage + 1, total: totalFilePages })}
                     </Text>
                     <Button size="xs" rightIcon={<FiChevronRight />} onClick={() => setFilesPage(p => Math.min(totalFilePages - 1, p + 1))} isDisabled={filesPage >= totalFilePages - 1}>
-                      Next
+                      {t('common:next')}
                     </Button>
                     <HStack spacing={1} ml={2}>
                       <Input
                         size="xs"
                         w="60px"
-                        placeholder="Go to..."
+                        placeholder={t('common:go')}
                         value={filesGoPage}
                         onChange={(e) => setFilesGoPage(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleFilesGoToPage(); }}
                       />
                       <Button size="xs" onClick={handleFilesGoToPage} isDisabled={!filesGoPage}>
-                        Go
+                        {t('common:go')}
                       </Button>
                     </HStack>
                   </HStack>
@@ -939,7 +939,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
         <Flex flex={1} align="center" justify="center" direction="column" color={mutedColor} py={12}>
           <Icon as={FiFolder} boxSize={10} mb={3} />
           <Text fontWeight="medium">{t('results:noChecks')}</Text>
-          <Text fontSize="sm" mt={1}>Upload files above to start analysis</Text>
+          <Text fontSize="sm" mt={1}>{t('review:uploadFilesToStartAnalysis')}</Text>
         </Flex>
       )}
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Box, Button, FormControl, FormLabel, Input, Heading, Alert, AlertIcon, VStack } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router';
+import { useTranslation } from 'react-i18next';
 
 const ForgotPassword: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -9,6 +10,7 @@ const ForgotPassword: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { forgotPassword } = useAuth();
+  const { t } = useTranslation();
 
     const navigate = useNavigate();
     const handleSubmit = async (e: React.FormEvent) => {
@@ -18,9 +20,9 @@ const ForgotPassword: React.FC = () => {
     setLoading(true);
     try {
       await forgotPassword(email);
-      setMessage('If the email exists, a reset link has been sent.');
+      setMessage(t('resetLinkSent'));
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Request failed');
+      setError(err.response?.data?.detail || err.message || t('requestFailed'));
     } finally {
       setLoading(false);
     }
@@ -29,7 +31,7 @@ const ForgotPassword: React.FC = () => {
 
   return (
     <Box maxW="md" mx="auto" mt={8} p={4}>
-      <Heading mb={6}>Forgot Password</Heading>
+      <Heading mb={6}>{t('forgotPassword')}</Heading>
       {error && (
         <Alert status="error" mb={4}>
           <AlertIcon />
@@ -45,11 +47,11 @@ const ForgotPassword: React.FC = () => {
       <form onSubmit={handleSubmit}>
         <VStack spacing={4} align="stretch">
           <FormControl isRequired>
-            <FormLabel>Email</FormLabel>
+            <FormLabel>{t('email')}</FormLabel>
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </FormControl>
           <Button type="submit" colorScheme="brand" isLoading={loading}>
-            Send Reset Link
+            {t('sendResetLink')}
           </Button>
         </VStack>
       </form>

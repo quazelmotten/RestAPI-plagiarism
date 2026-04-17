@@ -32,6 +32,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { getUsers, deleteUser, updateUserGlobalRole, adminChangePassword } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 interface User {
   id: string;
@@ -49,6 +50,7 @@ const Users: React.FC = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  const { t } = useTranslation();
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
@@ -60,14 +62,14 @@ const Users: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({
-        title: 'User deleted',
+        title: t('userDeleted'),
         status: 'success',
         duration: 3000,
       });
     },
     onError: () => {
       toast({
-        title: 'Failed to delete user',
+        title: t('failedToDeleteUser'),
         status: 'error',
         duration: 3000,
       });
@@ -80,14 +82,14 @@ const Users: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({
-        title: 'User role updated',
+        title: t('userRoleUpdated'),
         status: 'success',
         duration: 3000,
       });
     },
     onError: () => {
       toast({
-        title: 'Failed to update user role',
+        title: t('failedToUpdateUserRole'),
         status: 'error',
         duration: 3000,
       });
@@ -100,7 +102,7 @@ const Users: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({
-        title: 'Password changed successfully',
+        title: t('passwordChangedSuccessfully'),
         status: 'success',
         duration: 3000,
       });
@@ -109,7 +111,7 @@ const Users: React.FC = () => {
     },
     onError: () => {
       toast({
-        title: 'Failed to change password',
+        title: t('failedToChangePassword'),
         status: 'error',
         duration: 3000,
       });
@@ -117,7 +119,7 @@ const Users: React.FC = () => {
   });
 
   const handleDeleteUser = (userId: string) => {
-    if (window.confirm('Are you sure you want to delete this user?')) {
+    if (window.confirm(t('areYouSureDeleteUser'))) {
       deleteUserMutation.mutate(userId);
     }
   };
@@ -156,21 +158,21 @@ const Users: React.FC = () => {
           leftIcon={<Icon as={FiArrowLeft} />}
           onClick={() => navigate('/dashboard')}
         >
-          Back
+          {t('back')}
         </Button>
         <Text fontSize="2xl" fontWeight="bold">
-          User Management
+          {t('userManagement')}
         </Text>
       </HStack>
 
       <Table variant="simple">
         <Thead>
           <Tr>
-            <Th>Email</Th>
-            <Th>Admin</Th>
-            <Th>Created</Th>
-            <Th>Last Login</Th>
-            <Th>Actions</Th>
+            <Th>{t('email')}</Th>
+            <Th>{t('admin')}</Th>
+            <Th>{t('created')}</Th>
+            <Th>{t('lastLogin')}</Th>
+            <Th>{t('actions')}</Th>
           </Tr>
         </Thead>
         <Tbody>
@@ -180,7 +182,7 @@ const Users: React.FC = () => {
                 <HStack>
                   <Text>{user.email}</Text>
                   {user.id === currentUser?.id && (
-                    <Badge colorScheme="blue">You</Badge>
+                    <Badge colorScheme="blue">{t('you')}</Badge>
                   )}
                 </HStack>
               </Td>
@@ -195,7 +197,7 @@ const Users: React.FC = () => {
               <Td>
                 {user.last_login
                   ? new Date(user.last_login).toLocaleString()
-                  : 'Never'}
+                  : t('never')}
               </Td>
               <Td>
                 <HStack spacing={2}>
@@ -204,7 +206,7 @@ const Users: React.FC = () => {
                     variant="ghost"
                     onClick={() => openPasswordModal(user)}
                   >
-                    Change Password
+                    {t('changePassword')}
                   </Button>
                   <Button
                     size="sm"
@@ -213,7 +215,7 @@ const Users: React.FC = () => {
                     onClick={() => handleDeleteUser(user.id)}
                     isDisabled={user.id === currentUser?.id}
                   >
-                    Delete
+                    {t('delete')}
                   </Button>
                 </HStack>
               </Td>
@@ -225,11 +227,11 @@ const Users: React.FC = () => {
       <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Change Password</ModalHeader>
+          <ModalHeader>{t('changePassword')}</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <FormControl>
-              <FormLabel>New password for {selectedUser?.email}</FormLabel>
+              <FormLabel>{t('newPasswordFor', { email: selectedUser?.email })}</FormLabel>
               <Input
                 type="password"
                 value={newPassword}
@@ -240,14 +242,14 @@ const Users: React.FC = () => {
           </ModalBody>
           <ModalFooter>
             <Button variant="ghost" mr={3} onClick={onClose}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               colorScheme="brand"
               onClick={handleChangePassword}
               isLoading={changePasswordMutation.isPending}
             >
-              Change Password
+              {t('changePassword')}
             </Button>
           </ModalFooter>
         </ModalContent>

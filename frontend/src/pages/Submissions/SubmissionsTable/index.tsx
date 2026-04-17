@@ -93,24 +93,24 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
         header: t('table.taskId'),
         size: 150,
       },
-      {
-        accessorKey: 'assignment_name',
-        header: 'Assignment',
-        size: 180,
-        cell: (info) => {
-          const name = info.getValue<string | null>();
-          return name ? <Text fontWeight="medium">{name}</Text> : <Text color="gray.400">—</Text>;
-        },
-      },
-      {
-        accessorKey: 'subject_name',
-        header: 'Subject',
-        size: 150,
-        cell: (info) => {
-          const name = info.getValue<string | null>();
-          return name ? <Text fontWeight="medium">{name}</Text> : <Text color="gray.400">—</Text>;
-        },
-      },
+       {
+         accessorKey: 'assignment_name',
+         header: t('table.assignment'),
+         size: 180,
+         cell: (info) => {
+           const name = info.getValue<string | null>();
+           return name ? <Text fontWeight="medium">{name}</Text> : <Text color="gray.400">—</Text>;
+         },
+       },
+       {
+         accessorKey: 'subject_name',
+         header: t('table.subject'),
+         size: 150,
+         cell: (info) => {
+           const name = info.getValue<string | null>();
+           return name ? <Text fontWeight="medium">{name}</Text> : <Text color="gray.400">—</Text>;
+         },
+       },
       {
         id: 'actions',
         header: t('table.actions'),

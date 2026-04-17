@@ -50,5 +50,17 @@
   "validation": {
     "nameRequired": "Name is required"
   },
-  "viewAllAssignments": "View All Assignments"
+  "viewAllAssignments": "View All Assignments",
+  "taskId": "Task ID",
+  "status": "Status",
+  "files": "Files",
+  "pairs": "Pairs",
+  "high": "High",
+  "avgSim": "Avg Sim",
+  "review": "Review",
+  "similarity": "Similarity",
+  "filename": "Filename",
+  "task": "Task",
+  "maxSim": "Max Sim",
+  "allTasksAggregated": "All tasks (aggregated)"
 }

@@ -3,17 +3,20 @@
   "overview": "Главная страница",
   "assignments": "Задания студентам",
   "submissions": "Таблица файлов",
-  "plagiarismGraph": "Визуализация графа",
+  "plagiarismGraph": "Связный граф файлов",
   "uploadFiles": "Загрузка файлов",
   "results": "Результаты проверок",
   "pairComparison": "Попарное сравнение",
   "logo": "plagitype",
-  "tasks": "задач",
+  "tasks": "проверки",
   "filesLabel": "файлов",
   "noAssignments": "Заданий пока нет",
   "newAssignment": "Новое задание",
   "modeAssignments": "По заданиям",
   "modeClassic": "Классический вид",
   "uncategorized": "Без категории",
-  "viewAllAssignments": "Все задания"
+  "viewAllAssignments": "Все задания",
+  "users": "Пользователи",
+  "recent": "Недавние",
+  "detail": "Детали"
 }

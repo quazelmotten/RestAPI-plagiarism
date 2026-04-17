@@ -10,16 +10,18 @@
     "submittedDate": "Submitted Date",
     "taskId": "Task ID"
   },
-  "table": {
-    "fileName": "File Name",
-    "language": "Language",
-    "status": "Status",
-    "similarity": "Similarity",
-    "submittedAt": "Submitted At",
-    "taskId": "Task ID",
-    "actions": "Actions",
-    "goToTask": "Go to Task"
-  },
+   "table": {
+     "fileName": "File Name",
+     "language": "Language",
+     "status": "Status",
+     "similarity": "Similarity",
+     "submittedAt": "Submitted At",
+     "taskId": "Task ID",
+     "assignment": "Assignment",
+     "subject": "Subject",
+     "actions": "Actions",
+     "goToTask": "Go to Task"
+   },
   "noMatches": "No submissions match the current filters",
   "loading": "Loading...",
   "pagination": {

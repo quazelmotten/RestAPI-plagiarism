@@ -19,6 +19,7 @@
   "duplicateSkipped": "дубликат(ов) пропущено",
   "rejected": "файл(ов) отклонено",
   "filesCount": "{{count}} файлов",
+  "addFiles": "Добавить файлы",
   "toasts": {
     "noFilesSelected": "Файлы не выбраны",
     "success": "Загрузка успешна",

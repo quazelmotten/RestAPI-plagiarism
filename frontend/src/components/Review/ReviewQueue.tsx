@@ -6,6 +6,7 @@ import {
   AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
   useDisclosure, Select, Box, Flex, IconButton, Tooltip, Tabs, TabList, Tab
 } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import { FiZap, FiFilter, FiDownload, FiRefreshCw, FiChevronLeft, FiChevronRight, FiHelpCircle, FiCheckCircle, FiAlertTriangle, FiLayers } from 'react-icons/fi';
 import { FaFilter } from 'react-icons/fa';
 import api, { API_ENDPOINTS } from '../../services/api';
@@ -28,6 +29,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
   const { isOpen: isBulkClearOpen, onOpen: onBulkClearOpen, onClose: onBulkClearClose } = useDisclosure();
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
   const cancelRef = React.useRef<HTMLButtonElement>(null);
+  const { t } = useTranslation(['common', 'review']);
 
   const bulkClearMutation = useBulkClear();
   const [bulkClearThreshold, setBulkClearThreshold] = useState('0');
@@ -355,11 +357,11 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
         <CardBody py={2}>
           <Tabs variant="soft-rounded" colorScheme="blue" onChange={setActiveTab}>
             <TabList>
-              <Tab>To Review ({reviewStatus?.unreviewed || 0})</Tab>
-              <Tab>All Pairs ({reviewStatus?.total_pairs || 0})</Tab>
-              <Tab>Confirmed ({reviewStatus?.confirmed || 0})</Tab>
-              <Tab>Bulk Confirmed ({reviewStatus?.bulk_confirmed || 0})</Tab>
-              <Tab>Cleared ({reviewStatus?.cleared || 0})</Tab>
+              <Tab>{t('review:toReview')} ({reviewStatus?.unreviewed || 0})</Tab>
+              <Tab>{t('review:allPairs')} ({reviewStatus?.total_pairs || 0})</Tab>
+              <Tab>{t('review:confirmed')} ({reviewStatus?.confirmed || 0})</Tab>
+              <Tab>{t('review:bulkConfirmed')} ({reviewStatus?.bulk_confirmed || 0})</Tab>
+              <Tab>{t('review:cleared')} ({reviewStatus?.cleared || 0})</Tab>
             </TabList>
           </Tabs>
         </CardBody>
@@ -372,8 +374,8 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
             <Flex justify="space-between" align="flex-start" mb={3} wrap="wrap" gap={3}>
               <VStack align="start" spacing={0}>
                 <HStack>
-                  <Text fontSize="lg" fontWeight="bold">Review Progress</Text>
-                  <Tooltip label="Keyboard shortcuts">
+                  <Text fontSize="lg" fontWeight="bold">{t('review:reviewProgress')}</Text>
+                  <Tooltip label={t('review:keyboardShortcuts')}>
                     <IconButton
                       aria-label="Help"
                       icon={<FiHelpCircle />}
@@ -384,16 +386,16 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                   </Tooltip>
                 </HStack>
                 <Text fontSize="sm" color="gray.500">
-                  {reviewedPairs} / {totalPairs} pairs reviewed
+                  {t('review:pairsReviewed', { reviewed: reviewedPairs, total: totalPairs })}
                 </Text>
               </VStack>
               <HStack spacing={2} flexWrap="wrap">
                 <Badge colorScheme="blue" fontSize="md" px={3} py={1}>
-                  {reviewStatus.unreviewed} unreviewed
+                  {reviewStatus.unreviewed} {t('review:unreviewed')}
                 </Badge>
                 {isComplete && (
                   <Badge colorScheme="green" fontSize="md" px={3} py={1}>
-                    Complete ✓
+                    {t('review:complete')}
                   </Badge>
                 )}
               </HStack>
@@ -410,7 +412,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                     onClick={onBulkOpen}
                     size="sm"
                   >
-                    Bulk Confirm
+                    {t('review:bulkConfirm')}
                   </Button>
                   <Button
                     leftIcon={<FiZap />}
@@ -419,7 +421,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                     onClick={onBulkClearOpen}
                     size="sm"
                   >
-                    Bulk Clear
+                    {t('review:bulkClear')}
                   </Button>
                 </>
               )}
@@ -430,7 +432,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                 size="sm"
                 isLoading={exportReview.isPending}
               >
-                Export HTML
+                {t('review:exportHtml')}
               </Button>
               <Button
                 leftIcon={<FiRefreshCw />}
@@ -438,7 +440,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                 onClick={fetchQueue}
                 size="sm"
               >
-                Refresh
+                {t('common:refresh')}
               </Button>
             </HStack>
           </CardBody>
@@ -451,7 +453,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
           <HStack spacing={4} flexWrap="wrap">
             <HStack spacing={2}>
               <FiFilter />
-              <Text fontSize="sm" fontWeight="medium">Filters:</Text>
+              <Text fontSize="sm" fontWeight="medium">{t('review:filters')}</Text>
             </HStack>
             <Select
               size="sm"
@@ -459,19 +461,19 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
               value={similarityFilter}
               onChange={(e) => setSimilarityFilter(e.target.value)}
             >
-              <option value="all">All Similarity</option>
+              <option value="all">{t('review:allSimilarity')}</option>
               <option value="0.8">≥80%</option>
               <option value="0.5">≥50%</option>
               <option value="0.3">≥30%</option>
             </Select>
-            {activeTab === 0 && queue && (
-              <Text fontSize="sm" color="gray.500">
-                Showing {filteredQueue.length} of {queue.queue.length} pairs
-              </Text>
-            )}
+             {activeTab === 0 && queue && (
+               <Text fontSize="sm" color="gray.500">
+                 {t('review:showingPairs', { filtered: filteredQueue.length, total: queue.queue.length })}
+               </Text>
+             )}
             {activeTab > 0 && pairsData && (
               <Text fontSize="sm" color="gray.500">
-                {pairsData.total} pairs
+                {t('review:totalPairs', { total: pairsData.total })}
               </Text>
             )}
           </HStack>
@@ -486,7 +488,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
             <Card>
               <CardBody>
                 <Text textAlign="center" color="gray.500">
-                  {isComplete ? 'All files reviewed! 🎉' : 'No pairs to review'}
+                  {isComplete ? t('review:allFilesReviewed') : t('review:noPairsToReview')}
                 </Text>
               </CardBody>
             </Card>
@@ -569,7 +571,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
       <AlertDialog isOpen={isHelpOpen} onClose={onHelpClose} leastDestructiveRef={cancelRef}>
         <AlertDialogOverlay>
           <AlertDialogContent>
-            <AlertDialogHeader>Keyboard Shortcuts</AlertDialogHeader>
+             <AlertDialogHeader>{t('common:keyboardShortcuts')}</AlertDialogHeader>
             <AlertDialogBody>
               <VStack align="stretch" spacing={2}>
                 <HStack justify="space-between">
@@ -580,23 +582,23 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                   <Text fontWeight="medium">↑ / K</Text>
                   <Text color="gray.500">Previous pair</Text>
                 </HStack>
-                <HStack justify="space-between">
-                  <Text fontWeight="medium">Enter</Text>
-                  <Text color="gray.500">View selected pair</Text>
-                </HStack>
-                <HStack justify="space-between">
-                  <Text fontWeight="medium">C</Text>
-                  <Text color="gray.500">Confirm plagiarism</Text>
-                </HStack>
-                <HStack justify="space-between">
-                  <Text fontWeight="medium">X</Text>
-                  <Text color="gray.500">Clear (no plagiarism)</Text>
-                </HStack>
+<HStack justify="space-between">
+                    <Text fontWeight="medium">{t('common:enter')}</Text>
+                    <Text color="gray.500">{t('review:viewSelectedPairShortcut')}</Text>
+                  </HStack>
+                  <HStack justify="space-between">
+                    <Text fontWeight="medium">C</Text>
+                    <Text color="gray.500">{t('review:confirmPlagiarism')}</Text>
+                  </HStack>
+                  <HStack justify="space-between">
+                    <Text fontWeight="medium">X</Text>
+                    <Text color="gray.500">{t('review:clearNoPlagiarism')}</Text>
+                  </HStack>
               </VStack>
             </AlertDialogBody>
-            <AlertDialogFooter>
-              <Button onClick={onHelpClose}>Close</Button>
-            </AlertDialogFooter>
+             <AlertDialogFooter>
+               <Button onClick={onHelpClose}>{t('common:close')}</Button>
+             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>
       </AlertDialog>
@@ -610,19 +612,18 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
         <AlertDialogOverlay>
           <AlertDialogContent>
             <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Bulk Confirm Pairs
+              {t('review:bulkConfirmPairs')}
             </AlertDialogHeader>
 
             <AlertDialogBody>
               <VStack align="stretch" spacing={4}>
                 <Text>
-                  This will automatically confirm all pairs with similarity above the threshold.
-                  Both files in each confirmed pair will be marked as plagiarism.
+                  {t('review:bulkConfirmDescription')}
                 </Text>
 
                 <InputGroup>
                   <Input
-                    placeholder="Threshold (0.0 - 1.0)"
+                    placeholder={t('review:thresholdPlaceholder')}
                     value={bulkThreshold}
                     onChange={(e) => setBulkThreshold(e.target.value)}
                   />
@@ -634,14 +635,14 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                 </InputGroup>
 
                 <Text fontSize="xs" color="orange.500">
-                  ⚠️ This action cannot be undone automatically. You'll need to unconfirm files individually if needed.
+                  {t('review:bulkConfirmWarning')}
                 </Text>
               </VStack>
             </AlertDialogBody>
 
             <AlertDialogFooter>
               <Button ref={cancelRef} onClick={onBulkClose}>
-                Cancel
+                {t('common:cancel')}
               </Button>
               <Button
                 colorScheme="orange"
@@ -649,7 +650,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                 isLoading={bulkLoading}
                 ml={3}
               >
-                Confirm All
+                {t('review:confirmAll')}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -665,19 +666,18 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
         <AlertDialogOverlay>
           <AlertDialogContent>
             <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Bulk Clear Pairs
+              {t('review:bulkClearPairs')}
             </AlertDialogHeader>
 
             <AlertDialogBody>
               <VStack align="stretch" spacing={4}>
                 <Text>
-                  This will automatically clear all pairs with similarity above the threshold.
-                  Cleared pairs will be marked as not plagiarized.
+                  {t('review:bulkClearDescription')}
                 </Text>
 
                 <InputGroup>
                   <Input
-                    placeholder="Threshold (0.0 - 1.0)"
+                    placeholder={t('review:thresholdPlaceholder')}
                     value={bulkClearThreshold}
                     onChange={(e) => setBulkClearThreshold(e.target.value)}
                   />
@@ -689,14 +689,14 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                 </InputGroup>
 
                 <Text fontSize="xs" color="green.600">
-                  ✓ This action can be undone by navigating to the pair.
+                  {t('review:bulkClearNote')}
                 </Text>
               </VStack>
             </AlertDialogBody>
 
             <AlertDialogFooter>
               <Button ref={cancelRef} onClick={onBulkClearClose}>
-                Cancel
+                {t('common:cancel')}
               </Button>
               <Button
                 colorScheme="green"
@@ -704,7 +704,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                 isLoading={bulkClearMutation.isPending}
                 ml={3}
               >
-                Clear All
+                {t('review:clearAll')}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>

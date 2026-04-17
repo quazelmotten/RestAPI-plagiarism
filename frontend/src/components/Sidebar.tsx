@@ -381,25 +381,25 @@ const Sidebar: React.FC = () => {
               </Flex>
             </NavLink>
           ))}
-          {user?.is_global_admin && (
-            <NavLink to="/dashboard/users" style={{ textDecoration: 'none' }}>
-              <Flex
-                align="center"
-                px={4}
-                py={3}
-                borderRadius="md"
-                bg={isActive('/dashboard/users') ? 'brand.500' : 'transparent'}
-                color={isActive('/dashboard/users') ? 'white' : 'inherit'}
-                _hover={{
-                  bg: isActive('/dashboard/users') ? 'brand.600' : hoverBg,
-                }}
-                transition="all 0.2s"
-              >
-                <Icon as={FiUsers} boxSize={5} mr={3} />
-                <Text fontWeight="medium">Users</Text>
-              </Flex>
-            </NavLink>
-          )}
+           {user?.is_global_admin && (
+             <NavLink to="/dashboard/users" style={{ textDecoration: 'none' }}>
+               <Flex
+                 align="center"
+                 px={4}
+                 py={3}
+                 borderRadius="md"
+                 bg={isActive('/dashboard/users') ? 'brand.500' : 'transparent'}
+                 color={isActive('/dashboard/users') ? 'white' : 'inherit'}
+                 _hover={{
+                   bg: isActive('/dashboard/users') ? 'brand.600' : hoverBg,
+                 }}
+                 transition="all 0.2s"
+               >
+                 <Icon as={FiUsers} boxSize={5} mr={3} />
+                 <Text fontWeight="medium">{t('users')}</Text>
+               </Flex>
+             </NavLink>
+           )}
         </VStack>
       ) : (
         <DndContext

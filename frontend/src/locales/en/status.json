@@ -8,5 +8,6 @@
   "pending": "Pending",
   "finding_intra_pairs": "Finding Intra-Task Pairs",
   "finding_cross_pairs": "Finding Cross-Task Pairs",
-  "storing_results": "Storing Results"
+  "storing_results": "Storing Results",
+  "combined": "Combined"
 }

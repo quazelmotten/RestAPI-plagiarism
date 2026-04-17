@@ -37,14 +37,14 @@ const ROUTE_TITLES: Record<string, string> = {
   '/dashboard/pair-comparison': 'pairComparison',
 };
 
-const BREADCRUMB_MAP: Record<string, { label: string; to?: string }[]> = {
-  '/dashboard': [{ label: 'Overview', to: '/dashboard' }],
-  '/dashboard/assignments': [{ label: 'Assignments', to: '/dashboard/assignments' }],
-  '/dashboard/submissions': [{ label: 'Submissions', to: '/dashboard/submissions' }],
-  '/dashboard/graph': [{ label: 'Plagiarism Graph', to: '/dashboard/graph' }],
-  '/dashboard/upload': [{ label: 'Upload Files', to: '/dashboard/upload' }],
-  '/dashboard/results': [{ label: 'Results', to: '/dashboard/results' }],
-  '/dashboard/pair-comparison': [{ label: 'Pair Comparison', to: '/dashboard/pair-comparison' }],
+const BREADCRUMB_MAP: Record<string, { labelKey: string; to?: string }[]> = {
+  '/dashboard': [{ labelKey: 'overview', to: '/dashboard' }],
+  '/dashboard/assignments': [{ labelKey: 'assignments', to: '/dashboard/assignments' }],
+  '/dashboard/submissions': [{ labelKey: 'submissions', to: '/dashboard/submissions' }],
+  '/dashboard/graph': [{ labelKey: 'plagiarismGraph', to: '/dashboard/graph' }],
+  '/dashboard/upload': [{ labelKey: 'uploadFiles', to: '/dashboard/upload' }],
+  '/dashboard/results': [{ labelKey: 'results', to: '/dashboard/results' }],
+  '/dashboard/pair-comparison': [{ labelKey: 'pairComparison', to: '/dashboard/pair-comparison' }],
 };
 
 const getStatusIcon = (status: string) => {
@@ -62,7 +62,7 @@ const getStatusIcon = (status: string) => {
 const Header: React.FC = () => {
   const { logout } = useAuth();
   const { colorMode, toggleColorMode } = useColorMode();
-  const { t } = useTranslation('navigation');
+  const { t } = useTranslation(['navigation', 'common']);
   const { mode, setMode } = useViewMode();
   const navigate = useNavigate();
   const location = useLocation();
@@ -90,16 +90,23 @@ const Header: React.FC = () => {
     const path = location.pathname;
     const bc = BREADCRUMB_MAP[path];
     if (!bc) return [{ label: pageTitle }];
+    
+    // Convert labelKey to translated labels
+    const translatedBc = bc.map(item => ({
+      ...item,
+      label: item.labelKey ? t(item.labelKey) : ''
+    }));
+    
     if (path.startsWith('/dashboard/assignments/') && path !== '/dashboard/assignments') {
       const parts = path.split('/');
       const assignmentId = parts[parts.length - 1];
       return [
-        { label: 'Assignments', to: '/dashboard/assignments' },
-        { label: assignmentId ? `${assignmentId.substring(0, 12)}...` : 'Detail' },
+        { label: t('assignments'), to: '/dashboard/assignments' },
+        { label: assignmentId ? `${assignmentId.substring(0, 12)}...` : t('detail') },
       ];
     }
-    return bc;
-  }, [location.pathname, pageTitle]);
+    return translatedBc;
+  }, [location.pathname, pageTitle, t]);
 
   const handleModeSwitch = (newMode: 'assignments' | 'classic') => {
     setMode(newMode);
@@ -131,18 +138,18 @@ const Header: React.FC = () => {
 
         <Flex align="center" gap={{ base: 2, md: 4 }} flexShrink={0}>
 
-          {recentTasks.length > 0 && (
-            <Menu>
-              <MenuButton
-                as={Button}
-                size="xs"
-                variant="ghost"
-                rightIcon={<FiChevronDown />}
-                leftIcon={<FiClock />}
-                display={{ base: 'none', md: 'flex' }}
-              >
-                Recent
-              </MenuButton>
+           {recentTasks.length > 0 && (
+             <Menu>
+               <MenuButton
+                 as={Button}
+                 size="xs"
+                 variant="ghost"
+                 rightIcon={<FiChevronDown />}
+                 leftIcon={<FiClock />}
+                 display={{ base: 'none', md: 'flex' }}
+               >
+                 {t('recent')}
+               </MenuButton>
                <MenuList maxH="400px" overflowY="auto" minW="340px" maxW="400px">
                  {recentTasks.map(task => (
                    <MenuItem
@@ -158,9 +165,9 @@ const Header: React.FC = () => {
                              {task.task_id.substring(0, 12)}...
                            </Text>
                          </HStack>
-                         <Badge size="sm" colorScheme={getStatusColorScheme(task.status)} flexShrink={0}>
-                           {task.status}
-                         </Badge>
+<Badge size="sm" colorScheme={getStatusColorScheme(task.status)} flexShrink={0}>
+                            {t(`status:${task.status}`)}
+                          </Badge>
                        </HStack>
                        {(task.subject_name || task.assignment_name) && (
                          <HStack spacing={2} w="100%" overflow="hidden">
@@ -176,16 +183,16 @@ const Header: React.FC = () => {
                            )}
                          </HStack>
                        )}
-                       <HStack justify="space-between" w="100%">
-                         <Text fontSize="2xs" color="gray.500">
-                           Files: {task.files_count ?? 0}
-                         </Text>
-                         {task.progress && task.total_pairs > 0 && (
-                           <Text fontSize="2xs" color="gray.500">
-                             Pairs: {task.progress.display}
-                           </Text>
-                         )}
-                       </HStack>
+<HStack justify="space-between" w="100%">
+                          <Text fontSize="2xs" color="gray.500">
+                            {t('common:files')}: {task.files_count ?? 0}
+                          </Text>
+                          {task.progress && task.total_pairs > 0 && (
+                            <Text fontSize="2xs" color="gray.500">
+                              {t('common:pairs')}: {task.progress.display}
+                            </Text>
+                          )}
+                        </HStack>
                      </VStack>
                    </MenuItem>
                  ))}
@@ -235,15 +242,15 @@ const Header: React.FC = () => {
             size="md"
           />
           {/* Logout button */}
-          <Button
-            size="xs"
-            variant="ghost"
-            onClick={async () => {
-              await logout();
-            }}
-          >
-            Logout
-          </Button>
+           <Button
+             size="xs"
+             variant="ghost"
+             onClick={async () => {
+               await logout();
+             }}
+           >
+             {t('common:logout')}
+           </Button>
         </Flex>
       </Flex>
     </Box>

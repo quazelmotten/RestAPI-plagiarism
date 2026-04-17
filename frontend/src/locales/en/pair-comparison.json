@@ -22,13 +22,15 @@
     "similarity": "{{percent}}% similarity",
     "showHeader": "Show header",
     "hideHeader": "Hide header",
-    "tooltip": {
-      "showComments": "Show comments (c)",
-      "hideComments": "Hide comments (c)",
-      "unlockScrollSync": "Unlock scroll sync (s)",
-      "lockScrollSync": "Lock scroll sync (s)",
-      "matchStatistics": "Match statistics"
-    },
+     "tooltip": {
+       "showComments": "Show comments (c)",
+       "hideComments": "Hide comments (c)",
+       "showEmptyLines": "Show empty lines",
+       "hideEmptyLines": "Hide empty lines",
+       "unlockScrollSync": "Unlock scroll sync (s)",
+       "lockScrollSync": "Lock scroll sync (s)",
+       "matchStatistics": "Match statistics"
+     },
     "aria": {
       "showComments": "Show comments",
       "hideComments": "Hide comments",
@@ -49,6 +51,7 @@
       "3": "Reordered code",
       "4": "Semantic equivalent"
     },
-    "match": "Match"
-  }
+   "match": "Match"
+ },
+ "keyboardShortcuts": "Keyboard Shortcuts"
 }

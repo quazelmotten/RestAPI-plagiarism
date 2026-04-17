@@ -453,7 +453,7 @@ const Upload: React.FC = () => {
                 >
                   {languageOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
-                      {t(`languages.${opt.key}`)}
+                      {t(`languages:${opt.key}`)}
                     </option>
                   ))}
                 </Select>

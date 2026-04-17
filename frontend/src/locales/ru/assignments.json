@@ -1,28 +1,28 @@
 {
   "title": "Задания",
   "newAssignment": "Новое задание",
-  "newSubject": "Новая тема",
+  "newSubject": "Новая дисциплина",
   "search": "Поиск заданий...",
   "noAssignments": "Заданий пока нет",
-  "noAssignmentsInSubject": "В этой теме нет заданий",
+  "noAssignmentsInSubject": "В этой дисциплине нет заданий",
   "createAssignmentPrompt": "Создайте задание (к примеру, лабораторную работу) для проверки на плагиат",
   "uncategorized": "Не назначено",
   "modal": {
     "edit": "Редактировать задание",
     "new": "Новое задание",
-    "editSubject": "Редактировать тему",
+    "editSubject": "Редактировать предмет",
     "newSubject": "Новая дисциплина"
   },
   "form": {
     "name": "Название",
     "description": "Описание",
     "subject": "Тема",
-    "subjectName": "Название темы",
+    "subjectName": "Название дисциплины",
     "namePlaceholder": "напр., Лаба-3 по Программированию на Python",
     "descriptionPlaceholder": "Необязательное описание",
-    "selectSubject": "Выберите тему",
-    "subjectNamePlaceholder": "напр., Информатика",
-    "subjectDescriptionPlaceholder": "Необязательное описание темы"
+    "selectSubject": "Выберите дисциплину",
+    "subjectNamePlaceholder": "напр., Программирование на Python",
+    "subjectDescriptionPlaceholder": "Необязательное описание дисциплины"
   },
   "table": {
     "name": "Название",
@@ -41,14 +41,26 @@
   },
   "deleteConfirm": {
     "title": "Удалить задание",
-    "message": "Вы уверены, что хотите удалить «{{name}}»? Задачи, связанные с этим заданием, не будут удалены."
+    "message": "Вы уверены, что хотите удалить «{{name}}»? Проверки, связанные с этим заданием, не будут удалены."
   },
   "deleteSubjectConfirm": {
-    "title": "Удалить тему",
-    "message": "Вы уверены, что хотите удалить «{{name}}»? Задания останутся, но станут без темы."
+    "title": "Удалить предмет",
+    "message": "Вы уверены, что хотите удалить «{{name}}»? Задания внутри предмета останутся, но будут перемещены в папку «Не назначено»."
   },
   "validation": {
     "nameRequired": "Необходимо указать название"
   },
-  "viewAllAssignments": "Просмотр всех заданий"
+  "viewAllAssignments": "Просмотр всех заданий",
+  "taskId": "ID проверки",
+  "status": "Статус",
+  "files": "Файлы",
+  "pairs": "Пары",
+  "high": "Высокий",
+  "avgSim": "Средний % плагиата",
+  "review": "Проверка",
+  "similarity": "Сходство",
+  "filename": "Имя файла",
+  "task": "ID проверки",
+  "maxSim": "Макс. % плагиата",
+  "allTasksAggregated": "Все задачи"
 }

@@ -58,9 +58,9 @@ export const SubmissionsFilters: React.FC<SubmissionsFiltersProps> = ({
               onChange={onFilterChange}
             >
               <option value="">{t('common:all')}</option>
-              {uniqueLanguages.map(lang => (
-                <option key={lang} value={lang}>{lang}</option>
-              ))}
+               {uniqueLanguages.map(lang => (
+                 <option key={lang} value={lang}>{t(`languages:${lang}`)}</option>
+               ))}
             </Select>
           </div>
 
@@ -124,41 +124,41 @@ export const SubmissionsFilters: React.FC<SubmissionsFiltersProps> = ({
             </Select>
           </div>
 
-          <div>
-            <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
-              Assignment
-            </Text>
-            <Select
-              name="assignment_id"
-              size="sm"
-              value={filters.assignment_id}
-              onChange={onFilterChange}
-              maxW="150px"
-            >
-              <option value="">All</option>
-              {uniqueAssignments.map(assignment => (
-                <option key={assignment.id} value={assignment.id}>{assignment.name}</option>
-              ))}
-            </Select>
-          </div>
+            <div>
+              <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
+                {t('common:assignment')}
+              </Text>
+              <Select
+                name="assignment_id"
+                size="sm"
+                value={filters.assignment_id}
+                onChange={onFilterChange}
+                maxW="150px"
+              >
+                <option value="">{t('common:all')}</option>
+                {uniqueAssignments.map(assignment => (
+                  <option key={assignment.id} value={assignment.id}>{assignment.name}</option>
+                ))}
+              </Select>
+            </div>
 
-          <div>
-            <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
-              Subject
-            </Text>
-            <Select
-              name="subject_id"
-              size="sm"
-              value={filters.subject_id}
-              onChange={onFilterChange}
-              maxW="150px"
-            >
-              <option value="">All</option>
-              {uniqueSubjects.map(subject => (
-                <option key={subject.id} value={subject.id}>{subject.name}</option>
-              ))}
-            </Select>
-          </div>
+            <div>
+              <Text fontSize="xs" fontWeight="medium" mb={1} color="gray.600" _dark={{ color: 'gray.400' }}>
+                {t('common:subject')}
+              </Text>
+              <Select
+                name="subject_id"
+                size="sm"
+                value={filters.subject_id}
+                onChange={onFilterChange}
+                maxW="150px"
+              >
+                <option value="">{t('common:all')}</option>
+                {uniqueSubjects.map(subject => (
+                  <option key={subject.id} value={subject.id}>{subject.name}</option>
+                ))}
+              </Select>
+            </div>
         </SimpleGrid>
       </VStack>
     );

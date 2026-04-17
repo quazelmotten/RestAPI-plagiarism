@@ -12,6 +12,7 @@ import enPairComparison from '../locales/en/pair-comparison.json';
 import enOverview from '../locales/en/overview.json';
 import enStatus from '../locales/en/status.json';
 import enLanguages from '../locales/en/languages.json';
+import enReview from '../locales/en/review.json';
 
 import ruCommon from '../locales/ru/common.json';
 import ruNavigation from '../locales/ru/navigation.json';
@@ -24,6 +25,7 @@ import ruPairComparison from '../locales/ru/pair-comparison.json';
 import ruOverview from '../locales/ru/overview.json';
 import ruStatus from '../locales/ru/status.json';
 import ruLanguages from '../locales/ru/languages.json';
+import ruReview from '../locales/ru/review.json';
 
 i18n
   .use(initReactI18next)
@@ -41,6 +43,7 @@ i18n
         overview: enOverview,
         status: enStatus,
         languages: enLanguages,
+        review: enReview,
       },
       ru: {
         common: ruCommon,
@@ -54,6 +57,7 @@ i18n
         overview: ruOverview,
         status: ruStatus,
         languages: ruLanguages,
+        review: ruReview,
       },
     },
     lng: localStorage.getItem('language') || 'en',

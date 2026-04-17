@@ -106,11 +106,11 @@ const ResultsList: React.FC<ResultsListProps & { loading?: boolean }> = ({
       <CardBody>
         <HStack justify="space-between" align="center" mb={4}>
           <Text fontSize="md" fontWeight="bold">{t('resultsList.topSimilarities')}</Text>
-          <HStack spacing={2}>
-            <Text color="gray.500" fontSize="sm">
-              Showing {paginatedResults.length} of {totalPairs}
-            </Text>
-          </HStack>
+           <HStack spacing={2}>
+             <Text color="gray.500" fontSize="sm">
+               {t('resultsList.showing', { count: paginatedResults.length, total: totalPairs })}
+             </Text>
+           </HStack>
         </HStack>
 
         <VStack align="stretch" spacing={2} mb={4}>
