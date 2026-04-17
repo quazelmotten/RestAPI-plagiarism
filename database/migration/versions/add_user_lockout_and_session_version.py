@@ -10,7 +10,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "add_user_lockout_session_version"
-down_revision = "update_auth_simple_subject_access"
+down_revision = "add_role_back_001"
 branch_labels = None
 depends_on = None
 

@@ -181,6 +181,11 @@ async def on_startup():
     await ws_manager.start()
     app.state.ws_manager = ws_manager
 
+    # Run database migrations first
+    from startup.run_migrations import run_migrations
+
+    run_migrations()
+
     # Create initial admin user from env vars if configured
     from startup.create_initial_admin import create_initial_admin
 

@@ -33,6 +33,27 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  migrations:
+    build:
+      context: .
+      dockerfile: api.Dockerfile
+    environment:
+      # Database
+      DB_HOST: postgres
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-plagiarism_db}
+      DB_USER: ${DB_USER:-plagiarism_user}
+      DB_PASS: ${DB_PASS}
+    command: sh -c "cd /app/database && alembic upgrade head"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - plagiarism-network
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+
   api:
     container_name: plagiarism-api
     build:
@@ -96,6 +117,8 @@ services:
       REDIS_DB: ${REDIS_DB:-0}
       REDIS_TTL: ${REDIS_TTL:-86400}
     depends_on:
+      migrations:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       rabbitmq:

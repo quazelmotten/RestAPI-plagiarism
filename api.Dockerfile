@@ -28,6 +28,7 @@ COPY ./cli ./cli
 COPY ./worker ./worker
 COPY ./shared ./shared
 COPY ./plagiarism_core ./plagiarism_core
+COPY ./database ./database
 
 # Copy built frontend from previous stage
 COPY --from=frontend-build /frontend/dist ./frontend/dist

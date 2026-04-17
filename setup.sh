@@ -52,6 +52,7 @@ echo
 DB_PASS=$(generate_password)
 RMQ_PASS=$(generate_password)
 SECRET_KEY=$(generate_secret)
+ADMIN_PASS=$(generate_password)
 
 echo "Creating .env file with secure passwords..."
 
@@ -90,6 +91,8 @@ RMQ_QUEUE_DEAD_LETTER_NAME=plagiarism_dead
 # API CONFIGURATION
 # =============================================================================
 ENVIRONMENT=production
+APP_NAME=Plagiarism Detection API
+APP_VERSION=1.0.0
 API_HOST=0.0.0.0
 API_PORT=8000
 API_WORKERS=4
@@ -102,16 +105,36 @@ SUBPATH=plagitype
 # JWT secret key - REQUIRED (auto-generated)
 SECRET_KEY=${SECRET_KEY}
 
+# Initial admin user (created automatically on first startup)
+INITIAL_ADMIN_EMAIL=admin@example.com
+INITIAL_ADMIN_PASSWORD=${ADMIN_PASS}
+
 # Token expiration
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
+REFRESH_TOKEN_EXPIRE_DAYS=7
 
 # =============================================================================
 # PLAGIARISM DETECTION SETTINGS
 # =============================================================================
 DEFAULT_PLAGIARISM_THRESHOLD=0.75
+INVERTED_INDEX_MIN_OVERLAP_THRESHOLD=0.15
 SUPPORTED_LANGUAGES=python,java,cpp,c,javascript,typescript,go,rust
 MAX_FILE_SIZE=1048576
+MAX_UPLOAD_REQUEST_SIZE=52428800
 MAX_FILES_PER_BATCH=100
+
+# =============================================================================
+# STORAGE CONFIGURATION
+# =============================================================================
+STORAGE_LOCAL_PATH=/app/s3_storage
+BUCKET_NAME=plagiarism-bucket
+
+# =============================================================================
+# RATE LIMITING
+# =============================================================================
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_REQUESTS=100
+RATE_LIMIT_WINDOW=60
 
 # =============================================================================
 # WORKER CONFIGURATION
@@ -127,6 +150,9 @@ REDIS_PORT=6379
 REDIS_DB=0
 REDIS_PASSWORD=
 REDIS_USE_SSL=false
+REDIS_TTL=86400
+REDIS_FINGERPRINT_TTL=604800
+REDIS_MAXMEMORY=512mb
 
 # =============================================================================
 # LOGGING
@@ -139,6 +165,7 @@ LOG_FORMAT=json
 # =============================================================================
 # SENTRY_DSN=
 # METRICS_ENDPOINT=
+ENABLE_PROFILING=false
 EOF
 
 echo -e "${GREEN}✓ .env file created successfully!${NC}"
@@ -157,13 +184,21 @@ echo "Your configuration has been generated with:"
 echo "  • Strong database password (32 chars)"
 echo "  • Strong RabbitMQ password (32 chars)"
 echo "  • JWT secret key (64 chars hex)"
+echo "  • Initial admin user credentials"
 echo ""
-echo "The JWT SECRET_KEY has been auto-generated and is ready to use."
+echo "✅ INITIAL ADMIN CREDENTIALS:"
+echo -e "  ${YELLOW}Email:${NC}    admin@example.com"
+echo -e "  ${YELLOW}Password:${NC} ${ADMIN_PASS}"
+echo ""
+echo "⚠️  Save these credentials! You will need them to login."
+echo ""
+echo "The admin user will be created automatically on first startup."
 echo
 echo -e "${YELLOW}Next steps:${NC}"
 echo "  1. Review the .env file and adjust settings if needed"
 echo "  2. Update CORS_ORIGINS with your frontend domain"
-echo "  3. Run: docker-compose up -d --build"
+echo "  3. CHANGE THE DEFAULT ADMIN EMAIL AND PASSWORD IN .env!"
+echo "  4. Run: docker-compose up -d --build"
 echo
 echo -e "${RED}⚠️  IMPORTANT:${NC}"
 echo "  • Keep your .env file secure and never commit it"
