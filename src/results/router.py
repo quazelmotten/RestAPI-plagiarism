@@ -282,10 +282,11 @@ async def get_review_queue(
     assignment_id: uuid.UUID,
     result_service: ResultService = Depends(get_result_service),
     limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
 ):
     """Get smart review queue prioritized by unconfirmed files."""
-    return await result_service.get_review_queue(str(assignment_id), limit)
+    return await result_service.get_review_queue(str(assignment_id), limit, offset)
 
 
 @router.get(

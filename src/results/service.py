@@ -202,7 +202,7 @@ class ResultService:
             select(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
             .where(PlagiarismTask.assignment_id == UUID(assignment_id))
-            .where(SimilarityResult.ast_similarity >= threshold)
+            .where(SimilarityResult.ast_similarity <= threshold)
         )
         result = await self.db.execute(query)
         results = result.scalars().all()
@@ -238,13 +238,15 @@ class ResultService:
         )
 
     async def bulk_clear(self, assignment_id: str, threshold: float) -> BulkConfirmResponse:
-        """Clear all pairs above threshold (set as not plagiarized)."""
+        """Clear all unreviewed pairs below threshold (set as not plagiarized)."""
         query = (
             select(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
             .where(PlagiarismTask.assignment_id == UUID(assignment_id))
-            .where(SimilarityResult.ast_similarity >= threshold)
+            .where(SimilarityResult.review_disposition.is_(None))
         )
+        if threshold > 0:
+            query = query.where(SimilarityResult.ast_similarity <= threshold)
         result = await self.db.execute(query)
         results = result.scalars().all()
 
@@ -269,7 +271,7 @@ class ResultService:
             skipped_pairs=skipped_pairs,
         )
 
-    async def get_review_queue(self, assignment_id: str, limit: int) -> ReviewQueueResponse:
+    async def get_review_queue(self, assignment_id: str, limit: int, offset: int = 0) -> ReviewQueueResponse:
         """Get smart review queue prioritized by unconfirmed and unreviewed files."""
         files_query = (
             select(FileModel)
@@ -290,25 +292,31 @@ class ResultService:
             .where(PlagiarismTask.assignment_id == UUID(assignment_id))
             .where(SimilarityResult.review_disposition.is_(None))
             .order_by(SimilarityResult.ast_similarity.desc())
-            .limit(limit * 2)  # Get enough to ensure we have at least `limit` after filtering
+            .limit(limit * 2 + offset)  # Get enough to ensure we have at least `limit` after filtering
         )
         result = await self.db.execute(results_query)
         all_results = result.scalars().all()
 
-        priority_queue = []
-        secondary_queue = []
+        # Sort by priority while preserving similarity order within each bucket
+        # Priority: both unconfirmed (highest) → one unconfirmed → both confirmed (lowest)
+        both_unconfirmed = []
+        one_unconfirmed = []
+        both_confirmed = []
 
         for r in all_results:
             a_confirmed = r.file_a_id in confirmed_files
             b_confirmed = r.file_b_id in confirmed_files
 
             if not a_confirmed and not b_confirmed:
-                priority_queue.append(r)
+                both_unconfirmed.append(r)
             elif not a_confirmed or not b_confirmed:
-                secondary_queue.append(r)
+                one_unconfirmed.append(r)
+            else:
+                both_confirmed.append(r)
 
-        queue = priority_queue + secondary_queue
-        queue = queue[:limit]
+        queue = both_unconfirmed + one_unconfirmed + both_confirmed
+        total_estimated = len(queue)
+        queue = queue[offset : offset + limit]
 
         # Pre-fetch all file info for queue items in ONE query
         file_ids = set()
@@ -361,7 +369,7 @@ class ResultService:
             confirmed_files=len(confirmed_files),
             remaining_files=total_files - len(confirmed_files),
             queue=mapped_queue,
-            estimated_reviews=len(queue),
+            estimated_reviews=total_estimated,
         )
 
     async def get_cleared_pairs(
@@ -567,7 +575,7 @@ class ResultService:
             select(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
             .where(PlagiarismTask.assignment_id == UUID(assignment_id))
-            .where(SimilarityResult.ast_similarity >= threshold)
+            .where(SimilarityResult.ast_similarity <= threshold)
             .order_by(SimilarityResult.ast_similarity.desc())
         )
         results_result = await self.db.execute(results_query)

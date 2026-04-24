@@ -65,6 +65,7 @@ import TaskProgress from '../../components/Results/TaskProgress';
 import SimilarityDistribution from '../../components/Results/SimilarityDistribution';
 import PairComparisonModal from '../../components/PairComparisonModal';
 import ReviewQueue from '../../components/Review/ReviewQueue';
+import { useAssignmentInfo } from '../../contexts/AssignmentContext';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024;
 const MAX_FILES = 1000;
@@ -147,11 +148,13 @@ const AssignmentDetail: React.FC = () => {
   // Pair comparison
   const [pairModalOpen, setPairModalOpen] = useState(false);
   const [selectedPair, setSelectedPair] = useState<{
+    id?: string;
     file_a: { id: string; filename: string };
     file_b: { id: string; filename: string };
     ast_similarity: number;
   } | null>(null);
   const [reviewQueuePairs, setReviewQueuePairs] = useState<PlagiarismResult[]>([]);
+  const { setAssignmentInfo } = useAssignmentInfo();
 
   // File viewer
   const { isOpen: isFileViewerOpen, onOpen: onFileViewerOpen, onClose: onFileViewerClose } = useDisclosure();
@@ -188,6 +191,22 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
       toast({ title: t('common:error'), description: msg, status: 'error', duration: 5000 });
     }
   }, [queryError, toast, t]);
+
+  useEffect(() => {
+    setPairModalOpen(false);
+    setSelectedPair(null);
+  }, [assignmentId]);
+
+  useEffect(() => {
+    if (assignmentData?.name) {
+      setAssignmentInfo({
+        name: assignmentData.name,
+        filesCount: assignmentData.files_count ?? 0,
+        tasksCount: assignmentData.tasks_count ?? 0,
+      });
+    }
+    return () => setAssignmentInfo(null);
+  }, [assignmentData?.name, assignmentData?.files_count, assignmentData?.tasks_count, setAssignmentInfo]);
 
   // Files are server-paginated, with client-side filter/sort on the current page
   const displayedFiles = useMemo((): AssignmentFullFile[] => {
@@ -363,7 +382,19 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
   })();
 
   const handleCompare = useCallback((result: PlagiarismResult) => {
-    setSelectedPair({ file_a: result.file_a, file_b: result.file_b, ast_similarity: result.ast_similarity });
+    const pair = {
+      id: result.id,
+      file_a: result.file_a,
+      file_b: result.file_b,
+      ast_similarity: result.ast_similarity,
+      matches: result.matches,
+      created_at: result.created_at,
+    };
+    setSelectedPair(pair);
+    setReviewQueuePairs(prev => {
+      if (prev.some(p => p.id === result.id)) return prev;
+      return [pair, ...prev];
+    });
     setPairModalOpen(true);
   }, []);
 
@@ -419,9 +450,10 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
   const selectedTask = selectedTaskId ? assignmentData.tasks.find(t => t.task_id === selectedTaskId) : null;
 
   const tabLabels = [
-    t('results:resultsList.topSimilarities'),
+    t('assignments:review'),
     t('results:distribution.title'),
     t('assignments:files'),
+    t('results:resultsList.topSimilarities'),
   ];
 
   const renderResizeHandle = (col: string) => (
@@ -439,45 +471,6 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
 
   return (
     <Box display="flex" flexDirection="column" flex={1} minH={0} overflow="hidden" position="relative">
-      {/* Breadcrumb */}
-      <Breadcrumb spacing={1} separator={<FiChevronRight color={breadcrumbColor} />} mb={1} flexShrink={0}>
-        <BreadcrumbItem>
-          <BreadcrumbLink as={Link} to="/dashboard/assignments" fontSize="sm" color={breadcrumbColor}>
-            {t('assignments:title')}
-          </BreadcrumbLink>
-        </BreadcrumbItem>
-        <BreadcrumbItem isCurrentPage>
-          <Text fontSize="sm" fontWeight="semibold">{assignmentData.name}</Text>
-        </BreadcrumbItem>
-      </Breadcrumb>
-
-      {/* Header */}
-      <Flex justify="space-between" align="flex-start" mb={3} flexShrink={0} wrap="wrap" gap={3}>
-        <Box>
-          <HStack spacing={3} align="center">
-            <Text fontSize="2xl" fontWeight="bold">{assignmentData.name}</Text>
-            <Badge colorScheme="blue" fontSize="sm">{assignmentData.files_count} {t('common:files')}</Badge>
-            <Badge colorScheme="purple" fontSize="sm">{assignmentData.tasks_count} {t('common:tasks')}</Badge>
-          </HStack>
-          {assignmentData.description && (
-            <Text fontSize="sm" color={mutedColor} mt={1}>{assignmentData.description}</Text>
-          )}
-        </Box>
-        <HStack>
-          {isProcessing && activeTask && (
-            <HStack>
-              {getStatusIcon(activeTask.status)}
-              <Badge colorScheme={getStatusColorScheme(activeTask.status)}>
-                {t(`status:${activeTask.status}`)}
-              </Badge>
-            </HStack>
-          )}
-          <Button size="sm" leftIcon={<FiRefreshCw />} onClick={refreshData} isLoading={isFetching}>
-            {t('common:refresh')}
-          </Button>
-        </HStack>
-      </Flex>
-
       {/* Combined Tasks + Upload section */}
       <Box bg={cardBg} borderRadius="lg" borderWidth="1px" borderColor={borderColor} mb={3} flexShrink={0} overflow="hidden">
         {/* Expanded view: upload + task table */}
@@ -676,18 +669,12 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                 {label}
               </Button>
             ))}
-             <Button size="sm" variant={activeTab === 3 ? 'solid' : 'ghost'} colorScheme={activeTab === 3 ? 'brand' : 'gray'} onClick={() => setActiveTab(3)} fontSize="xs">
-               <HStack spacing={1}>
-                 <Icon as={FiList} boxSize={3} />
-                 <Text>{t('assignments:review')}</Text>
-               </HStack>
-             </Button>
           </HStack>
 
           {/* Tab content */}
           <Box flex={1} minH={0} display="flex" flexDirection="column" overflow="hidden">
             {/* Top Similarities */}
-            {activeTab === 0 && (
+            {activeTab === 3 && (
               <Box flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
                 <HStack mb={3} flexShrink={0}>
                   <InputGroup size="sm" maxW="300px">
@@ -921,7 +908,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
             )}
 
             {/* Review */}
-            {activeTab === 3 && (
+            {activeTab === 0 && (
               <Box flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
                 <ReviewQueue
                   assignmentId={assignmentId!}

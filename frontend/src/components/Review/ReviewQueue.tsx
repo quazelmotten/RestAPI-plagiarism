@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   VStack, HStack, Card, CardBody, Text, Badge, Button,
-  Input, InputGroup, InputRightElement, Progress, Spinner,
+  Input, InputGroup, InputLeftElement, InputRightElement, Progress, Spinner,
   useToast, AlertDialog, AlertDialogBody, AlertDialogFooter,
   AlertDialogHeader, AlertDialogContent, AlertDialogOverlay,
   useDisclosure, Select, Box, Flex, IconButton, Tooltip, Tabs, TabList, Tab
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
-import { FiZap, FiFilter, FiDownload, FiRefreshCw, FiChevronLeft, FiChevronRight, FiHelpCircle, FiCheckCircle, FiAlertTriangle, FiLayers } from 'react-icons/fi';
+import { FiZap, FiFilter, FiDownload, FiRefreshCw, FiChevronLeft, FiChevronRight, FiHelpCircle, FiCheckCircle, FiAlertTriangle, FiLayers, FiSearch } from 'react-icons/fi';
 import { FaFilter } from 'react-icons/fa';
 import api, { API_ENDPOINTS } from '../../services/api';
 import type { ReviewQueueResponse, PlagiarismResult, BulkConfirmResponse, ReviewStatusSummary } from '../../types';
 import ReviewQueueItem from './ReviewQueueItem';
+import { PaginationControls } from '../../pages/Submissions/PaginationControls';
 import { useExportReview, useReviewStatus, usePairsByStatus, useBulkClear } from '../../hooks/useGrading';
 
 interface ReviewQueueProps {
@@ -38,9 +39,12 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
   const [activeTab, setActiveTab] = useState<number>(0);
 
   // Filters
-  const [similarityFilter, setSimilarityFilter] = useState<string>('all');
+  const [similarityFilter, setSimilarityFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchFilter, setSearchFilter] = useState<string>('');
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [pageOffset, setPageOffset] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
 
   const exportReview = useExportReview();
   const { data: reviewStatus, isLoading: statusLoading, refetch: refetchStatus } = useReviewStatus(assignmentId);
@@ -56,15 +60,29 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
     refetchPairs();
   }, [refetchStatus, refetchPairs]);
 
+  // Filter pairsData.items for other tabs when search is active
+  const filteredPairsData = React.useMemo(() => {
+    if (!pairsData) return null;
+    if (!searchFilter.trim()) return pairsData;
+    
+    const q = searchFilter.toLowerCase();
+    const filteredItems = pairsData.items.filter(item => 
+      (item.file_a?.filename || '').toLowerCase().includes(q) || 
+      (item.file_b?.filename || '').toLowerCase().includes(q)
+    );
+    return { ...pairsData, items: filteredItems };
+  }, [pairsData, searchFilter]);
+
   useEffect(() => {
     fetchQueue();
-  }, [assignmentId]);
+  }, [assignmentId, pageOffset, pageSize]);
 
   const fetchQueue = async () => {
     setLoading(true);
     try {
       const response = await api.get<ReviewQueueResponse>(
-        API_ENDPOINTS.REVIEW_QUEUE(assignmentId)
+        API_ENDPOINTS.REVIEW_QUEUE(assignmentId),
+        { params: { limit: pageSize * 2, offset: pageOffset } }
       );
       setQueue(response.data);
       setSelectedIndex(0);
@@ -208,6 +226,25 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
     }
   };
 
+  const handleClearAll = async () => {
+    if (!confirm(t('review:confirmClearAll'))) return;
+    try {
+      await bulkClearMutation.mutateAsync({ assignmentId, threshold: 0 });
+      toast({
+        title: t('review:clearAllSuccess'),
+        status: 'success',
+        duration: 3000,
+      });
+      await Promise.all([refetchStatus(), fetchQueue()]);
+    } catch (error) {
+      toast({
+        title: t('review:clearAllError'),
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
   const handleItemAction = async (resultId?: string, action?: 'confirm' | 'clear') => {
     // If action provided (from keyboard), perform it directly
     if (resultId && action) {
@@ -287,14 +324,50 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
     if (!queue) return [];
     let items = queue.queue;
 
-    // Similarity filter
-    if (similarityFilter !== 'all') {
-      const threshold = parseFloat(similarityFilter);
-      items = items.filter(item => (item.ast_similarity || 0) >= threshold);
+    // Search filter
+    if (searchFilter.trim()) {
+      const q = searchFilter.toLowerCase();
+      items = items.filter(item => 
+        (item.file_a?.filename || '').toLowerCase().includes(q) || 
+        (item.file_b?.filename || '').toLowerCase().includes(q)
+      );
+    }
+
+    // Similarity filter (e.g., "≤55%" or "<=55%" or "0.55")
+    if (similarityFilter.trim()) {
+      const match = similarityFilter.match(/[<>≤≥]?\s*=?\s*([\d.]+)/);
+      if (match) {
+        const threshold = parseFloat(match[1]);
+        if (!isNaN(threshold) && threshold >= 0 && threshold <= 1) {
+          items = items.filter(item => (item.ast_similarity || 0) <= threshold);
+        } else if (!isNaN(threshold) && threshold > 1) {
+          items = items.filter(item => (item.ast_similarity || 0) * 100 <= threshold);
+        }
+      }
     }
 
     return items;
-  }, [queue, similarityFilter]);
+  }, [queue, similarityFilter, searchFilter]);
+
+  // Paginated queue
+  const paginatedQueue = React.useMemo(() => {
+    return filteredQueue.slice(pageOffset, pageOffset + pageSize);
+  }, [filteredQueue, pageOffset, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredQueue.length / pageSize));
+  const showingStart = filteredQueue.length > 0 ? pageOffset + 1 : 0;
+  const showingEnd = Math.min(pageOffset + pageSize, filteredQueue.length);
+
+  const handlePageChange = (newOffset: number) => {
+    setPageOffset(Math.max(0, newOffset));
+  };
+
+  const handlePageSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setPageSize(parseInt(e.target.value, 10));
+    setPageOffset(0);
+  };
+
+  const paginationInfo = { offset: pageOffset, limit: pageSize, total: filteredQueue.length, totalPages, showingStart, showingEnd };
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!queue || queue.queue.length === 0) return;
@@ -349,6 +422,8 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
   const totalPairs = reviewStatus?.total_pairs || 0;
   const progress = totalPairs > 0 ? (reviewedPairs / totalPairs) * 100 : 0;
   const isComplete = reviewStatus ? reviewStatus.unreviewed === 0 : false;
+  const confirmedFiles = queue?.confirmed_files ?? 0;
+  const totalFiles = queue?.total_files ?? 0;
 
   return (
     <VStack align="stretch" spacing={4}>
@@ -376,13 +451,13 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                 <HStack>
                   <Text fontSize="lg" fontWeight="bold">{t('review:reviewProgress')}</Text>
                   <Tooltip label={t('review:keyboardShortcuts')}>
-                    <IconButton
-                      aria-label="Help"
-                      icon={<FiHelpCircle />}
+                    <Button
                       size="sm"
                       variant="ghost"
                       onClick={onHelpOpen}
-                    />
+                    >
+                      Shortcuts
+                    </Button>
                   </Tooltip>
                 </HStack>
                 <Text fontSize="sm" color="gray.500">
@@ -400,9 +475,17 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                 )}
               </HStack>
             </Flex>
-            <Progress value={progress} colorScheme="blue" size="lg" />
+            <HStack spacing={3}>
+              <Progress value={progress} colorScheme="blue" size="lg" flex={1} />
+              <Text fontSize="sm" fontWeight="medium" minW="50px" textAlign="right">
+                {Math.round(progress)}%
+              </Text>
+            </HStack>
+            <Text fontSize="xs" color="gray.500">
+              {t('review:filesConfirmed', { confirmed: confirmedFiles, total: totalFiles })}
+            </Text>
 
-            {/* Bulk Confirm + Bulk Clear + Export */}
+            {/* Bulk Confirm + Bulk Clear + Clear All + Export */}
             <HStack mt={4} spacing={2} flexWrap="wrap">
               {!isComplete && (
                 <>
@@ -422,6 +505,16 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
                     size="sm"
                   >
                     {t('review:bulkClear')}
+                  </Button>
+                  <Button
+                    leftIcon={<FiCheckCircle />}
+                    colorScheme="blue"
+                    variant="outline"
+                    onClick={handleClearAll}
+                    size="sm"
+                    isLoading={bulkClearMutation.isPending}
+                  >
+                    {t('review:clearAllAndFinish')}
                   </Button>
                 </>
               )}
@@ -455,17 +548,23 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
               <FiFilter />
               <Text fontSize="sm" fontWeight="medium">{t('review:filters')}</Text>
             </HStack>
-            <Select
+            <InputGroup size="sm" w="180px">
+              <InputLeftElement>
+                <FiSearch />
+              </InputLeftElement>
+              <Input
+                placeholder="Search files..."
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+              />
+            </InputGroup>
+            <Input
               size="sm"
-              w="150px"
+              w="120px"
+              placeholder="≤55%"
               value={similarityFilter}
               onChange={(e) => setSimilarityFilter(e.target.value)}
-            >
-              <option value="all">{t('review:allSimilarity')}</option>
-              <option value="0.8">≥80%</option>
-              <option value="0.5">≥50%</option>
-              <option value="0.3">≥30%</option>
-            </Select>
+            />
              {activeTab === 0 && queue && (
                <Text fontSize="sm" color="gray.500">
                  {t('review:showingPairs', { filtered: filteredQueue.length, total: queue.queue.length })}
@@ -481,43 +580,49 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
       </Card>
 
       {/* Pairs List */}
-      <Box overflowY="auto" maxH="calc(100vh - 400px)" borderWidth="1px" borderRadius="md" p={2}>
-        <VStack align="stretch" spacing={2}>
-        {activeTab === 0 ? (
-          filteredQueue.length === 0 ? (
-            <Card>
-              <CardBody>
-                <Text textAlign="center" color="gray.500">
-                  {isComplete ? t('review:allFilesReviewed') : t('review:noPairsToReview')}
-                </Text>
-              </CardBody>
-            </Card>
-          ) : (
-            filteredQueue.map((item, idx) => (
-              <Box
-                key={item.id || `${item.file_a.id}-${item.file_b.id}`}
-                borderWidth={selectedIndex === idx ? '2px' : '1px'}
-                borderColor={selectedIndex === idx ? 'brand.500' : 'gray.200'}
-                borderRadius="md"
-                transition="border-color 0.15s"
-              >
-                <ReviewQueueItem
-                  item={item}
-                  index={idx}
-                  onReview={(pair) => onReviewPair(pair, filteredQueue)}
-                  onAction={handleItemAction}
-                />
-              </Box>
-            ))
-          )
+      <Card>
+        <PaginationControls
+          pagination={paginationInfo}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
+        <Box flex="1" overflowY="auto">
+          <VStack align="stretch" spacing={2} p={2}>
+          {activeTab === 0 ? (
+            filteredQueue.length === 0 ? (
+              <Card>
+                <CardBody>
+                  <Text textAlign="center" color="gray.500">
+                    {isComplete ? t('review:allFilesReviewed') : t('review:noPairsToReview')}
+                  </Text>
+                </CardBody>
+              </Card>
+            ) : (
+              paginatedQueue.map((item, idx) => (
+                <Box
+                  key={item.id || `${item.file_a.id}-${item.file_b.id}`}
+                  borderWidth={selectedIndex - pageOffset === idx ? '2px' : '1px'}
+                  borderColor={selectedIndex - pageOffset === idx ? 'brand.500' : 'gray.200'}
+                  borderRadius="md"
+                  transition="border-color 0.15s"
+                >
+                  <ReviewQueueItem
+                    item={item}
+                    index={idx}
+                    onReview={(pair) => onReviewPair(pair, paginatedQueue)}
+                    onAction={handleItemAction}
+                  />
+                </Box>
+              ))
+            )
         ) : pairsLoading ? (
           <Card>
             <CardBody>
               <Spinner />
             </CardBody>
           </Card>
-        ) : pairsData && pairsData.items.length > 0 ? (
-          pairsData.items.map((item, idx) => (
+        ) : filteredPairsData && filteredPairsData.items.length > 0 ? (
+          filteredPairsData.items.map((item, idx) => (
             <Box
               key={item.id || `${item.file_a.id}-${item.file_b.id}`}
               borderWidth="1px"
@@ -527,7 +632,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
               <ReviewQueueItem
                 item={item}
                 index={idx}
-                onReview={(pair) => onReviewPair(pair, pairsData.items)}
+                onReview={(pair) => onReviewPair(pair, filteredPairsData?.items || [])}
                 onAction={async () => {
                   await Promise.all([refetchStatus(), refetchPairs()]);
                 }}
@@ -545,6 +650,7 @@ const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReviewPair })
         )}
         </VStack>
       </Box>
+      </Card>
 
       {/* Navigation */}
       {filteredQueue.length > 0 && (

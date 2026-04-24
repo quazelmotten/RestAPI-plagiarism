@@ -21,10 +21,12 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { FiMoon, FiSun, FiClock, FiChevronDown } from 'react-icons/fi';
 import { FiCheckCircle, FiAlertCircle, FiActivity, FiLayers } from 'react-icons/fi';
 import { useViewMode } from '../contexts/ViewModeContext';
+import { useAssignmentInfo } from '../contexts/AssignmentContext';
 import { useAuth } from '../contexts/AuthContext';
 import { SIDEBAR_WIDTH_PX } from '../constants/layout';
 import { useTasksList } from '../hooks/useTaskQueries';
 import { getStatusColorScheme } from '../utils/statusColors';
+
 
 const ROUTE_TITLES: Record<string, string> = {
   '/dashboard': 'overview',
@@ -64,11 +66,12 @@ const Header: React.FC = () => {
   const { colorMode, toggleColorMode } = useColorMode();
   const { t } = useTranslation(['navigation', 'common']);
   const { mode, setMode } = useViewMode();
+  const { assignmentInfo } = useAssignmentInfo();
   const navigate = useNavigate();
   const location = useLocation();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
-  const [breadcrumbsExpanded, setBreadcrumbsExpanded] = useState(false);
+  const mutedColor = useColorModeValue('gray.500', 'gray.400');
 
   const { data: tasksData } = useTasksList();
   const recentTasks = useMemo(() => {
@@ -86,17 +89,26 @@ const Header: React.FC = () => {
     return t('overview');
   }, [location.pathname, t]);
 
+  const routeAssignmentInfo = useMemo(() => {
+    const path = location.pathname;
+    const match = path.match(/^\/dashboard\/assignments\/([^\/]+)$/);
+    if (match) {
+      return { assignmentId: match[1] };
+    }
+    return null;
+  }, [location.pathname]);
+
   const breadcrumbs = useMemo(() => {
     const path = location.pathname;
     const bc = BREADCRUMB_MAP[path];
     if (!bc) return [{ label: pageTitle }];
-    
+
     // Convert labelKey to translated labels
     const translatedBc = bc.map(item => ({
       ...item,
       label: item.labelKey ? t(item.labelKey) : ''
     }));
-    
+
     if (path.startsWith('/dashboard/assignments/') && path !== '/dashboard/assignments') {
       const parts = path.split('/');
       const assignmentId = parts[parts.length - 1];
@@ -133,6 +145,13 @@ const Header: React.FC = () => {
     >
       <Flex h="full" align="center" justify="space-between">
         <Flex align="center" gap={3} minW={0} flex={1}>
+          {assignmentInfo && (
+            <HStack spacing={2} flexShrink={0}>
+              <Text fontSize="md" fontWeight="bold" isTruncated maxW="200px">{assignmentInfo.name}</Text>
+              <Badge colorScheme="blue" fontSize="xs">{assignmentInfo.filesCount} {t('common:files')}</Badge>
+              <Badge colorScheme="purple" fontSize="xs">{assignmentInfo.tasksCount} {t('common:tasks')}</Badge>
+            </HStack>
+          )}
           <BreadcrumbNav items={breadcrumbs} />
         </Flex>
 

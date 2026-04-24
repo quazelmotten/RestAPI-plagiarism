@@ -81,6 +81,8 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
       borderColor={isBothUnconfirmed ? "blue.200" : "gray.200"}
       _hover={{ bg: isBothUnconfirmed ? "blue.100" : "gray.100" }}
       transition="all 0.2s"
+      role="listitem"
+      aria-label={`${item.file_a.filename} vs ${item.file_b.filename}`}
     >
       <Badge colorScheme={isBothUnconfirmed ? "blue" : "gray"} mr={2}>
         {index + 1}
@@ -111,17 +113,9 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
           <IconButton
             size="sm"
             icon={<FiEye />}
-            aria-label="Review"
+            aria-label={`Review ${item.file_a.filename} vs ${item.file_b.filename}`}
             onClick={() => onReview(item)}
-          />
-        </Tooltip>
-        
-        <Tooltip label={t('review:reviewInDetail')}>
-          <IconButton
-            size="sm"
-            icon={<FiEye />}
-            aria-label="Review"
-            onClick={() => onReview(item)}
+            _focus={{ boxShadow: 'outline' }}
           />
         </Tooltip>
         
@@ -132,6 +126,7 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
             leftIcon={<FiCheck />}
             onClick={handleConfirm}
             isLoading={confirming}
+            _focus={{ boxShadow: 'outline' }}
           >
             {t('review:confirm')}
           </Button>
@@ -143,6 +138,7 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
             colorScheme="gray"
             onClick={handleSkip}
             isLoading={skipping}
+            _focus={{ boxShadow: 'outline' }}
           >
             {t('review:clear')}
           </Button>
