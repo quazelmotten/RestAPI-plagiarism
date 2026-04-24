@@ -31,7 +31,7 @@
   "bulkConfirmWarning": "⚠️ This action cannot be undone automatically. You'll need to unconfirm files individually if needed.",
   "confirmAll": "Confirm All",
   "bulkClearPairs": "Bulk Clear Pairs",
-  "bulkClearDescription": "This will automatically clear all pairs with similarity above the threshold. Cleared pairs will be marked as not plagiarized.",
+  "bulkClearDescription": "This will automatically clear all pairs with similarity below the threshold. Cleared pairs will be marked as not plagiarized.",
   "bulkClearNote": "✓ This action can be undone by navigating to the pair.",
   "clearAll": "Clear All",
   "taskId": "Task ID",
