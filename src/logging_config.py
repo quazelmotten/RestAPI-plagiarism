@@ -26,7 +26,6 @@ def configure_logging(log_level: str = "INFO", log_format: str = "json"):
         log_format: Format for logs: "json" or "plain"
     """
     # Check if running under pytest - preserve pytest handlers
-    import sys
 
     is_pytest = "pytest" in sys.argv[0] or "pytest" in sys.modules
 

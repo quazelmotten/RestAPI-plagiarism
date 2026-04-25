@@ -9,9 +9,11 @@ Responsible for:
 
 import logging
 import time
-from typing import Dict, List, Optional, Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from shared.interfaces import CandidateIndex, FingerprintCache
+
 from worker.services.fingerprint_service import FingerprintService
 
 logger = logging.getLogger(__name__)

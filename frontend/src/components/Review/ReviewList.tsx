@@ -6,6 +6,7 @@ import {
   VStack,
   Text,
   Spinner,
+  useColorModeValue,
 } from '@chakra-ui/react';
 import ReviewQueueItem from './ReviewQueueItem';
 import type { PlagiarismResult } from '../../types';
@@ -29,6 +30,10 @@ export const ReviewList: React.FC<ReviewListProps> = ({
   onSelectItem,
   onAction,
 }) => {
+  const mutedTextColor = useColorModeValue("gray.500", "gray.400");
+  const defaultBorderColor = useColorModeValue('gray.200', 'gray.600');
+  const hoverBorderColor = useColorModeValue('brand.300', 'brand.400');
+
   if (isLoading) {
     return (
       <Card flex="1" display="flex" flexDirection="column" minH={0}>
@@ -43,7 +48,7 @@ export const ReviewList: React.FC<ReviewListProps> = ({
     return (
       <Card flex="1" display="flex" flexDirection="column" minH={0}>
         <CardBody display="flex" alignItems="center" justifyContent="center" flex={1}>
-          <Text color="gray.500">{isEmptyMessage}</Text>
+          <Text color={mutedTextColor}>{isEmptyMessage}</Text>
         </CardBody>
       </Card>
     );
@@ -57,11 +62,11 @@ export const ReviewList: React.FC<ReviewListProps> = ({
             <Box
               key={item.id || `${item.file_a?.id}-${item.file_b?.id}`}
               borderWidth={selectedIndex === idx ? '2px' : '1px'}
-              borderColor={selectedIndex === idx ? 'brand.500' : 'gray.200'}
+              borderColor={selectedIndex === idx ? 'brand.500' : defaultBorderColor}
               borderRadius="md"
               transition="border-color 0.15s"
               cursor="pointer"
-              _hover={{ borderColor: 'brand.300' }}
+              _hover={{ borderColor: hoverBorderColor }}
               onClick={() => onSelectItem(item, idx)}
             >
               <ReviewQueueItem

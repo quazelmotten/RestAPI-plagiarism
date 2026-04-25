@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  HStack, Text, Badge, Button, useToast, IconButton, Tooltip
+  HStack, Text, Badge, Button, useToast, IconButton, Tooltip, useColorModeValue
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
 import { FiCheck, FiX, FiEye } from 'react-icons/fi';
@@ -21,6 +21,13 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
   const [confirming, setConfirming] = useState(false);
   const [skipping, setSkipping] = useState(false);
   const toast = useToast();
+  
+  const isBothUnconfirmed = !item.file_a.is_confirmed && !item.file_b.is_confirmed;
+  
+  const itemBg = useColorModeValue(isBothUnconfirmed ? "blue.50" : "gray.50", isBothUnconfirmed ? "blue.900" : "gray.700");
+  const itemBorderColor = useColorModeValue(isBothUnconfirmed ? "blue.200" : "gray.200", isBothUnconfirmed ? "blue.700" : "gray.600");
+  const itemHoverBg = useColorModeValue(isBothUnconfirmed ? "blue.100" : "gray.100", isBothUnconfirmed ? "blue.800" : "gray.600");
+  const mutedTextColor = useColorModeValue("gray.500", "gray.400");
   
   const handleConfirm = async () => {
     if (!item.id) return;
@@ -68,18 +75,16 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
     } finally {
       setSkipping(false);
     }
-  };
-  
-  const isBothUnconfirmed = !item.file_a.is_confirmed && !item.file_b.is_confirmed;
-  
+};
+   
   return (
     <HStack
       p={3}
       borderWidth={1}
       borderRadius="md"
-      bg={isBothUnconfirmed ? "blue.50" : "gray.50"}
-      borderColor={isBothUnconfirmed ? "blue.200" : "gray.200"}
-      _hover={{ bg: isBothUnconfirmed ? "blue.100" : "gray.100" }}
+      bg={itemBg}
+      borderColor={itemBorderColor}
+      _hover={{ bg: itemHoverBg }}
       transition="all 0.2s"
       role="listitem"
       aria-label={`${item.file_a.filename} vs ${item.file_b.filename}`}
@@ -95,7 +100,7 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
         {item.file_a.is_confirmed && (
           <Badge colorScheme="green" size="sm">✓</Badge>
         )}
-        <Text fontSize="sm" color="gray.500">vs</Text>
+        <Text fontSize="sm" color={mutedTextColor}>vs</Text>
         <Text fontSize="sm" fontWeight="medium">
           {item.file_b.filename}
         </Text>

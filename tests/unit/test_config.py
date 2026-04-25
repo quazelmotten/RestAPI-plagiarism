@@ -3,9 +3,9 @@ Tests for configuration system.
 """
 
 import os
+
 import pytest
 from pydantic import ValidationError
-
 from src.config import (
     AppConfig,
     DatabaseConfig,

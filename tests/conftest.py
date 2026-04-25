@@ -1,5 +1,5 @@
+import logging
 import os
-import sys
 
 import pytest
 
@@ -26,10 +26,6 @@ if not RUNNING_INTEGRATION_TESTS:
                 del os.environ[key]
             except KeyError:
                 pass
-
-
-# Preserve pytest logging handlers before configure_logging() overwrites them
-import logging
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -156,14 +152,15 @@ def mock_database():
     # Only import app and setup FastAPI dependency overrides if needed
     try:
         from src.app import app
+
         from assignments.dependencies import get_assignment_repository, get_assignment_service
+        from auth.dependencies import get_current_user
+        from auth.models import User
         from database import get_async_session
         from dependencies import get_s3_storage
         from files.dependencies import get_file_repository, get_file_service
         from results.dependencies import get_result_repository, get_result_service
         from tasks.dependencies import get_task_repository, get_task_service
-        from auth.dependencies import get_current_user
-        from auth.models import User, UserRole
 
         mock_storage = MagicMock()
         mock_user = User(id="test-user-id", email="test@example.com", is_global_admin=True)

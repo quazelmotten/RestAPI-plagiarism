@@ -3,7 +3,6 @@ Run database migrations on application startup.
 """
 
 import logging
-import os
 from pathlib import Path
 
 from alembic import command

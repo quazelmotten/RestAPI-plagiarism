@@ -6,7 +6,7 @@ Uses real services (PostgreSQL, Redis, RabbitMQ) via docker-compose.test.yml.
 import os
 import sys
 import uuid
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio

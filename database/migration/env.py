@@ -27,11 +27,11 @@ if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 # Import models
-from shared.models import SharedBase  # noqa: E402
+from pydantic import Field  # noqa: E402
 
 # Load database config directly without full application config
-from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic_settings import BaseSettings  # noqa: E402
+from shared.models import SharedBase  # noqa: E402
 
 
 class DatabaseConfig(BaseSettings):

@@ -964,9 +964,9 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
             <VStack align="stretch" spacing={4}>
               {/* Existing Notes */}
               {(activeFileForNote === 'file_a' ? fileANotes.data : fileBNotes.data)?.map(note => (
-                <Box key={note.id} p={3} bg="gray.50" borderRadius="md" position="relative">
+                <Box key={note.id} p={3} bg="gray.50" _dark={{ bg: 'gray.700' }} borderRadius="md" position="relative">
                   <Text fontSize="sm">{note.content}</Text>
-                  <Text fontSize="xs" color="gray.500" mt={1}>
+                  <Text fontSize="xs" color="gray.500" _dark={{ color: 'gray.400' }} mt={1}>
                     {new Date(note.created_at).toLocaleString()}
                   </Text>
                   <IconButton

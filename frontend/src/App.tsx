@@ -47,6 +47,43 @@ const theme = extendTheme({
       900: '#002766',
     },
   },
+  styles: {
+    global: (props: { colorMode: string }) => ({
+      body: {
+        bg: props.colorMode === 'dark' ? 'gray.800' : 'white',
+        color: props.colorMode === 'dark' ? 'white' : 'gray.800',
+      },
+    }),
+  },
+  components: {
+    Tabs: {
+      variants: {
+        'soft-rounded': {
+          tab: {
+            color: 'gray.600',
+            _selected: {
+              color: 'white',
+              bg: 'blue.500',
+            },
+            _dark: {
+              color: 'gray.300',
+              _selected: {
+                color: 'white',
+                bg: 'blue.400',
+              },
+            },
+          },
+        },
+      },
+    },
+    Card: {
+      baseStyle: (props: { colorMode: string }) => ({
+        container: {
+          bg: props.colorMode === 'dark' ? 'gray.700' : 'white',
+        },
+      }),
+    },
+  },
 });
 
 const BASE = getBasePath();

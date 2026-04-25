@@ -23,6 +23,7 @@ import {
   Input,
   InputGroup,
   InputRightElement,
+  useColorModeValue,
 } from '@chakra-ui/react';
 import { FiZap, FiDownload, FiRefreshCw, FiChevronLeft, FiChevronRight, FiHelpCircle, FiCheckCircle } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
@@ -72,6 +73,10 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
   // Mutations
   const bulkClearMutation = useBulkClear();
   const exportReview = useExportReview();
+
+  // Colors for dark mode
+  const mutedTextColor = useColorModeValue("gray.500", "gray.400");
+  const inputRightElementColor = useColorModeValue("gray.500", "gray.400");
 
   // Fetch review status
   const { data: reviewStatus, isLoading: statusLoading, refetch: refetchStatus } = useReviewStatus(assignmentId);
@@ -340,7 +345,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
                     <Button size="sm" variant="ghost" onClick={onHelpOpen}>Shortcuts</Button>
                   </Tooltip>
                 </HStack>
-                <Text fontSize="sm" color="gray.500">
+                <Text fontSize="sm" color={mutedTextColor}>
                   {t('review:pairsReviewed', { reviewed: reviewedPairs, total: totalPairs })}
                 </Text>
               </VStack>
@@ -364,7 +369,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
               mt={2}
             />
             <HStack spacing={3}>
-              <Text fontSize="sm" color="gray.500">
+              <Text fontSize="sm" color={mutedTextColor}>
                 {t('review:filesConfirmed', { confirmed: confirmedFiles, total: totalFiles })}
               </Text>
             </HStack>
@@ -432,11 +437,11 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
             <AlertDialogHeader>{t('common:keyboardShortcuts')}</AlertDialogHeader>
             <AlertDialogBody>
               <VStack align="stretch" spacing={2}>
-                <HStack justify="space-between"><Text fontWeight="medium">↓ / J</Text><Text color="gray.500">Next pair</Text></HStack>
-                <HStack justify="space-between"><Text fontWeight="medium">↑ / K</Text><Text color="gray.500">Previous pair</Text></HStack>
-                <HStack justify="space-between"><Text fontWeight="medium">Enter</Text><Text color="gray.500">View selected pair</Text></HStack>
-                <HStack justify="space-between"><Text fontWeight="medium">C</Text><Text color="gray.500">Confirm plagiarism</Text></HStack>
-                <HStack justify="space-between"><Text fontWeight="medium">X</Text><Text color="gray.500">Clear pair</Text></HStack>
+                <HStack justify="space-between"><Text fontWeight="medium">↓ / J</Text><Text color={mutedTextColor}>Next pair</Text></HStack>
+                <HStack justify="space-between"><Text fontWeight="medium">↑ / K</Text><Text color={mutedTextColor}>Previous pair</Text></HStack>
+                <HStack justify="space-between"><Text fontWeight="medium">Enter</Text><Text color={mutedTextColor}>View selected pair</Text></HStack>
+                <HStack justify="space-between"><Text fontWeight="medium">C</Text><Text color={mutedTextColor}>Confirm plagiarism</Text></HStack>
+                <HStack justify="space-between"><Text fontWeight="medium">X</Text><Text color={mutedTextColor}>Clear pair</Text></HStack>
               </VStack>
             </AlertDialogBody>
             <AlertDialogFooter>
@@ -461,7 +466,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
                     onChange={(e) => setBulkThreshold(e.target.value)}
                   />
                   <InputRightElement>
-                    <Text fontSize="sm" color="gray.500" mr={2}>
+                    <Text fontSize="sm" color={mutedTextColor} mr={2}>
                       {bulkThreshold ? (parseFloat(bulkThreshold) * 100).toFixed(0) : 0}%
                     </Text>
                   </InputRightElement>
@@ -492,7 +497,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
                     onChange={(e) => setBulkClearThreshold(e.target.value)}
                   />
                   <InputRightElement>
-                    <Text fontSize="sm" color="gray.500" mr={2}>
+                    <Text fontSize="sm" color={mutedTextColor} mr={2}>
                       {bulkClearThreshold ? (parseFloat(bulkClearThreshold) * 100).toFixed(0) : 0}%
                     </Text>
                   </InputRightElement>
