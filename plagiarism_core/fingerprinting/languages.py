@@ -24,6 +24,37 @@ LANGUAGE_MAP = {
     "rust": Language(tsrust.language()),
 }
 
+EXTENSION_MAP = {
+    ".py": "python",
+    ".java": "java",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".h": "cpp",
+    ".hpp": "cpp",
+    ".c": "c",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".tsx": "tsx",
+    ".go": "go",
+    ".rs": "rust",
+}
+
+
+def detect_language_from_extension(filename: str) -> str:
+    """Detect language from file extension."""
+    import os
+
+    _, ext = os.path.splitext(filename)
+    ext = ext.lower()
+    if ext not in EXTENSION_MAP:
+        supported = ", ".join(sorted(EXTENSION_MAP.keys()))
+        raise ValueError(
+            f"Cannot detect language from '{filename}'. "
+            f"Supported extensions: {supported}"
+        )
+    return EXTENSION_MAP[ext]
+
 
 def get_language(lang_code: str) -> Language:
     if lang_code not in LANGUAGE_MAP:

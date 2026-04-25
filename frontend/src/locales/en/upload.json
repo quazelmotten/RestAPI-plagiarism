@@ -20,6 +20,7 @@
   "rejected": "file(s) rejected",
   "filesCount": "{{count}} files",
   "addFiles": "Add files",
+  "autoDetected": "auto-detected",
   "toasts": {
     "noFilesSelected": "No files selected",
     "success": "Upload successful",

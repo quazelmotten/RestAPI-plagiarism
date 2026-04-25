@@ -1,4 +1,6 @@
 {
+  "auto": "Автоопределение",
+  "autoDetected": "автоопределён",
   "python": "Python",
   "javascript": "JavaScript",
   "typescript": "TypeScript",

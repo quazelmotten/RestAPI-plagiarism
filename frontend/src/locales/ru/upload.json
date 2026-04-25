@@ -20,6 +20,7 @@
   "rejected": "файл(ов) отклонено",
   "filesCount": "{{count}} файлов",
   "addFiles": "Добавить файлы",
+  "autoDetected": "автоопределён",
   "toasts": {
     "noFilesSelected": "Файлы не выбраны",
     "success": "Загрузка успешна",

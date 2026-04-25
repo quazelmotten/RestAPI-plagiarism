@@ -108,7 +108,29 @@ const getLastLanguage = (): string => {
   }
 };
 
+const EXTENSION_TO_LANGUAGE: Record<string, string> = {
+  '.py': 'python',
+  '.java': 'java',
+  '.js': 'javascript',
+  '.ts': 'typescript',
+  '.tsx': 'tsx',
+  '.go': 'go',
+  '.rs': 'rust',
+  '.c': 'c',
+  '.cpp': 'cpp',
+  '.cc': 'cpp',
+  '.cxx': 'cpp',
+  '.h': 'cpp',
+  '.hpp': 'cpp',
+};
+
+const detectLanguageFromExtension = (filename: string): string | null => {
+  const ext = '.' + getFileExtension(filename);
+  return EXTENSION_TO_LANGUAGE[ext] || null;
+};
+
 const languageOptions = [
+  { value: 'auto', key: 'auto' },
   { value: 'python', key: 'python' },
   { value: 'javascript', key: 'javascript' },
   { value: 'typescript', key: 'typescript' },
@@ -124,6 +146,7 @@ const Upload: React.FC = () => {
   const navigate = useNavigate();
   const [files, setFiles] = useState<File[]>([]);
   const [language, setLanguage] = useState(getLastLanguage);
+  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -165,6 +188,16 @@ const Upload: React.FC = () => {
       window.addEventListener('beforeunload', handleBeforeUnload);
       return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }, [files.length, isUploading]);
+
+    // Auto-detect language when files change
+    useEffect(() => {
+      if (language !== 'auto' || files.length === 0) {
+        setDetectedLanguage(null);
+        return;
+      }
+      const detected = detectLanguageFromExtension(files[0].name);
+      setDetectedLanguage(detected);
+    }, [files, language]);
 
     // Set up navigation blocker
     useEffect(() => {
@@ -324,6 +357,9 @@ const Upload: React.FC = () => {
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const lang = e.target.value;
     setLanguage(lang);
+    if (lang !== 'auto') {
+      setDetectedLanguage(null);
+    }
     try {
       localStorage.setItem(LANG_STORAGE_KEY, lang);
     } catch {
@@ -338,13 +374,16 @@ const Upload: React.FC = () => {
       return;
     }
 
+    // Use detected language if auto, otherwise use selected language
+    const languageToSubmit = language === 'auto' && detectedLanguage ? detectedLanguage : language;
+
     setIsUploading(true);
     setUploadProgress(0);
 
     try {
       const formData = new FormData();
       files.forEach((file) => formData.append('files', file));
-      formData.append('language', language);
+      formData.append('language', languageToSubmit);
       if (selectedAssignmentId) {
         formData.append('assignment_id', selectedAssignmentId);
       }
@@ -444,16 +483,17 @@ const Upload: React.FC = () => {
               <Box>
                 <Text fontSize="sm" color={mutedColor} mb={1}>
                   {t('language')}
+                  {detectedLanguage && <Badge ml={2} colorScheme="green" fontSize="xs">{t('languages:autoDetected')}</Badge>}
                 </Text>
                 <Select
-                  value={language}
+                  value={detectedLanguage || language}
                   onChange={handleLanguageChange}
                   maxW="200px"
                   size="sm"
                 >
                   {languageOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
-                      {t(`languages:${opt.key}`)}
+                      {detectedLanguage && opt.value === 'auto' ? `${t(`languages:${detectedLanguage}`)} (${t('languages:auto')})` : t(`languages:${opt.key}`)}
                     </option>
                   ))}
                 </Select>

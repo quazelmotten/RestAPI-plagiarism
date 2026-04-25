@@ -14,6 +14,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from plagiarism_core.fingerprinting.languages import detect_language_from_extension
 
 from auth.dependencies import get_current_user
 from auth.models import User
@@ -56,8 +57,9 @@ logger = logging.getLogger(__name__)
 )
 async def check_plagiarism(
     files: list[UploadFile] = File(..., description="Multiple files to check for plagiarism"),
-    language: str = Form(
-        "python", description="Programming language for analysis (python, java, cpp, c, javascript)"
+    language: str | None = Form(
+        None,
+        description="Programming language (python, java, cpp, c, javascript, go, rust) or 'auto' to detect from extension",
     ),
     assignment_id: str | None = Form(
         None,
@@ -85,7 +87,21 @@ async def check_plagiarism(
                 "Invalid assignment_id format. Must be a valid UUID."
             ) from None
 
-    files_data = [(f, language) for f in files]
+    # Detect language from extension if "auto" or not specified
+    if language is None or language.lower() == "auto":
+        if not files:
+            raise PlagiarismValidationError("No files provided for language detection.")
+        detected_languages = []
+        for upload_file in files:
+            detected = detect_language_from_extension(upload_file.filename)
+            detected_languages.append(detected)
+        # Use the first file's detected language for all (assuming uniform batch)
+        detected_language = detected_languages[0]
+        logger.info(f"Auto-detected language '{detected_language}' from file '{files[0].filename}'")
+        files_data = [(f, detected_language) for f in files]
+    else:
+        files_data = [(f, language) for f in files]
+
     return await task_service.create_task(
         files_data, storage, publish, assignment_id=validated_assignment_id
     )

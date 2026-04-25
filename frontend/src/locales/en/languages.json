@@ -1,4 +1,6 @@
 {
+  "auto": "Auto-detect",
+  "autoDetected": "auto-detected",
   "python": "Python",
   "javascript": "JavaScript",
   "typescript": "TypeScript",

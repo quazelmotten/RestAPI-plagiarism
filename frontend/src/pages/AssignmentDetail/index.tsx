@@ -84,7 +84,34 @@ const getLastLanguage = (): string => {
   catch { return 'python'; }
 };
 
+const getFileExtension = (filename: string): string => {
+  const parts = filename.split('.');
+  return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
+};
+
+const EXTENSION_TO_LANGUAGE: Record<string, string> = {
+  '.py': 'python',
+  '.java': 'java',
+  '.js': 'javascript',
+  '.ts': 'typescript',
+  '.tsx': 'tsx',
+  '.go': 'go',
+  '.rs': 'rust',
+  '.c': 'c',
+  '.cpp': 'cpp',
+  '.cc': 'cpp',
+  '.cxx': 'cpp',
+  '.h': 'cpp',
+  '.hpp': 'cpp',
+};
+
+const detectLanguageFromExtension = (filename: string): string | null => {
+  const ext = '.' + getFileExtension(filename);
+  return EXTENSION_TO_LANGUAGE[ext] || null;
+};
+
 const languageOptions = [
+  { value: 'auto', key: 'auto' },
   { value: 'python', key: 'python' },
   { value: 'javascript', key: 'javascript' },
   { value: 'typescript', key: 'typescript' },
@@ -116,6 +143,7 @@ const AssignmentDetail: React.FC = () => {
   // Upload state
   const [files, setFiles] = useState<File[]>([]);
   const [language, setLanguage] = useState(getLastLanguage);
+  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -286,6 +314,16 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
   // Reset page when task changes
   React.useEffect(() => { setPairsPage(0); setFilesPage(0); }, [selectedTaskId]);
 
+  // Auto-detect language when files change
+  React.useEffect(() => {
+    if (language !== 'auto' || files.length === 0) {
+      setDetectedLanguage(null);
+      return;
+    }
+    const detected = detectLanguageFromExtension(files[0].name);
+    setDetectedLanguage(detected);
+  }, [files, language]);
+
   // Upload
   const onDrop = useCallback(
     (acceptedFiles: File[], rejected: { file: File }[]) => {
@@ -324,12 +362,16 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
       toast({ title: t('toasts.noFilesSelected'), status: 'warning', duration: 3000 });
       return;
     }
+
+    // Use detected language if auto, otherwise use selected language
+    const languageToSubmit = language === 'auto' && detectedLanguage ? detectedLanguage : language;
+
     setIsUploading(true);
     setUploadProgress(0);
     try {
       const formData = new FormData();
       files.forEach((file) => formData.append('files', file));
-      formData.append('language', language);
+      formData.append('language', languageToSubmit);
       if (assignmentId) formData.append('assignment_id', assignmentId);
       await api.post(API_ENDPOINTS.CHECK, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -481,14 +523,26 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
               <Flex direction={{ base: 'column', md: 'row' }} gap={3} align="flex-start">
                 <HStack spacing={3} flexShrink={0}>
                   <Box>
-                    <Text fontSize="xs" color={mutedColor} mb={1}>{t('language')}</Text>
+                    <Text fontSize="xs" color={mutedColor} mb={1}>
+                      {t('language')}
+                      {detectedLanguage && <Badge ml={1} colorScheme="green" fontSize="xs">{t('languages:autoDetected')}</Badge>}
+                    </Text>
                     <Select
-                      value={language}
-                      onChange={(e) => { setLanguage(e.target.value); localStorage.setItem(LANG_STORAGE_KEY, e.target.value); }}
+                      value={detectedLanguage || language}
+                      onChange={(e) => {
+                        const lang = e.target.value;
+                        setLanguage(lang);
+                        if (lang !== 'auto') {
+                          setDetectedLanguage(null);
+                        }
+                        localStorage.setItem(LANG_STORAGE_KEY, lang);
+                      }}
                       size="sm" maxW="130px"
                     >
                       {languageOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{t(`languages:${opt.key}`)}</option>
+                        <option key={opt.value} value={opt.value}>
+                          {detectedLanguage && opt.value === 'auto' ? `${t(`languages:${detectedLanguage}`)} (${t('languages:auto')})` : t(`languages:${opt.key}`)}
+                        </option>
                       ))}
                     </Select>
                   </Box>
