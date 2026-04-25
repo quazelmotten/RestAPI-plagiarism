@@ -22,22 +22,26 @@
     "similarity": "{{percent}}% similarity",
     "showHeader": "Show header",
     "hideHeader": "Hide header",
-     "tooltip": {
-       "showComments": "Show comments (c)",
-       "hideComments": "Hide comments (c)",
-       "showEmptyLines": "Show empty lines",
-       "hideEmptyLines": "Hide empty lines",
-       "unlockScrollSync": "Unlock scroll sync (s)",
-       "lockScrollSync": "Lock scroll sync (s)",
-       "matchStatistics": "Match statistics"
-     },
-    "aria": {
-      "showComments": "Show comments",
-      "hideComments": "Hide comments",
-      "unlockScrollSync": "Unlock scroll sync",
-      "lockScrollSync": "Lock scroll sync",
-      "matchStatistics": "Match statistics"
-    },
+"tooltip": {
+        "showComments": "Show comments (c)",
+        "hideComments": "Hide comments (c)",
+        "showEmptyLines": "Show empty lines",
+        "hideEmptyLines": "Hide empty lines",
+        "unlockScrollSync": "Unlock scroll sync (s)",
+        "lockScrollSync": "Lock scroll sync (s)",
+        "matchStatistics": "Match statistics",
+        "enableSyntaxHighlight": "Enable syntax highlighting",
+        "disableSyntaxHighlight": "Disable syntax highlighting"
+      },
+      "aria": {
+        "showComments": "Show comments",
+        "hideComments": "Hide comments",
+        "unlockScrollSync": "Unlock scroll sync",
+        "lockScrollSync": "Lock scroll sync",
+        "matchStatistics": "Match statistics",
+        "enableSyntaxHighlight": "Enable syntax highlighting",
+        "disableSyntaxHighlight": "Disable syntax highlighting"
+      },
     "stats": {
       "totalMatches": "Total matches",
       "coverageA": "Coverage A",

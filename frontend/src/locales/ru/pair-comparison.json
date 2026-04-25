@@ -22,22 +22,26 @@
     "similarity": "{{percent}}% сходства",
     "showHeader": "Показать заголовок",
     "hideHeader": "Скрыть заголовок",
-     "tooltip": {
-       "showComments": "Показать комментарии (c)",
-       "hideComments": "Скрыть комментарии (c)",
-       "showEmptyLines": "Показать пустые строки",
-       "hideEmptyLines": "Скрыть пустые строки",
-       "unlockScrollSync": "Синхронизация прокрутки (s)",
-       "lockScrollSync": "Синхронизация прокрутки (s)",
-       "matchStatistics": "Статистика совпадений"
-     },
-    "aria": {
-      "showComments": "Показать комментарии",
-      "hideComments": "Скрыть комментарии",
-      "unlockScrollSync": "Синхронизация прокрутки",
-      "lockScrollSync": "Синхронизация прокрутки",
-      "matchStatistics": "Статистика совпадений"
-    },
+"tooltip": {
+        "showComments": "Показать комментарии (c)",
+        "hideComments": "Скрыть комментарии (c)",
+        "showEmptyLines": "Показать пустые строки",
+        "hideEmptyLines": "Скрыть пустые строки",
+        "unlockScrollSync": "Синхронизация прокрутки (s)",
+        "lockScrollSync": "Синхронизация прокрутки (s)",
+        "matchStatistics": "Статистика совпадений",
+        "enableSyntaxHighlight": "Включить подсветку синтаксиса",
+        "disableSyntaxHighlight": "Выключить подсветку синтаксиса"
+      },
+      "aria": {
+        "showComments": "Показать комментарии",
+        "hideComments": "Скрыть комментарии",
+        "unlockScrollSync": "Синхронизация прокрутки",
+        "lockScrollSync": "Синхронизация прокрутки",
+        "matchStatistics": "Статистика совпадений",
+        "enableSyntaxHighlight": "Включить подсветку синтаксиса",
+        "disableSyntaxHighlight": "Выключить подсветку синтаксиса"
+      },
     "stats": {
       "totalMatches": "Всего совпадений",
       "coverageA": "Покрытие A",

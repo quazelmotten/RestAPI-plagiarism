@@ -7,9 +7,11 @@ import {
   Text,
   Badge,
   useColorModeValue,
+  useColorMode,
   Box,
   Tooltip,
 } from '@chakra-ui/react';
+import { Highlight, themes } from 'prism-react-renderer';
 import { useTranslation } from 'react-i18next';
 import type { PlagiarismMatch } from '../../types';
 import {
@@ -17,6 +19,39 @@ import {
   PLAGIARISM_TYPE_COLORS_HOVER,
   PLAGIARISM_TYPE_BORDERS,
 } from '../../types';
+
+const prismLanguageMap: Record<string, string> = {
+  javascript: 'javascript',
+  typescript: 'typescript',
+  tsx: 'tsx',
+  jsx: 'jsx',
+  python: 'python',
+  java: 'java',
+  c: 'c',
+  cpp: 'cpp',
+  csharp: 'csharp',
+  'csharp.net': 'csharp',
+  go: 'go',
+  rust: 'rust',
+  ruby: 'ruby',
+  php: 'php',
+  swift: 'swift',
+  kotlin: 'kotlin',
+  sql: 'sql',
+  lua: 'lua',
+  html: 'markup',
+  xml: 'markup',
+  css: 'css',
+  scss: 'scss',
+  less: 'less',
+  bash: 'bash',
+  shell: 'bash',
+  sh: 'bash',
+  json: 'json',
+  yaml: 'yaml',
+  markdown: 'markdown',
+  md: 'markdown',
+};
 
 // Fallback colors for matches without type info (backward compat)
 const FALLBACK_COLORS = [
@@ -104,6 +139,7 @@ interface FileViewerProps {
   isFileA: boolean;
   filterComments: boolean;
   filterEmpty: boolean;
+  syntaxHighlight: boolean;
   hoveredMatchIndex: number | null;
   onHoverMatch: (index: number | null) => void;
   onJumpToMatch: (clickedLine: number, clickedLineOffset: number, clickedIsFileA: boolean) => void;
@@ -119,6 +155,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
   isFileA,
   filterComments,
   filterEmpty,
+  syntaxHighlight,
   hoveredMatchIndex,
   onHoverMatch,
   onJumpToMatch,
@@ -126,10 +163,12 @@ const FileViewer: React.FC<FileViewerProps> = ({
   getLineRef,
 }) => {
   const { t } = useTranslation(['pairComparison', 'common']);
+  const { colorMode } = useColorMode();
   const lineNumberBg = useColorModeValue('gray.100', 'gray.700');
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const textColor = useColorModeValue('gray.800', 'gray.100');
   const lineNumberColor = useColorModeValue('gray.500', 'gray.400');
+  const syntaxTheme = colorMode === 'dark' ? themes.vsDark : themes.vsLight;
 
   const lines = useMemo(() => content.split('\n'), [content]);
 
@@ -166,7 +205,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
       result.push({ originalIdx: idx, originalLineNumber: idx + 1, line });
     });
     return result;
-  }, [lines, filterComments, filterEmpty, language]);
+  }, [lines, filterComments, filterEmpty, language, syntaxHighlight]);
 
   const handleClick = useCallback((lineNumber: number, event: React.SyntheticEvent) => {
     const lineEl = event.currentTarget as HTMLDivElement;
@@ -248,7 +287,29 @@ const FileViewer: React.FC<FileViewerProps> = ({
                     color={textColor}
                     minWidth={0}
                   >
-                    {line || ' '}
+                    {syntaxHighlight ? (
+                      <Highlight
+                        code={line}
+                        language={prismLanguageMap[language] || 'text'}
+                        theme={syntaxTheme}
+                      >
+                        {({ tokens, getLineProps, getTokenProps }) => (
+                          <>
+                            {tokens.map((lineTokens, lineIdx) => (
+                              <span key={lineIdx} {...getLineProps({ line: lineTokens })}>
+                                {lineTokens.map((token, tokenIdx) => (
+                                  <span key={tokenIdx} {...getTokenProps({ token })}>
+                                    {token.content}
+                                  </span>
+                                ))}
+                              </span>
+                            ))}
+                          </>
+                        )}
+                      </Highlight>
+                    ) : (
+                      line || ' '
+                    )}
                   </Box>
                   {matchInfo?.match?.plagiarism_type && matchInfo.match.plagiarism_type >= 2 && (
                       <Tooltip label={t(`page.matchTypes.${matchInfo.match.plagiarism_type}`, `Type ${matchInfo.match.plagiarism_type}`)} placement="top">

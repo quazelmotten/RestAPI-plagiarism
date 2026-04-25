@@ -20,7 +20,7 @@ import {
   ModalCloseButton,
   ModalBody,
 } from '@chakra-ui/react';
-import { FiEye, FiEyeOff, FiChevronUp, FiChevronDown, FiLink, FiLink2, FiBarChart2, FiHelpCircle, FiFilter } from 'react-icons/fi';
+import { FiEye, FiEyeOff, FiChevronUp, FiChevronDown, FiLink, FiLink2, FiBarChart2, FiHelpCircle, FiFilter, FiCode } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../services/api';
 import FilePickerModal from '../components/FilePickerModal';
@@ -113,6 +113,7 @@ const PairComparison: React.FC = () => {
   const [analyzingMatches, setAnalyzingMatches] = useState(false);
   const [filterComments, setFilterComments] = useState(false);
   const [filterEmpty, setFilterEmpty] = useState(false);
+  const [syntaxHighlight, setSyntaxHighlight] = useState(false);
   const [headerVisible, setHeaderVisible] = useState(true);
   const [syncScroll, setSyncScroll] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
@@ -493,6 +494,16 @@ const PairComparison: React.FC = () => {
                 onClick={() => setFilterEmpty(!filterEmpty)}
               />
             </Tooltip>
+            <Tooltip label={syntaxHighlight ? t('page.tooltip.disableSyntaxHighlight') : t('page.tooltip.enableSyntaxHighlight')} placement="bottom">
+              <IconButton
+                aria-label={syntaxHighlight ? t('page.aria.disableSyntaxHighlight') : t('page.aria.enableSyntaxHighlight')}
+                icon={<FiCode />}
+                size="sm"
+                variant={syntaxHighlight ? 'solid' : 'ghost'}
+                colorScheme={syntaxHighlight ? 'cyan' : 'gray'}
+                onClick={() => setSyntaxHighlight(!syntaxHighlight)}
+              />
+            </Tooltip>
              <Tooltip label={syncScroll ? t('page.tooltip.unlockScrollSync') : t('page.tooltip.lockScrollSync')} placement="bottom">
                <IconButton
                  aria-label={syncScroll ? t('page.aria.unlockScrollSync') : t('page.aria.lockScrollSync')}
@@ -637,6 +648,7 @@ const PairComparison: React.FC = () => {
                       isFileA={isFileAInPair}
                       filterComments={filterComments}
                       filterEmpty={filterEmpty}
+                      syntaxHighlight={syntaxHighlight}
                       hoveredMatchIndex={hoveredMatchIndex}
                       onHoverMatch={setHoveredMatchIndex}
                       onJumpToMatch={handleJumpToMatch}
@@ -652,6 +664,7 @@ const PairComparison: React.FC = () => {
                       isFileA={!isFileAInPair}
                       filterComments={filterComments}
                       filterEmpty={filterEmpty}
+                      syntaxHighlight={syntaxHighlight}
                       hoveredMatchIndex={hoveredMatchIndex}
                       onHoverMatch={setHoveredMatchIndex}
                       onJumpToMatch={handleJumpToMatch}

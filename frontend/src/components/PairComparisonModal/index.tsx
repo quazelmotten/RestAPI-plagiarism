@@ -36,6 +36,7 @@ import {
   FiFilter,
   FiCheck,
   FiFileText,
+  FiCode,
 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../../services/api';
@@ -162,6 +163,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
   const [analyzingMatches, setAnalyzingMatches] = useState(false);
   const [filterComments, setFilterComments] = useState(false);
   const [filterEmpty, setFilterEmpty] = useState(false);
+  const [syntaxHighlight, setSyntaxHighlight] = useState(false);
   const [syncScroll, setSyncScroll] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -741,6 +743,16 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
               onClick={() => setFilterEmpty(!filterEmpty)}
             />
           </Tooltip>
+          <Tooltip label={syntaxHighlight ? t('page.tooltip.disableSyntaxHighlight') : t('page.tooltip.enableSyntaxHighlight')} placement="bottom">
+            <IconButton
+              aria-label={syntaxHighlight ? t('page.aria.disableSyntaxHighlight') : t('page.aria.enableSyntaxHighlight')}
+              icon={<FiCode />}
+              size="sm"
+              variant={syntaxHighlight ? 'solid' : 'ghost'}
+              colorScheme={syntaxHighlight ? 'cyan' : 'gray'}
+              onClick={() => setSyntaxHighlight(!syntaxHighlight)}
+            />
+          </Tooltip>
           <Tooltip label={syncScroll ? t('page.tooltip.unlockScrollSync') : t('page.tooltip.lockScrollSync')} placement="bottom">
             <IconButton
               aria-label="Toggle scroll sync"
@@ -882,6 +894,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
                 isFileA={true}
                 filterComments={filterComments}
                 filterEmpty={filterEmpty}
+                syntaxHighlight={syntaxHighlight}
                 hoveredMatchIndex={hoveredMatchIndex}
                 onHoverMatch={setHoveredMatchIndex}
                 onJumpToMatch={handleJumpToMatch}
@@ -896,6 +909,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
                 isFileA={false}
                 filterComments={filterComments}
                 filterEmpty={filterEmpty}
+                syntaxHighlight={syntaxHighlight}
                 hoveredMatchIndex={hoveredMatchIndex}
                 onHoverMatch={setHoveredMatchIndex}
                 onJumpToMatch={handleJumpToMatch}
