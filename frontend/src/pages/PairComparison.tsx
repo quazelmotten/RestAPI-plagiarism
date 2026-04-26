@@ -164,8 +164,8 @@ const PairComparison: React.FC = () => {
     const totalEffectiveB = effectiveB.size;
 
     const stats: Record<number, { count: number; linesA: number; linesB: number }> = {};
-    let totalLinesA = 0;
-    let totalLinesB = 0;
+    const coveredA = new Set<number>();
+    const coveredB = new Set<number>();
 
     for (const m of matches) {
       const type = m.plagiarism_type ?? 1;
@@ -175,27 +175,35 @@ const PairComparison: React.FC = () => {
       // Count effective lines in the range for A
       let countA = 0;
       for (let i = m.file_a_start_line - 1; i <= m.file_a_end_line - 1; i++) {
-        if (effectiveA.has(i)) countA++;
+        if (effectiveA.has(i)) {
+          countA++;
+          coveredA.add(i);
+        }
       }
       // For B
       let countB = 0;
       for (let i = m.file_b_start_line - 1; i <= m.file_b_end_line - 1; i++) {
-        if (effectiveB.has(i)) countB++;
+        if (effectiveB.has(i)) {
+          countB++;
+          coveredB.add(i);
+        }
       }
 
       stats[type].linesA += countA;
       stats[type].linesB += countB;
-      totalLinesA += countA;
-      totalLinesB += countB;
     }
+
+    // Use unique covered lines for total (deduplication)
+    const uniqueA = coveredA.size;
+    const uniqueB = coveredB.size;
 
     return {
       byType: stats,
       totalMatches: matches.length,
-      totalLinesA,
-      totalLinesB,
-      coverageA: totalEffectiveA > 0 ? (totalLinesA / totalEffectiveA) * 100 : 0,
-      coverageB: totalEffectiveB > 0 ? (totalLinesB / totalEffectiveB) * 100 : 0,
+      totalLinesA: uniqueA,
+      totalLinesB: uniqueB,
+      coverageA: totalEffectiveA > 0 ? (uniqueA / totalEffectiveA) * 100 : 0,
+      coverageB: totalEffectiveB > 0 ? (uniqueB / totalEffectiveB) * 100 : 0,
     };
   }, [currentPairMemo, fileAContent, fileBContent]);
 

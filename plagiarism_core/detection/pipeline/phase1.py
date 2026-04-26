@@ -4,6 +4,7 @@ import logging
 
 from ...canonicalizer import ast_canonicalize
 from ...models import Match, PlagiarismType
+from ...ast_hash import ast_minhash
 from ..ast_helpers import _extract_functions
 from ..body_signatures import _extract_body_signature
 from ..function_matcher import _function_level_matches
@@ -19,6 +20,9 @@ _LARGE_FUNCTION_THRESHOLD = 50
 _LARGE_FUNCTION_OVERLAP_RATIO = 0.4
 _MOSTLY_IDENTICAL_RATIO = 0.1
 _MIN_CANONICAL_LENGTH = 50
+
+_MINHASH_THRESHOLD = 0.75
+_MINHASH_MIN_SIZE = 10
 
 
 def run_phase1(
@@ -91,6 +95,15 @@ def run_phase1(
         covered_a,
         covered_b,
         lang_code,
+        all_matches,
+    )
+    _match_by_minhash(
+        funcs_a,
+        funcs_b,
+        covered_a,
+        covered_b,
+        tree_a,
+        tree_b,
         all_matches,
     )
     return all_matches
@@ -350,6 +363,113 @@ def _find_prefix_suffix(fn_lines_a, fn_lines_b, fn_shadow_a, fn_shadow_b):
         else:
             break
     return prefix_len, suffix_len
+
+
+def _match_by_minhash(
+    funcs_a,
+    funcs_b,
+    covered_a,
+    covered_b,
+    tree_a,
+    tree_b,
+    all_matches,
+):
+    """
+    Match functions using MinHash similarity for partial matches.
+    
+    This catches functions that are structurally similar but not identical
+    (e.g., a few lines added/removed or modified). It's the "fallback"
+    layer after exact structural/semantic matching.
+    """
+    from ...fingerprinting.minhash import MinHash
+    
+    minhash_sigs_a = {}
+    for fa in funcs_a:
+        func_lines = set(range(fa["start_line"], fa["end_line"] + 1))
+        if func_lines & covered_a:
+            continue
+        if fa["end_line"] - fa["start_line"] < _MINHASH_MIN_SIZE:
+            continue
+        try:
+            func_node = _find_function_node(tree_a.root_node, fa["start_line"], fa["end_line"])
+            if func_node:
+                minhash_sigs_a[fa["name"]] = ast_minhash(func_node)
+        except Exception:
+            continue
+    
+    minhash_sigs_b = {}
+    for fb in funcs_b:
+        func_lines = set(range(fb["start_line"], fb["end_line"] + 1))
+        if func_lines & covered_b:
+            continue
+        if fb["end_line"] - fb["start_line"] < _MINHASH_MIN_SIZE:
+            continue
+        try:
+            func_node = _find_function_node(tree_b.root_node, fb["start_line"], fb["end_line"])
+            if func_node:
+                minhash_sigs_b[fb["name"]] = ast_minhash(func_node)
+        except Exception:
+            continue
+    
+    matched_pairs = set()
+    for name_a, sig_a in minhash_sigs_a.items():
+        if name_a in matched_pairs:
+            continue
+        for name_b, sig_b in minhash_sigs_b.items():
+            if name_b in matched_pairs:
+                continue
+            sim = MinHash.jaccard(sig_a, sig_b)
+            if sim >= _MINHASH_THRESHOLD:
+                fa = next(f for f in funcs_a if f["name"] == name_a)
+                fb = next(f for f in funcs_b if f["name"] == name_b)
+                
+                partial_match = Match(
+                    file1={
+                        "start_line": fa["start_line"],
+                        "start_col": 0,
+                        "end_line": fa["end_line"],
+                        "end_col": 0,
+                    },
+                    file2={
+                        "start_line": fb["start_line"],
+                        "start_col": 0,
+                        "end_line": fb["end_line"],
+                        "end_col": 0,
+                    },
+                    kgram_count=fa["end_line"] - fa["start_line"] + 1,
+                    plagiarism_type=PlagiarismType.SEMANTIC,
+                    similarity=sim,
+                    details={
+                        "original_function": fa["name"],
+                        "matched_function": fb["name"],
+                        "_minhash_match": True,
+                    },
+                    description=f"Partial match (MinHash): {fa['name']} ↔ {fb['name']} (similarity: {sim:.2f})",
+                )
+                all_matches.append(partial_match)
+                matched_pairs.add(name_a)
+                matched_pairs.add(name_b)
+                for line in range(fa["start_line"], fa["end_line"] + 1):
+                    covered_a.add(line)
+                for line in range(fb["start_line"], fb["end_line"] + 1):
+                    covered_b.add(line)
+                break
+
+
+def _find_function_node(root, start_line, end_line):
+    """Find function node within the given line range."""
+    
+    def visit(node):
+        if node.type in ("function_definition", "method_definition", "function_declaration"):
+            if node.start_point[0] <= start_line <= node.end_point[0]:
+                return node
+        for child in node.children:
+            result = visit(child)
+            if result:
+                return result
+        return None
+    
+    return visit(root)
 
 
 def _count_differing_lines(

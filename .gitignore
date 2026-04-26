@@ -72,7 +72,7 @@ build/
 *.egg-info/
 
 # Datasets and synthetic clones
-dataset/
+*dataset*/
 tests/plagiarism/type*
 tests/tmp_synthetic
 

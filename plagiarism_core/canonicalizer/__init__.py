@@ -22,6 +22,9 @@ from .api import (
     canonicalize_type4 as canonicalize_type4,
 )
 from .api import (
+    canonicalize_type4_light as canonicalize_type4_light,
+)
+from .api import (
     parse_file_once_from_string as parse_file_once_from_string,
 )
 from .ast_canonical import (
@@ -63,6 +66,7 @@ __all__ = [
     "ast_canonicalize_with_identifiers",
     "canonicalize_full",
     "canonicalize_type4",
+    "canonicalize_type4_light",
     "get_identifier_renames",
     "normalize_identifiers",
     "parse_file_once_from_string",

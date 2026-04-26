@@ -66,7 +66,47 @@ def detect_plagiarism(source_a, source_b, lang_code="python", min_match_lines=2)
 
     all_matches = _merge_matches(all_matches, gap=0)
     all_matches.sort(key=lambda m: m.file1["start_line"])
+    
+    all_matches = _filter_contained_matches(all_matches)
+    
     return all_matches
+
+
+def _filter_contained_matches(matches: list) -> list:
+    """Remove matches fully contained within larger matches (regardless of type)."""
+    if not matches:
+        return matches
+    
+    ranges = []
+    for m in matches:
+        ranges.append({
+            'match': m,
+            'a_start': m.file1["start_line"],
+            'a_end': m.file1["end_line"],
+            'b_start': m.file2["start_line"],
+            'b_end': m.file2["end_line"],
+            'size': (m.file1["end_line"] - m.file1["start_line"]) + (m.file2["end_line"] - m.file2["start_line"]),
+        })
+    
+    ranges.sort(key=lambda x: -x['size'])
+    
+    filtered = []
+    used_a = set()
+    used_b = set()
+    
+    for r in ranges:
+        a_range = set(range(r['a_start'], r['a_end'] + 1))
+        b_range = set(range(r['b_start'], r['b_end'] + 1))
+        
+        if a_range.issubset(used_a) and b_range.issubset(used_b):
+            continue
+        
+        filtered.append(r['match'])
+        used_a.update(a_range)
+        used_b.update(b_range)
+    
+    filtered.sort(key=lambda m: m.file1["start_line"])
+    return filtered
 
 
 def _run_phase3(
@@ -76,10 +116,27 @@ def _run_phase3(
     for m in module_line_matches:
         a_range = set(range(m.file1["start_line"], m.file1["end_line"] + 1))
         b_range = set(range(m.file2["start_line"], m.file2["end_line"] + 1))
-        if not (a_range & covered_a) and not (b_range & covered_b):
+        new_a = a_range - covered_a
+        new_b = b_range - covered_b
+        
+        # Skip if match is fully contained in existing coverage (would create overlapping matches)
+        if not new_a or not new_b:
+            continue
+            
+        # Only add if new portion is meaningful (>50% of original or >2 lines)
+        orig_size = len(a_range)
+        new_size = len(new_a)
+        if new_size >= orig_size * 0.5 or new_size >= 3:
+            new_a_range = sorted(new_a)
+            new_b_range = sorted(new_b)
+            m.file1["start_line"] = new_a_range[0]
+            m.file1["end_line"] = new_a_range[-1]
+            m.file2["start_line"] = new_b_range[0]
+            m.file2["end_line"] = new_b_range[-1]
             all_matches.append(m)
-            covered_a.update(a_range)
-            covered_b.update(b_range)
+            covered_a.update(new_a)
+            covered_b.update(new_b)
+        # Otherwise, fully covered - no need to add
 
 
 def _run_phase4(
@@ -104,7 +161,7 @@ def _run_phase4(
         lines_b,
         shadow_a,
         shadow_b,
-        min_match_lines=2,
+        min_match_lines=1,
         lang_code=lang_code,
         func_matches=all_matches,
     )

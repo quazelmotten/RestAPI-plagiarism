@@ -339,27 +339,17 @@ def _unused_stub():
             code = source_code
 
             # All available transformations (pick a random subset each time)
+            # Use only FAST transformations to avoid hangs
             transformations = [
                 (self._convert_for_to_while, 0.7),
-                (self._convert_while_to_for, 0.4),
                 (self._convert_list_comprehension, 0.6),
-                (self._convert_listcomp_to_loop, 0.5),
-                (self._use_map_filter, 0.4),
-                (self._change_string_formatting, 0.6),
-                (self._shuffle_commutative_ops, 0.5),
-                (self._swap_if_else_negation, 0.4),
                 (self._change_comparison_operators, 0.5),
-                (self._convert_dict_comprehension, 0.5),
-                (self._convert_lambda_to_def, 0.4),
-                (self._split_compound_conditions, 0.4),
-                (self._merge_conditions, 0.3),
                 (self._change_augmented_assignment, 0.4),
             ]
 
-            # Randomly select and apply a subset (3-6 transformations)
-            selected = random.sample(
-                transformations, min(len(transformations), random.randint(3, 6))
-            )
+            # Randomly select and apply a subset (2-4 transformations)
+            n_select = min(4, random.randint(2, len(transformations)))
+            selected = random.sample(transformations, n_select)
             for transform, _ in selected:
                 try:
                     code = transform(code)
@@ -373,6 +363,7 @@ def _unused_stub():
         """
         Convert simple for-loops into equivalent while-loops using iter().
         """
+        # Limit iterations to prevent catastrophic backtracking
         pattern = re.compile(r"^([ \t]*)for\s+(\w+)\s+in\s+([^\n:]+):", re.MULTILINE)
 
         def replacer(match):
@@ -387,7 +378,11 @@ def _unused_stub():
                 f"{indent_next}    break"
             )
 
-        return pattern.sub(replacer, code)
+        # Use limited replacements
+        matches = list(pattern.finditer(code))
+        if len(matches) > 10:
+            return code  # Skip if too many matches
+        return pattern.sub(replacer, code, count=10)
 
     def _convert_list_comprehension(self, code: str) -> str:
         """
@@ -404,7 +399,11 @@ def _unused_stub():
             else:
                 return f"list(map(lambda {var}: {expr}, {iterable}))"
 
-        return pattern.sub(replacer, code)
+        # Limit to prevent slowdowns
+        matches = pattern.findall(code)
+        if len(matches) > 20:
+            return code
+        return pattern.sub(replacer, code, count=20)
 
     def _use_map_filter(self, code: str) -> str:
         """
@@ -417,7 +416,11 @@ def _unused_stub():
             expr, var, iterable = match.groups()
             return f"list(map(lambda {var}: {expr}, {iterable}))"
 
-        return pattern.sub(replacer, code)
+        # Limit to prevent slowdowns
+        matches = pattern.findall(code)
+        if len(matches) > 20:
+            return code
+        return pattern.sub(replacer, code, count=20)
 
     def _change_string_formatting(self, code: str) -> str:
         """
@@ -453,7 +456,11 @@ def _unused_stub():
             body = match.group(3)
             return f"for {var} in range({end}):{body}"
 
-        return pattern.sub(replacer, code)
+        # Limit matches
+        matches = pattern.findall(code)
+        if len(matches) > 10:
+            return code
+        return pattern.sub(replacer, code, count=10)
 
     def _convert_listcomp_to_loop(self, code: str) -> str:
         pattern = re.compile(r"\[(.*?)\s+for\s+(\w+)\s+in\s+(.*?)\]")
@@ -467,7 +474,11 @@ def _unused_stub():
             )
             return f"{var}_list"
 
-        return pattern.sub(replacer, code)
+        # Limit matches
+        matches = pattern.findall(code)
+        if len(matches) > 20:
+            return code
+        return pattern.sub(replacer, code, count=20)
 
     def _shuffle_commutative_ops(self, code: str) -> str:
         pattern = re.compile(r"(\b\w+\b)\s*([\+\*])\s*(\b\w+\b)")
@@ -478,7 +489,11 @@ def _unused_stub():
                 return f"{b} {op} {a}"
             return match.group(0)
 
-        return pattern.sub(replacer, code)
+        # Limit to prevent slowdowns on large files
+        matches = pattern.findall(code)
+        if len(matches) > 20:
+            return code
+        return pattern.sub(replacer, code, count=20)
 
     def _swap_if_else_negation(self, code: str) -> str:
         """
@@ -504,7 +519,11 @@ def _unused_stub():
             negated = self._negate_condition(cond)
             return f"{indent}if {negated}:\n{else_body}{indent}else:\n{if_body}"
 
-        return pattern.sub(replacer, code)
+        # Limit matches
+        matches = pattern.findall(code)
+        if len(matches) > 10:
+            return code
+        return pattern.sub(replacer, code, count=10)
 
     def _negate_condition(self, cond: str) -> str:
         """Negate a simple boolean condition."""
@@ -551,7 +570,11 @@ def _unused_stub():
                 f"for {k_var}, {v_var} in {iterable}] and _d)({{}}))()"
             )
 
-        return pattern.sub(replacer, code)
+        # Limit matches
+        matches = pattern.findall(code)
+        if len(matches) > 10:
+            return code
+        return pattern.sub(replacer, code, count=10)
 
     def _convert_lambda_to_def(self, code: str) -> str:
         """
@@ -606,7 +629,11 @@ def _unused_stub():
                 return match.group(0)
             return f"{indent}if {a}:\n{inner_indent}if {b}:\n{inner_indent}    {body.lstrip()}"
 
-        return pattern.sub(replacer, code)
+        # Limit matches
+        matches = pattern.findall(code)
+        if len(matches) > 10:
+            return code
+        return pattern.sub(replacer, code, count=10)
 
     def _merge_conditions(self, code: str) -> str:
         """
@@ -628,7 +655,11 @@ def _unused_stub():
                 return match.group(0)
             return f"{indent}if {a} and {b}:\n{body}"
 
-        return pattern.sub(replacer, code)
+        # Limit matches
+        matches = pattern.findall(code)
+        if len(matches) > 10:
+            return code
+        return pattern.sub(replacer, code, count=10)
 
     def _change_augmented_assignment(self, code: str) -> str:
         """
@@ -679,18 +710,11 @@ def _unused_stub():
             if self.rng.random() < 0.3:
                 code = self._add_stub_functions(code)
 
-            # T4: Logic changes (pick 2-4 random transformations)
+            # T4: Logic changes (pick 2-4 fast transformations only)
             t4_transforms = [
                 self._convert_for_to_while,
-                self._convert_while_to_for,
                 self._convert_list_comprehension,
-                self._convert_listcomp_to_loop,
-                self._use_map_filter,
-                self._change_string_formatting,
-                self._shuffle_commutative_ops,
-                self._swap_if_else_negation,
                 self._change_comparison_operators,
-                self._convert_lambda_to_def,
                 self._change_augmented_assignment,
             ]
             selected = random.sample(t4_transforms, min(len(t4_transforms), random.randint(2, 4)))

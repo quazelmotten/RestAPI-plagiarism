@@ -75,13 +75,23 @@ class Analyzer:
         ast_sim = compute_ast_similarity(ast1, ast2)
 
         # Multi-level matching using the full detector
-        matches = detect_plagiarism(source1, source2, language)
+        # Use min_match_lines=1 to catch single-line identical fragments
+        matches = detect_plagiarism(source1, source2, language, min_match_lines=1)
 
-        # Compute metrics
-        total_lines_a = len([ln for ln in lines1 if ln.strip()])
-        total_lines_b = len([ln for ln in lines2 if ln.strip()])
-        matched_lines_a = sum(m.file1["end_line"] - m.file1["start_line"] + 1 for m in matches)
-        matched_lines_b = sum(m.file2["end_line"] - m.file2["start_line"] + 1 for m in matches)
+        # Compute metrics (count ALL lines to be consistent with line indices in matches)
+        total_lines_a = len(lines1)
+        total_lines_b = len(lines2)
+        
+        # Calculate unique covered lines (deduplicate overlapping matches)
+        covered_a = set()
+        covered_b = set()
+        for m in matches:
+            for line in range(m.file1["start_line"], m.file1["end_line"] + 1):
+                covered_a.add(line)
+            for line in range(m.file2["start_line"], m.file2["end_line"] + 1):
+                covered_b.add(line)
+        matched_lines_a = len(covered_a)
+        matched_lines_b = len(covered_b)
 
         metrics = SimilarityMetrics(
             left_covered=matched_lines_a,
@@ -175,14 +185,23 @@ class Analyzer:
 
         ast_sim = compute_ast_similarity(ast1, ast2)
 
-        # Multi-level matching
-        matches = detect_plagiarism(source1, source2, language)
+        # Multi-level matching (use min_match_lines=1 to catch single-line fragments)
+        matches = detect_plagiarism(source1, source2, language, min_match_lines=1)
 
-        # Compute metrics (all match types contribute to coverage)
-        total_lines_a = len([ln for ln in lines1 if ln.strip()])
-        total_lines_b = len([ln for ln in lines2 if ln.strip()])
-        matched_lines_a = sum(m.file1["end_line"] - m.file1["start_line"] + 1 for m in matches)
-        matched_lines_b = sum(m.file2["end_line"] - m.file2["start_line"] + 1 for m in matches)
+        # Compute metrics (count ALL lines to be consistent with line indices in matches)
+        total_lines_a = len(lines1)
+        total_lines_b = len(lines2)
+        
+        # Calculate unique covered lines (deduplicate overlapping matches)
+        covered_a = set()
+        covered_b = set()
+        for m in matches:
+            for line in range(m.file1["start_line"], m.file1["end_line"] + 1):
+                covered_a.add(line)
+            for line in range(m.file2["start_line"], m.file2["end_line"] + 1):
+                covered_b.add(line)
+        matched_lines_a = len(covered_a)
+        matched_lines_b = len(covered_b)
 
         # Transform matches to dict format (1-indexed line numbers)
         matches_data = []

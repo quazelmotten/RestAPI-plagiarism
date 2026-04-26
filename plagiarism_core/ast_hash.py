@@ -7,6 +7,12 @@ import logging
 from tree_sitter import Parser
 
 from .fingerprints import get_language, stable_hash
+from .fingerprinting.minhash import (
+    MinHash,
+    extract_kgrams,
+    extract_node_types,
+    minhash_signature,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +82,39 @@ def ast_similarity(hashes_a: list[int], hashes_b: list[int]) -> float:
     intersection = sum((ca & cb).values())
     union = sum((ca | cb).values())
     return intersection / union if union else 0.0
+
+
+def ast_minhash(root, num_hashes: int = MinHash.DEFAULT_NUM_HASHES) -> bytes:
+    """
+    Compute MinHash signature for an AST.
+    
+    This uses bag-of-node-types and k-grams to create a signature
+    that can detect partial similarity.
+    
+    Args:
+        root: AST root node
+        num_hashes: Number of hash functions for MinHash
+    
+    Returns:
+        MinHash signature as bytes
+    """
+    node_types = extract_node_types(root)
+    kgrams = extract_kgrams(root, k=3)
+    
+    features = node_types + kgrams
+    return minhash_signature(features, num_hashes)
+
+
+def ast_minhash_similarity(root_a, root_b) -> float:
+    """
+    Compute MinHash-based similarity between two ASTs.
+    
+    This is faster than exact subtree matching and can catch
+    partially similar functions.
+    """
+    sig_a = ast_minhash(root_a)
+    sig_b = ast_minhash(root_b)
+    return MinHash.jaccard(sig_a, sig_b)
 
 
 def hash_ast_subtrees_with_positions(

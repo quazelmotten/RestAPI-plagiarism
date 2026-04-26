@@ -6,7 +6,7 @@ alembic==1.12.1
 pydantic==2.5.0
 pydantic-settings==2.1.0
 asyncio-mqtt==0.16.1
-python-multipart==0.0.6
+python-multipart==0.0.26
 redis==5.0.1
 tree-sitter
 tree-sitter-python
