@@ -266,7 +266,8 @@ const PairComparison: React.FC = () => {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // Only handle shortcuts when not in text inputs/textareas
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
       if (!e.ctrlKey && !e.metaKey) return;
 
       switch (e.key.toLowerCase()) {

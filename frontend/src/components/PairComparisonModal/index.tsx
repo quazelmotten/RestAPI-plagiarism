@@ -183,6 +183,9 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
 
   const scrollSyncing = useRef(false);
 
+  // Stable ref for resultId to avoid stale closures in keyboard handlers
+  const resultIdRef = useRef<string | null>(null);
+
   const overlayBg = useColorModeValue('gray.50', 'gray.900');
   const headerBg = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
@@ -221,8 +224,14 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
       setCurrentPair(null);
       setFileAContent(null);
       setFileBContent(null);
+      resultIdRef.current = null;
     }
   }, [isOpen, initialFileA, initialFileB]);
+
+  // Keep resultIdRef in sync with currentPair
+  useEffect(() => {
+    resultIdRef.current = currentPair?.id || (currentIndex >= 0 ? pairs[currentIndex]?.id : null) || null;
+  }, [currentPair, currentIndex, pairs]);
 
   // Match statistics (ignore blank lines and comments)
   const matchStats = useMemo(() => {
@@ -424,86 +433,83 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      // Get current result ID from currentPair or pairs
-      const resultId = currentPair?.id || (currentIndex >= 0 ? pairs[currentIndex]?.id : null);
-
-      // Helper to navigate to next pair
-      const goToNext = () => {
-        if (pairs.length > 0 && currentIndex >= 0 && currentIndex < pairs.length - 1) {
-          navigateToIndex(currentIndex + 1);
-        } else if (pairs.length > 0) {
-          navigateToIndex(0);
+      // Allow native copy/cut in text inputs
+      const isTextInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
+      if (!isTextInput) {
+        // Shift+C = Confirm plagiarism (replacing Ctrl+C)
+        if (e.shiftKey && e.key.toLowerCase() === 'c') {
+          e.preventDefault();
+          if (!resultIdRef.current) return;
+          setConfirming(true);
+          api.post(API_ENDPOINTS.CONFIRM_PLAGIARISM(resultIdRef.current)).then(() => {
+            toast({ title: t('common:toasts.confirmed'), description: t('common:toasts.pairMarkedAsPlagiarism'), status: 'success', duration: 1500 });
+            handleNextPair();
+            if (onActionComplete) onActionComplete();
+          }).catch(err => {
+            console.error('Error confirming:', err);
+            toast({ title: t('common:errors.generic'), description: t('common:toasts.failedToConfirm'), status: 'error', duration: 3000 });
+          }).finally(() => setConfirming(false));
+          return;
         }
-      };
 
-      // Ctrl/Cmd + C = Confirm plagiarism
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        if (!resultId) return;
-        setConfirming(true);
-        api.post(API_ENDPOINTS.CONFIRM_PLAGIARISM(resultId)).then(() => {
-          toast({ title: t('common:toasts.confirmed'), description: t('common:toasts.pairMarkedAsPlagiarism'), status: 'success', duration: 1500 });
-          goToNext();
-          if (onActionComplete) onActionComplete();
-        }).catch(err => {
-          console.error('Error confirming:', err);
-          toast({ title: t('common:errors.generic'), description: t('common:toasts.failedToConfirm'), status: 'error', duration: 3000 });
-        }).finally(() => setConfirming(false));
-        return;
-      }
-
-      // Ctrl/Cmd + X = Clear pair (not plagiarism)
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') {
-        e.preventDefault();
-        if (!resultId) return;
-        setClearing(true);
-        api.post(API_ENDPOINTS.CLEAR_PAIR(resultId)).then(() => {
-          toast({ title: t('common:toasts.cleared'), description: t('common:toasts.pairMarkedAsNotPlagiarism'), status: 'info', duration: 1500 });
-          goToNext();
-          if (onActionComplete) onActionComplete();
-        }).catch(err => {
-          console.error('Error clearing:', err);
-          toast({ title: t('common:errors.generic'), description: t('common:toasts.failedToClear'), status: 'error', duration: 3000 });
-        }).finally(() => setClearing(false));
-        return;
+        // Shift+X = Clear pair (not plagiarism) (replacing Ctrl+X)
+        if (e.shiftKey && e.key.toLowerCase() === 'x') {
+          e.preventDefault();
+          if (!resultIdRef.current) return;
+          setClearing(true);
+          api.post(API_ENDPOINTS.CLEAR_PAIR(resultIdRef.current)).then(() => {
+            toast({ title: t('common:toasts.cleared'), description: t('common:toasts.pairMarkedAsNotPlagiarism'), status: 'info', duration: 1500 });
+            handleNextPair();
+            if (onActionComplete) onActionComplete();
+          }).catch(err => {
+            console.error('Error clearing:', err);
+            toast({ title: t('common:errors.generic'), description: t('common:toasts.failedToClear'), status: 'error', duration: 3000 });
+          }).finally(() => setClearing(false));
+          return;
+        }
       }
 
       switch (e.key) {
         case 'Escape':
+          // Don't close while typing in note textarea
+          if (isNoteOpen) {
+            onNoteClose();
+            return;
+          }
           e.preventDefault();
           onClose();
           break;
         case 'ArrowRight':
         case 'l':
           e.preventDefault();
-          if (pairs.length > 0) {
-            const nextIdx = currentIndex < pairs.length - 1 ? currentIndex + 1 : 0;
-            navigateToIndex(nextIdx);
+          if (pairs.length > 0 && currentIndex < pairs.length - 1) {
+            navigateToIndex(currentIndex + 1);
           }
           break;
         case 'ArrowLeft':
         case 'h':
           e.preventDefault();
-          if (pairs.length > 0) {
-            const prevIdx = currentIndex > 0 ? currentIndex - 1 : pairs.length - 1;
-            navigateToIndex(prevIdx);
+          if (pairs.length > 0 && currentIndex > 0) {
+            navigateToIndex(currentIndex - 1);
           }
           break;
         case 'c':
-          e.preventDefault();
-          setFilterComments(f => !f);
+          if (!isTextInput) {
+            e.preventDefault();
+            setFilterComments(f => !f);
+          }
           break;
         case 's':
-          e.preventDefault();
-          setSyncScroll(f => !f);
+          if (!isTextInput) {
+            e.preventDefault();
+            setSyncScroll(f => !f);
+          }
           break;
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isOpen, currentIndex, pairs, navigateToIndex, onClose, currentPair, onActionComplete]);
+  }, [isOpen, currentIndex, pairs, navigateToIndex, onClose, onActionComplete, isNoteOpen, onNoteClose, t]);
 
   const getLineRef = useCallback((fileA: boolean) => (lineIndex: number, el: HTMLDivElement | null) => {
     if (el) {
@@ -548,8 +554,8 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
     targetContainer.scrollTo({ top: targetContainer.scrollTop + scrollDelta, behavior: 'smooth' });
   }, [currentPair]);
 
-  const handleConfirmPlagiarism = async () => {
-    const resultId = currentPair?.id || (currentIndex >= 0 ? pairs[currentIndex]?.id : null);
+const handleConfirmPlagiarism = async () => {
+    const resultId = resultIdRef.current;
     if (!resultId) {
       toast({
         title: t('errors.generic'),
@@ -574,7 +580,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
       }
     } catch (error) {
       console.error('Error confirming plagiarism:', error);
-toast({
+      toast({
         title: t('common:errors.generic'),
         description: t('common:toasts.pairIdMissing'),
         status: 'error',
@@ -586,7 +592,7 @@ toast({
   };
 
   const handleClearPair = async () => {
-    const resultId = currentPair?.id || (currentIndex >= 0 ? pairs[currentIndex]?.id : null);
+    const resultId = resultIdRef.current;
     if (!resultId) {
       toast({
         title: t('errors.generic'),

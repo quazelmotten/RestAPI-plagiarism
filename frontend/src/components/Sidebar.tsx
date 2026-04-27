@@ -17,7 +17,15 @@ import {
   MenuList,
   MenuItem,
   Button,
+  Drawer,
+  DrawerBody,
+  DrawerHeader,
+  DrawerOverlay,
+  DrawerContent,
+  DrawerCloseButton,
+  useDisclosure,
 } from '@chakra-ui/react';
+import { FiMenu } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -53,6 +61,7 @@ import { MdDragIndicator } from 'react-icons/md';
 import api, { API_ENDPOINTS } from '../services/api';
 import { useViewMode } from '../contexts/ViewModeContext';
 import { SIDEBAR_WIDTH_PX } from '../constants/layout';
+import { useSidebar } from '../contexts/SidebarContext';
 
 const blink = keyframes`
   0%, 50% { opacity: 1; }
@@ -177,6 +186,7 @@ const Sidebar: React.FC = () => {
   const location = useLocation();
   const { mode } = useViewMode();
   const { user } = useAuth();
+  const { isMobileOpen, closeMobile } = useSidebar();
   const [assignmentsExpanded, setAssignmentsExpanded] = useState(true);
   const [isBlinking, setIsBlinking] = useState(false);
   const [collapsedSubjects, setCollapsedSubjects] = useState<Set<string>>(() => {
@@ -196,6 +206,8 @@ const Sidebar: React.FC = () => {
   const mutedColor = useColorModeValue('gray.500', 'gray.400');
   const sectionColor = useColorModeValue('gray.400', 'gray.500');
   const scrollbarBg = useColorModeValue('gray.300', 'gray.600');
+  const subjectHeaderBg = useColorModeValue('gray.50', 'gray.700');
+  const subjectHeaderHoverBg = useColorModeValue('gray.100', 'gray.600');
 
   const { data: assignmentsData, isLoading: assignmentsLoading } = useQuery<AssignmentsResponse>({
     queryKey: ['assignments'],
@@ -331,21 +343,24 @@ const Sidebar: React.FC = () => {
   };
 
   return (
-    <Box
-      as="nav"
-      pos="fixed"
-      left="0"
-      h="full"
-      w={SIDEBAR_WIDTH_PX}
-      bg={bgColor}
-      borderRight="1px"
-      borderColor={borderColor}
-      py={6}
-      px={4}
-      display="flex"
-      flexDirection="column"
-      overflow="hidden"
-    >
+    <>
+      {/* Desktop fixed sidebar - hidden on mobile */}
+      <Box
+        as="nav"
+        pos="fixed"
+        left="0"
+        top="0"
+        h="full"
+        w={{ base: 0, lg: SIDEBAR_WIDTH_PX }}
+        bg={bgColor}
+        borderRight={{ base: 'none', lg: '1px' }}
+        borderColor={borderColor}
+        py={6}
+        px={4}
+        display={{ base: 'none', lg: 'flex' }}
+        flexDirection="column"
+        overflow="hidden"
+      >
       <Box mb={6} px={4} cursor="pointer" onClick={() => setIsBlinking(!isBlinking)} title={tCommon('toggleBlink')}>
         <Text
           fontSize="1.6rem"
@@ -492,8 +507,8 @@ const Sidebar: React.FC = () => {
                         cursor="pointer"
                         onClick={() => toggleSubject(group.id)}
                         userSelect="none"
-                        bg={useColorModeValue('gray.50', 'gray.750')}
-                        _hover={{ bg: useColorModeValue('gray.100', 'gray.700') }}
+                        bg={subjectHeaderBg}
+                        _hover={{ bg: subjectHeaderHoverBg }}
                         transition="all 0.15s"
                       >
                         <HStack spacing={2} flex={1} minW={0}>
@@ -587,9 +602,167 @@ const Sidebar: React.FC = () => {
       <Box mt="auto" pt={4} borderTopWidth="1px" borderColor={borderColor} px={4}>
         <LanguageSwitcherFooter />
       </Box>
-     </Box>
-   );
- };
+    </Box>
+
+    {/* Mobile drawer sidebar */}
+    <Drawer isOpen={isMobileOpen} placement="left" onClose={closeMobile} size="xs">
+      <DrawerOverlay />
+      <DrawerContent bg={bgColor}>
+        <DrawerCloseButton />
+        <DrawerHeader px={4}>
+          <Box cursor="pointer" onClick={() => { setIsBlinking(!isBlinking); closeMobile(); }} title={tCommon('toggleBlink')}>
+            <Text
+              fontSize="1.4rem"
+              fontWeight="bold"
+              fontFamily="monospace"
+              letterSpacing="0.05em"
+              userSelect="none"
+            >
+              <span style={{ color: logoColor }}>plagi</span>
+              <span style={{ color: '#38A169' }}>type</span>
+              <Box as="span" sx={isBlinking ? { animation: `${blink} 1s infinite` } : undefined}>_</Box>
+            </Text>
+          </Box>
+        </DrawerHeader>
+        <DrawerBody p={0} overflow="auto">
+          {/* Classic menu items for mobile */}
+          <VStack spacing={1} align="stretch" px={2} py={2}>
+            {classicMenuItems.map((item) => (
+              <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none' }} onClick={closeMobile}>
+                <Flex
+                  align="center"
+                  px={3}
+                  py={2.5}
+                  borderRadius="md"
+                  bg={isActive(item.path) ? 'brand.500' : 'transparent'}
+                  color={isActive(item.path) ? 'white' : 'inherit'}
+                  _hover={{ bg: isActive(item.path) ? 'brand.600' : hoverBg }}
+                  transition="all 0.2s"
+                >
+                  <Icon as={item.icon} boxSize={4.5} mr={3} />
+                  <Text fontWeight="medium" fontSize="sm">{tNav(item.label)}</Text>
+                </Flex>
+              </NavLink>
+            ))}
+            {user?.is_global_admin && (
+              <NavLink to="/dashboard/users" style={{ textDecoration: 'none' }} onClick={closeMobile}>
+                <Flex
+                  align="center"
+                  px={3}
+                  py={2.5}
+                  borderRadius="md"
+                  bg={isActive('/dashboard/users') ? 'brand.500' : 'transparent'}
+                  color={isActive('/dashboard/users') ? 'white' : 'inherit'}
+                  _hover={{ bg: isActive('/dashboard/users') ? 'brand.600' : hoverBg }}
+                  transition="all 0.2s"
+                >
+                  <Icon as={FiUsers} boxSize={4.5} mr={3} />
+                  <Text fontWeight="medium" fontSize="sm">{tCommon('users')}</Text>
+                </Flex>
+              </NavLink>
+            )}
+            <Divider my={2} />
+            <NavLink to="/dashboard/assignments" style={{ textDecoration: 'none' }} onClick={closeMobile}>
+              <Flex
+                align="center"
+                px={3}
+                py={2}
+                borderRadius="md"
+                bg={isActive('/dashboard/assignments') ? 'brand.500' : 'transparent'}
+                color={isActive('/dashboard/assignments') ? 'white' : 'inherit'}
+                _hover={{ bg: isActive('/dashboard/assignments') ? 'brand.600' : hoverBg }}
+                transition="all 0.2s"
+              >
+                <Icon as={FiList} boxSize={4.5} mr={3} />
+                <Text fontWeight="medium" fontSize="sm">{tNav('viewAllAssignments')}</Text>
+              </Flex>
+            </NavLink>
+          </VStack>
+
+          {/* Assignments list for mobile */}
+          <Box px={2} py={2} overflow="auto" maxH="calc(100vh - 280px)">
+            {isLoading ? (
+              <Flex justify="center" py={4}>
+                <Spinner size="sm" />
+              </Flex>
+            ) : subjectGroups.length === 0 ? (
+              <Text fontSize="xs" color={mutedColor} px={2} py={2}>
+                {tCommon('noAssignments')}
+              </Text>
+            ) : (
+              <VStack spacing={1} align="stretch">
+                {subjectGroups.map((group) => {
+                  const isCollapsed = collapsedSubjects.has(group.id);
+                  return (
+                    <Box key={group.id}>
+                      <Flex
+                        align="center"
+                        justify="space-between"
+                        px={2}
+                        py={1.5}
+                        borderRadius="md"
+                        cursor="pointer"
+                        onClick={() => toggleSubject(group.id)}
+                        userSelect="none"
+                        bg={subjectHeaderBg}
+                        _hover={{ bg: subjectHeaderHoverBg }}
+                        transition="all 0.15s"
+                      >
+                        <HStack spacing={1.5} flex={1} minW={0}>
+                          <Icon
+                            as={isCollapsed ? FiChevronRight : FiChevronDown}
+                            boxSize={3}
+                            color={mutedColor}
+                          />
+                          <Icon
+                            as={FiFolder}
+                            boxSize={3.5}
+                            color={group.isUncategorized ? 'gray.400' : 'purple.500'}
+                          />
+                          <Text fontSize="xs" fontWeight="semibold" noOfLines={1}>
+                            {group.name}
+                          </Text>
+                          <Badge size="sm" colorScheme={group.isUncategorized ? 'gray' : 'purple'} flexShrink={0}>
+                            {group.assignments.length}
+                          </Badge>
+                        </HStack>
+                      </Flex>
+                      {!isCollapsed && (
+                        <VStack spacing={0} align="stretch" pl={1}>
+                          {group.assignments.map((assignment) => (
+                            <NavLink
+                              key={assignment.id}
+                              to={`/dashboard/assignments/${assignment.id}`}
+                              style={{ textDecoration: 'none' }}
+                              onClick={closeMobile}
+                            >
+                              <Flex
+                                align="center"
+                                px={3}
+                                py={1.5}
+                                borderRadius="md"
+                                _hover={{ bg: hoverBg }}
+                                transition="all 0.15s"
+                              >
+                                <Icon as={FiBookOpen} boxSize={3.5} mr={2} opacity={0.6} />
+                                <Text fontSize="xs" noOfLines={1}>{assignment.name}</Text>
+                              </Flex>
+                            </NavLink>
+                          ))}
+                        </VStack>
+                      )}
+                    </Box>
+                  );
+                })}
+              </VStack>
+            )}
+          </Box>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
+    </>
+  );
+};
 
 const LanguageSwitcherFooter: React.FC = () => {
     const { t, i18n } = useTranslation();

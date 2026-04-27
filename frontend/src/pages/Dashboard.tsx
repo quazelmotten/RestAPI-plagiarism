@@ -6,6 +6,7 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import Sidebar from '../components/Sidebar';
+import { SidebarProvider } from '../contexts/SidebarContext';
 import Header from '../components/Header';
 import { ViewModeContext } from '../contexts/ViewModeContext';
 import { AssignmentProvider } from '../contexts/AssignmentContext';
@@ -26,24 +27,26 @@ const Dashboard: React.FC = () => {
   return (
     <ViewModeContext.Provider value={{ mode: viewMode, setMode: setViewMode }}>
       <AssignmentProvider>
-        <Flex h="100vh" bg={useColorModeValue('gray.100', 'gray.900')}>
-          <Sidebar />
-          <Box flex="1" ml={SIDEBAR_WIDTH_PX} display="flex" flexDirection="column" overflow="hidden">
-            <Header />
-            <Box as="main" p={8} pt={24} flex="1" overflow="hidden" minH={0} display="flex" flexDirection="column">
-              <Routes>
-                <Route path="/" element={<Overview />} />
-                <Route path="assignments" element={<Assignments />} />
-                <Route path="assignments/:assignmentId" element={<AssignmentDetail />} />
-                <Route path="submissions" element={<Submissions />} />
-                <Route path="graph" element={<PlagiarismGraph />} />
-                <Route path="upload" element={<Upload />} />
-                <Route path="results" element={<Results />} />
-                <Route path="pair-comparison" element={<PairComparison />} />
-              </Routes>
+        <SidebarProvider>
+          <Flex h="100vh" bg={useColorModeValue('gray.100', 'gray.900')}>
+            <Sidebar />
+            <Box flex="1" ml={{ base: 0, lg: SIDEBAR_WIDTH_PX }} display="flex" flexDirection="column" overflow="hidden">
+              <Header />
+              <Box as="main" p={8} pt={24} flex="1" overflow="hidden" minH={0} display="flex" flexDirection="column">
+                <Routes>
+                  <Route path="/" element={<Overview />} />
+                  <Route path="assignments" element={<Assignments />} />
+                  <Route path="assignments/:assignmentId" element={<AssignmentDetail />} />
+                  <Route path="submissions" element={<Submissions />} />
+                  <Route path="graph" element={<PlagiarismGraph />} />
+                  <Route path="upload" element={<Upload />} />
+                  <Route path="results" element={<Results />} />
+                  <Route path="pair-comparison" element={<PairComparison />} />
+                </Routes>
+              </Box>
             </Box>
-          </Box>
-        </Flex>
+          </Flex>
+        </SidebarProvider>
       </AssignmentProvider>
     </ViewModeContext.Provider>
   );

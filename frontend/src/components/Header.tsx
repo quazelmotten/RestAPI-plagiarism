@@ -18,11 +18,12 @@ import {
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { FiMoon, FiSun, FiClock, FiChevronDown } from 'react-icons/fi';
+import { FiMoon, FiSun, FiClock, FiChevronDown, FiMenu } from 'react-icons/fi';
 import { FiCheckCircle, FiAlertCircle, FiActivity, FiLayers } from 'react-icons/fi';
 import { useViewMode } from '../contexts/ViewModeContext';
 import { useAssignmentInfo } from '../contexts/AssignmentContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSidebar } from '../contexts/SidebarContext';
 import { SIDEBAR_WIDTH_PX } from '../constants/layout';
 import { useTasksList } from '../hooks/useTaskQueries';
 import { getStatusColorScheme } from '../utils/statusColors';
@@ -67,6 +68,7 @@ const Header: React.FC = () => {
   const { t } = useTranslation(['navigation', 'common']);
   const { mode, setMode } = useViewMode();
   const { assignmentInfo } = useAssignmentInfo();
+  const { openMobile } = useSidebar();
   const navigate = useNavigate();
   const location = useLocation();
   const bgColor = useColorModeValue('white', 'gray.800');
@@ -134,7 +136,7 @@ const Header: React.FC = () => {
       as="header"
       pos="fixed"
       top="0"
-      left={SIDEBAR_WIDTH_PX}
+      left={{ base: 0, lg: SIDEBAR_WIDTH_PX }}
       right="0"
       h="16"
       bg={bgColor}
@@ -145,6 +147,15 @@ const Header: React.FC = () => {
     >
       <Flex h="full" align="center" justify="space-between">
         <Flex align="center" gap={3} minW={0} flex={1}>
+          {/* Mobile hamburger button */}
+          <IconButton
+            aria-label={t('common:aria.openSidebar')}
+            icon={<FiMenu />}
+            variant="ghost"
+            size="md"
+            display={{ base: 'flex', lg: 'none' }}
+            onClick={openMobile}
+          />
           {assignmentInfo && (
             <HStack spacing={2} flexShrink={0}>
               <Text fontSize="md" fontWeight="bold" isTruncated maxW="200px">{assignmentInfo.name}</Text>

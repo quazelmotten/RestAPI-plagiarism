@@ -18,6 +18,7 @@ import {
   MenuList,
   MenuItem,
   Icon,
+  useColorModeValue,
 } from '@chakra-ui/react';
 import { FiGlobe } from 'react-icons/fi';
 import { login, register, isAuthenticated } from '../services/api';
@@ -73,7 +74,7 @@ function Login() {
     }
   };
 
-  const languages = [
+const languages = [
     { code: 'en', name: t('languageNames.en'), flag: '🇺🇸' },
     { code: 'ru', name: t('languageNames.ru'), flag: '🇷🇺' },
   ];
@@ -89,6 +90,10 @@ function Login() {
     });
   };
 
+  const toggleBg = useColorModeValue('gray.50', 'gray.700');
+  const toggleBorder = useColorModeValue('gray.200', 'gray.600');
+  const subtitleColor = useColorModeValue('gray.600', 'gray.400');
+
   return (
     <Container maxW="md" py={20}>
       <Card>
@@ -99,10 +104,10 @@ function Login() {
             {/* View Toggle - Classic/Assignment style */}
             <Box 
               border="1px" 
-              borderColor="gray.200" 
-              borderRadius="md" 
+              borderColor={toggleBorder}
+              borderRadius="md"
               p={1}
-              bg="gray.50"
+              bg={toggleBg}
             >
               <HStack spacing={1}>
                 <Button
@@ -126,7 +131,7 @@ function Login() {
               </HStack>
             </Box>
 
-            <Text color="gray.600">
+            <Text color={subtitleColor}>
               {viewMode === 'signin' 
                 ? t('enterCredentialsSignIn') 
                 : t('createAccountSignUp')

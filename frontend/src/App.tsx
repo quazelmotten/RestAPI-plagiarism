@@ -30,8 +30,8 @@ const getColorMode = (): 'light' | 'dark' => {
 
 const theme = extendTheme({
   config: {
-    initialColorMode: getColorMode(),
-    useSystemColorMode: false,
+    initialColorMode: 'system',
+    useSystemColorMode: true,
   },
   colors: {
     brand: {
@@ -109,7 +109,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <>
-      <ColorModeScript initialColorMode={theme.config.initialColorMode} />
+      <ColorModeScript initialColorMode="system" />
       <CSSReset />
       <ChakraProvider theme={theme}>
 <QueryClientProvider client={queryClient}>
@@ -144,6 +144,7 @@ function App() {
                     }
                   />
                   <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
               </Router>
             </AuthProvider>

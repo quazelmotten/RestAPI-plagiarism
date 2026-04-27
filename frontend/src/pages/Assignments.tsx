@@ -222,7 +222,7 @@ const Assignments: React.FC = () => {
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
   const mutedColor = useColorModeValue('gray.500', 'gray.400');
-  const subjectBg = useColorModeValue('gray.50', 'gray.750');
+  const subjectBg = useColorModeValue('gray.50', 'gray.700');
   const headerBg = useColorModeValue('gray.100', 'gray.700');
 
   const [searchQuery, setSearchQuery] = useState('');

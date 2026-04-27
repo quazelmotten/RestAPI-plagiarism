@@ -854,17 +854,17 @@ const Upload: React.FC = () => {
                  {t('common:cancel')}
                </Button>
 <Button
-  colorScheme="red"
-  onClick={() => {
-    setIsNavigationBlocked(false);
-    if (targetPath) {
-      window.location.href = targetPath;
-    }
-  }}
-  ml={3}
->
-  {t('buttons.leavePage')}
-</Button>
+                  colorScheme="red"
+                  onClick={() => {
+                    setIsNavigationBlocked(false);
+                    if (targetPath) {
+                      navigate(targetPath, { replace: true });
+                    }
+                  }}
+                  ml={3}
+                >
+                  {t('buttons.leavePage')}
+                </Button>
              </AlertDialogFooter>
            </AlertDialogContent>
          </AlertDialogOverlay>

@@ -119,9 +119,9 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
   );
 
   // Fetch queue for "To Review" tab (separate endpoint)
-  const fetchQueue = async () => {
+  const fetchQueue = useCallback(async () => {
     if (activeTab !== 0) return;
-    
+
     setQueueLoading(true);
     try {
       const response = await api.get<ReviewQueueResponse>(
@@ -139,7 +139,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
     } finally {
       setQueueLoading(false);
     }
-  };
+  }, [assignmentId, activeTab, pageSize, pagination.start, toast]);
 
   // Refetch when tab or pagination changes
   useEffect(() => {
@@ -148,7 +148,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
     } else {
       refetchPairs();
     }
-  }, [activeTab, pagination.start, pageSize]);
+  }, [activeTab, pagination.start, pageSize, fetchQueue, refetchPairs]);
 
   // Apply search filter locally
   const filterBySearch = useCallback((items: PlagiarismResult[]) => {

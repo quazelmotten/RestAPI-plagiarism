@@ -52,6 +52,7 @@
   },
   "aria": {
     "toggleDarkMode": "Toggle dark mode",
+    "openSidebar": "Open navigation menu",
     "copyTaskId": "Copy task ID",
     "previousPage": "Previous page",
     "nextPage": "Next page",

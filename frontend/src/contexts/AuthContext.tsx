@@ -33,6 +33,7 @@ const AuthContext = createContext<AuthContextProps | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [authVersion, setAuthVersion] = useState(0);
 
   // On mount, if token exists, set user from token payload (lightweight)
   useEffect(() => {
@@ -63,11 +64,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       is_global_admin: data.user.is_global_admin,
       role: data.user.role,
     });
+    setAuthVersion(v => v + 1);
   };
 
   const logout = async () => {
     await apiLogout();
     setUser(null);
+    setAuthVersion(v => v + 1);
   };
 
   const register = async (email: string, password: string) => {
@@ -93,6 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await apiChangePassword(currentPassword, newPassword);
   };
 
+  // Re-evaluate on each render - reactive to login/logout via authVersion
   const isAuthenticated = apiIsAuthenticated();
 
   const value: AuthContextProps = {
