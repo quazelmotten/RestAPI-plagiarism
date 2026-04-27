@@ -133,7 +133,7 @@ tree-sitter-rust
 redis==5.0.1
 xxhash
 passlib==1.7.4
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]>=3.4.0
 cryptography==47.0.0
 cffi==2.0.0
 pyasn1==0.6.3

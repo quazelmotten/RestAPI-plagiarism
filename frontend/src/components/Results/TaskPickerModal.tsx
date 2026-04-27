@@ -24,6 +24,7 @@ import {
 } from '@chakra-ui/react';
 import { FiSearch, FiCheck, FiAlertCircle, FiActivity, FiLayers, FiClock, FiCheckCircle, FiFolder, FiAlertTriangle } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import type { TaskListItem } from '../../types';
 import { getStatusColorScheme } from '../../utils/statusColors';
 
@@ -36,14 +37,15 @@ interface TaskPickerModalProps {
   loading?: boolean;
 }
 
-const formatDate = (dateString?: string) => {
-  if (!dateString) return 'N/A';
+const formatDate = (dateString?: string, t?: (key: string) => string) => {
+  if (!dateString) return t ? t('common:notAvailable') : 'N/A';
   const date = new Date(dateString);
-  const datePart = date.toLocaleDateString('en-US', {
+  const locale = i18n.language || 'en-US';
+  const datePart = date.toLocaleDateString(locale, {
     month: 'short',
     day: 'numeric',
   });
-  const timePart = date.toLocaleTimeString('en-US', {
+  const timePart = date.toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -151,7 +153,7 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
                   return (
                     <Tooltip
                       key={task.task_id}
-                      label={t('taskPicker.tooltip', { id: task.task_id, date: formatDate(task.created_at) })}
+                      label={t('taskPicker.tooltip', { id: task.task_id, date: formatDate(task.created_at, t) })}
                       placement="left"
                       hasArrow
                     >
@@ -184,7 +186,7 @@ const TaskPickerModal: React.FC<TaskPickerModalProps> = ({
                                 <HStack spacing={1}>
                                   <FiClock />
                                   <Text fontSize="xs" color="gray.500">
-                                    {formatDate(task.created_at)}
+                                    {formatDate(task.created_at, t)}
                                   </Text>
                                 </HStack>
                               </HStack>

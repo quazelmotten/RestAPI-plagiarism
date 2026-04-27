@@ -16,5 +16,7 @@
   "readyForReview": "Ready for review",
   "taskId": "Task",
   "files": "files",
-  "pairs": "pairs"
+  "pairs": "pairs",
+  "highSimilarityThreshold": "≥80%",
+  "uploadToSeeActivity": "Upload files to see activity"
 }

@@ -16,5 +16,7 @@
   "readyForReview": "Готово к проверке",
   "taskId": "Загрузка",
   "files": "файлов",
-  "pairs": "пар"
+  "pairs": "пар",
+  "highSimilarityThreshold": "≥80%",
+  "uploadToSeeActivity": "Загрузите файлы, чтобы увидеть активность"
 }

@@ -408,7 +408,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
         }
       } catch (error) {
         if (!cancelled) {
-          setContentError(error instanceof Error ? error.message : 'Failed to load file contents');
+          setContentError(error instanceof Error ? error.message : t('common:errors.failedToLoad'));
         }
       } finally {
         if (!cancelled) setLoadingContent(false);
@@ -444,12 +444,12 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
         if (!resultId) return;
         setConfirming(true);
         api.post(API_ENDPOINTS.CONFIRM_PLAGIARISM(resultId)).then(() => {
-          toast({ title: 'Confirmed', description: 'Pair marked as plagiarism', status: 'success', duration: 1500 });
+          toast({ title: t('common:toasts.confirmed'), description: t('common:toasts.pairMarkedAsPlagiarism'), status: 'success', duration: 1500 });
           goToNext();
           if (onActionComplete) onActionComplete();
         }).catch(err => {
           console.error('Error confirming:', err);
-          toast({ title: 'Error', description: 'Failed to confirm', status: 'error', duration: 3000 });
+          toast({ title: t('common:errors.generic'), description: t('common:toasts.failedToConfirm'), status: 'error', duration: 3000 });
         }).finally(() => setConfirming(false));
         return;
       }
@@ -460,12 +460,12 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
         if (!resultId) return;
         setClearing(true);
         api.post(API_ENDPOINTS.CLEAR_PAIR(resultId)).then(() => {
-          toast({ title: 'Cleared', description: 'Pair marked as not plagiarism', status: 'info', duration: 1500 });
+          toast({ title: t('common:toasts.cleared'), description: t('common:toasts.pairMarkedAsNotPlagiarism'), status: 'info', duration: 1500 });
           goToNext();
           if (onActionComplete) onActionComplete();
         }).catch(err => {
           console.error('Error clearing:', err);
-          toast({ title: 'Error', description: 'Failed to clear', status: 'error', duration: 3000 });
+          toast({ title: t('common:errors.generic'), description: t('common:toasts.failedToClear'), status: 'error', duration: 3000 });
         }).finally(() => setClearing(false));
         return;
       }
@@ -552,8 +552,8 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
     const resultId = currentPair?.id || (currentIndex >= 0 ? pairs[currentIndex]?.id : null);
     if (!resultId) {
       toast({
-        title: 'Error',
-        description: 'Cannot confirm: result ID not found',
+        title: t('errors.generic'),
+        description: t('toasts.pairIdMissing'),
         status: 'error',
         duration: 3000,
       });
@@ -563,8 +563,8 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
     try {
       await api.post(API_ENDPOINTS.CONFIRM_PLAGIARISM(resultId));
       toast({
-        title: 'Confirmed',
-        description: 'Pair marked as plagiarism',
+        title: t('common:toasts.confirmed'),
+        description: t('common:toasts.pairMarkedAsPlagiarism'),
         status: 'success',
         duration: 1500,
       });
@@ -574,9 +574,9 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
       }
     } catch (error) {
       console.error('Error confirming plagiarism:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to confirm plagiarism',
+toast({
+        title: t('common:errors.generic'),
+        description: t('common:toasts.pairIdMissing'),
         status: 'error',
         duration: 3000,
       });
@@ -589,8 +589,8 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
     const resultId = currentPair?.id || (currentIndex >= 0 ? pairs[currentIndex]?.id : null);
     if (!resultId) {
       toast({
-        title: 'Error',
-        description: 'Cannot clear: result ID not found',
+        title: t('errors.generic'),
+        description: t('toasts.pairIdMissing'),
         status: 'error',
         duration: 3000,
       });
@@ -600,8 +600,8 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
     try {
       await api.post(API_ENDPOINTS.CLEAR_PAIR(resultId));
       toast({
-        title: 'Cleared',
-        description: 'Pair marked as not plagiarism',
+        title: t('common:toasts.cleared'),
+        description: t('common:toasts.pairMarkedAsNotPlagiarism'),
         status: 'info',
         duration: 1500,
       });
@@ -611,9 +611,9 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
       }
     } catch (error) {
       console.error('Error clearing pair:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to clear pair',
+toast({
+        title: t('common:errors.generic'),
+        description: t('common:toasts.failedToClear'),
         status: 'error',
         duration: 3000,
       });
@@ -685,7 +685,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
             <Text noOfLines={1} fontSize="sm">
               {selectedFileA && selectedFileB
                 ? `${selectedFileA.filename} ${t('common:vs')} ${selectedFileB.filename}`
-                : t('header.noSelection')}
+                : t('pairComparison:header.noSelection')}
             </Text>
           </Button>
 
@@ -710,7 +710,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
           {pairs.length > 1 && currentIndex >= 0 && (
             <HStack spacing={1} flexShrink={0}>
               <IconButton
-                aria-label="Previous pair"
+                aria-label={t('common:aria.previousPair')}
                 icon={<FiChevronLeft />}
                 size="sm"
                 variant="ghost"
@@ -720,7 +720,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
                 {currentIndex + 1}/{pairs.length}
               </Text>
               <IconButton
-                aria-label="Next pair"
+                aria-label={t('common:aria.nextPair')}
                 icon={<FiChevronRight />}
                 size="sm"
                 variant="ghost"
@@ -731,9 +731,9 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
         </HStack>
 
         <HStack spacing={1} flexShrink={0}>
-          <Tooltip label={filterComments ? t('page.tooltip.showComments') : t('page.tooltip.hideComments')} placement="bottom">
+          <Tooltip label={filterComments ? t('pairComparison:page.tooltip.showComments') : t('pairComparison:page.tooltip.hideComments')} placement="bottom">
             <IconButton
-              aria-label="Toggle comments"
+              aria-label={t('pairComparison:page.aria.showComments')}
               icon={filterComments ? <FiEye /> : <FiEyeOff />}
               size="sm"
               variant={filterComments ? 'solid' : 'ghost'}
@@ -741,9 +741,9 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
               onClick={() => setFilterComments(!filterComments)}
             />
           </Tooltip>
-          <Tooltip label={filterEmpty ? t('page.tooltip.showEmptyLines') : t('page.tooltip.hideEmptyLines')} placement="bottom">
+          <Tooltip label={filterEmpty ? t('pairComparison:page.tooltip.showEmptyLines') : t('pairComparison:page.tooltip.hideEmptyLines')} placement="bottom">
             <IconButton
-              aria-label="Toggle empty lines"
+              aria-label={t('pairComparison:page.aria.showEmptyLines')}
               icon={filterEmpty ? <FiEye /> : <FiFilter />}
               size="sm"
               variant={filterEmpty ? 'solid' : 'ghost'}
@@ -751,9 +751,9 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
               onClick={() => setFilterEmpty(!filterEmpty)}
             />
           </Tooltip>
-          <Tooltip label={syntaxHighlight ? t('page.tooltip.disableSyntaxHighlight') : t('page.tooltip.enableSyntaxHighlight')} placement="bottom">
+          <Tooltip label={syntaxHighlight ? t('pairComparison:page.tooltip.disableSyntaxHighlight') : t('pairComparison:page.tooltip.enableSyntaxHighlight')} placement="bottom">
             <IconButton
-              aria-label={syntaxHighlight ? t('page.aria.disableSyntaxHighlight') : t('page.aria.enableSyntaxHighlight')}
+              aria-label={syntaxHighlight ? t('pairComparison:page.aria.disableSyntaxHighlight') : t('pairComparison:page.aria.enableSyntaxHighlight')}
               icon={<FiCode />}
               size="sm"
               variant={syntaxHighlight ? 'solid' : 'ghost'}
@@ -761,9 +761,9 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
               onClick={() => setSyntaxHighlight(!syntaxHighlight)}
             />
           </Tooltip>
-          <Tooltip label={syncScroll ? t('page.tooltip.unlockScrollSync') : t('page.tooltip.lockScrollSync')} placement="bottom">
+          <Tooltip label={syncScroll ? t('pairComparison:page.tooltip.unlockScrollSync') : t('pairComparison:page.tooltip.lockScrollSync')} placement="bottom">
             <IconButton
-              aria-label="Toggle scroll sync"
+              aria-label={syncScroll ? t('pairComparison:page.aria.lockScrollSync') : t('pairComparison:page.aria.unlockScrollSync')}
               icon={syncScroll ? <FiLink /> : <FiLink2 />}
               size="sm"
               variant={syncScroll ? 'solid' : 'ghost'}
@@ -771,9 +771,9 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
               onClick={() => setSyncScroll(!syncScroll)}
             />
           </Tooltip>
-          <Tooltip label={t('page.tooltip.matchStatistics')} placement="bottom">
+          <Tooltip label={t('pairComparison:page.tooltip.matchStatistics')} placement="bottom">
             <IconButton
-              aria-label="Match statistics"
+              aria-label={t('common:aria.matchStatistics')}
               icon={<FiBarChart2 />}
               size="sm"
               variant={statsOpen ? 'solid' : 'ghost'}
@@ -783,7 +783,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
           </Tooltip>
           
           {/* Add Note Button */}
-          <Tooltip label="Add note to file" placement="bottom">
+          <Tooltip label={t('common:labels.addNewNote')} placement="bottom">
             <Button
               size="sm"
               variant="outline"
@@ -796,7 +796,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
               }}
               isDisabled={!selectedFileA || !selectedFileB}
             >
-              Note
+              {t('common:buttons.note')}
             </Button>
           </Tooltip>
           
@@ -807,7 +807,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
             onClick={handleConfirmPlagiarism}
             isLoading={confirming}
           >
-            Confirm ✓
+            {t('common:buttons.confirm')}
           </Button>
           <Button
             size="sm"
@@ -815,10 +815,10 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
             onClick={handleClearPair}
             isLoading={clearing}
           >
-            Clear
+            {t('common:buttons.clear')}
           </Button>
           <IconButton
-            aria-label="Close"
+            aria-label={t('common:aria.close')}
             icon={<FiX />}
             size="sm"
             variant="ghost"
@@ -832,15 +832,15 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
         <Box px={4} py={2} borderBottomWidth={1} borderColor={borderColor} bg={headerBg}>
           <HStack spacing={6} wrap="wrap">
             <VStack spacing={0} align="start">
-              <Text fontSize="xs" color="gray.500">{t('page.stats.totalMatches')}</Text>
+              <Text fontSize="xs" color="gray.500">{t('pairComparison:page.stats.totalMatches')}</Text>
               <Text fontWeight="bold">{matchStats.totalMatches}</Text>
             </VStack>
             <VStack spacing={0} align="start">
-              <Text fontSize="xs" color="gray.500">{t('page.stats.coverageA')}</Text>
+              <Text fontSize="xs" color="gray.500">{t('pairComparison:page.stats.coverageA')}</Text>
               <Text fontWeight="bold">{matchStats.coverageA.toFixed(1)}%</Text>
             </VStack>
             <VStack spacing={0} align="start">
-              <Text fontSize="xs" color="gray.500">{t('page.stats.coverageB')}</Text>
+              <Text fontSize="xs" color="gray.500">{t('pairComparison:page.stats.coverageB')}</Text>
               <Text fontWeight="bold">{matchStats.coverageB.toFixed(1)}%</Text>
             </VStack>
             {Object.entries(matchStats.byType).map(([type, s]) => (
@@ -853,7 +853,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
                   T{type}
                 </Badge>
                 <Text fontSize="sm">
-                  {t('page.stats.matchLineInfo', { count: s.count, linesA: s.linesA, linesB: s.linesB })}
+                  {t('pairComparison:page.stats.matchLineInfo', { count: s.count, linesA: s.linesA, linesB: s.linesB })}
                 </Text>
               </HStack>
             ))}
@@ -871,7 +871,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
       {loadingContent ? (
         <Flex flex={1} align="center" justify="center" py={8} minH={0}>
           <Spinner size="lg" />
-          <Text ml={3} color={mutedColor}>{t('page.loading')}</Text>
+          <Text ml={3} color={mutedColor}>{t('pairComparison:page.loading')}</Text>
         </Flex>
       ) : (
         <ErrorBoundary>
@@ -965,7 +965,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>
-            {activeFileForNote === 'file_a' ? selectedFileA?.filename : selectedFileB?.filename} - Notes
+            {activeFileForNote === 'file_a' ? selectedFileA?.filename : selectedFileB?.filename} - {t('common:labels.notes')}
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody>
@@ -978,7 +978,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
                     {new Date(note.created_at).toLocaleString()}
                   </Text>
                   <IconButton
-                    aria-label="Delete note"
+                    aria-label={t('common:aria.deleteNote')}
                     icon={<FiX />}
                     size="xs"
                     variant="ghost"
@@ -993,11 +993,11 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
 
               {/* Add Note */}
               <Box>
-                <Text fontSize="sm" fontWeight="medium" mb={2}>Add new note:</Text>
+                <Text fontSize="sm" fontWeight="medium" mb={2}>{t('common:labels.addNewNote')}</Text>
                 <Textarea
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="Enter note content..."
+                  placeholder={t('common:placeholders.noteContent')}
                   rows={3}
                 />
               </Box>
@@ -1005,7 +1005,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
           </ModalBody>
           <ModalFooter>
             <Button variant="ghost" mr={3} onClick={onNoteClose}>
-              Close
+              {t('common:close')}
             </Button>
             <Button
               colorScheme="blue"
@@ -1025,7 +1025,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
               isLoading={addNote.isPending}
               isDisabled={!noteText.trim()}
             >
-              Add Note
+              {t('common:buttons.addNote')}
             </Button>
           </ModalFooter>
         </ModalContent>

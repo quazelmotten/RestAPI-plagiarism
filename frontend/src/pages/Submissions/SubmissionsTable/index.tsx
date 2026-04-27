@@ -181,7 +181,7 @@ export const SubmissionsTable: React.FC<SubmissionsTableProps> = ({
       <Flex direction="column" align="center" justify="center" py={16} color="gray.500">
         <Icon as={FiInbox} boxSize={16} mb={4} opacity={0.5} />
         <Text fontWeight="medium" fontSize="lg">{t('noMatches')}</Text>
-        <Text fontSize="sm">No submissions found</Text>
+        <Text fontSize="sm">{t('common:labels.noSubmissionsFound')}</Text>
       </Flex>
     );
   }

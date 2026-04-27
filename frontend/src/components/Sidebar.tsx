@@ -172,7 +172,8 @@ const SortableAssignment: React.FC<{
 };
 
 const Sidebar: React.FC = () => {
-  const { t } = useTranslation('navigation');
+  const { t: tNav } = useTranslation('navigation');
+  const { t: tCommon } = useTranslation();
   const location = useLocation();
   const { mode } = useViewMode();
   const { user } = useAuth();
@@ -284,14 +285,14 @@ const Sidebar: React.FC = () => {
     if (uncategorized.length > 0) {
       groups.push({
         id: '__uncategorized__',
-        name: t('uncategorized'),
+        name: tCommon('uncategorized'),
         isUncategorized: true,
         assignments: sortAssignments('__uncategorized__', uncategorized),
       });
     }
 
     return groups;
-  }, [assignments, subjects, t]);
+  }, [assignments, subjects, tCommon, uncategorizedAssignments]);
 
   const subjectGroups = buildSubjectGroups();
 
@@ -345,7 +346,7 @@ const Sidebar: React.FC = () => {
       flexDirection="column"
       overflow="hidden"
     >
-      <Box mb={6} px={4} cursor="pointer" onClick={() => setIsBlinking(!isBlinking)} title="Click to toggle blink">
+      <Box mb={6} px={4} cursor="pointer" onClick={() => setIsBlinking(!isBlinking)} title={tCommon('toggleBlink')}>
         <Text
           fontSize="1.6rem"
           fontWeight="bold"
@@ -377,7 +378,7 @@ const Sidebar: React.FC = () => {
                 transition="all 0.2s"
               >
                 <Icon as={item.icon} boxSize={5} mr={3} />
-                <Text fontWeight="medium">{t(item.label)}</Text>
+                <Text fontWeight="medium">{tNav(item.label)}</Text>
               </Flex>
             </NavLink>
           ))}
@@ -396,7 +397,7 @@ const Sidebar: React.FC = () => {
                  transition="all 0.2s"
                >
                  <Icon as={FiUsers} boxSize={5} mr={3} />
-                 <Text fontWeight="medium">{t('users')}</Text>
+                 <Text fontWeight="medium">{tCommon('users')}</Text>
                </Flex>
              </NavLink>
            )}
@@ -420,7 +421,7 @@ const Sidebar: React.FC = () => {
                 transition="all 0.2s"
               >
                 <Icon as={FiHome} boxSize={4.5} mr={3} />
-                <Text fontWeight="medium" fontSize="sm">{t('overview')}</Text>
+                <Text fontWeight="medium" fontSize="sm">{tNav('overview')}</Text>
               </Flex>
             </NavLink>
 
@@ -437,7 +438,7 @@ const Sidebar: React.FC = () => {
                 gap={2}
               >
                 <Icon as={FiList} boxSize={4.5} mr={1} />
-                <Text fontWeight="medium" fontSize="sm">{t('viewAllAssignments')}</Text>
+                <Text fontWeight="medium" fontSize="sm">{tNav('viewAllAssignments')}</Text>
               </Flex>
             </NavLink>
           </VStack>
@@ -454,7 +455,7 @@ const Sidebar: React.FC = () => {
             userSelect="none"
           >
             <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wider" color={sectionColor}>
-              {t('assignments')}
+              {tCommon('assignments')}
             </Text>
             <Icon
               as={assignmentsExpanded ? FiChevronDown : FiChevronRight}
@@ -474,7 +475,7 @@ const Sidebar: React.FC = () => {
                 </Flex>
               ) : subjectGroups.length === 0 ? (
                 <Text fontSize="xs" color={mutedColor} px={4} py={2}>
-                  {t('noAssignments')}
+                  {tCommon('noAssignments')}
                 </Text>
               ) : (
                 subjectGroups.map((group) => {
@@ -536,7 +537,7 @@ const Sidebar: React.FC = () => {
                                   assignment={assignment}
                                   isCurrent={isCurrent}
                                   hoverBg={hoverBg}
-                                  t={t}
+                                  t={tCommon}
                                   isDragging={isDragging}
                                 />
                               );
@@ -590,14 +591,13 @@ const Sidebar: React.FC = () => {
    );
  };
 
- const LanguageSwitcherFooter: React.FC = () => {
-   const { t } = useTranslation();
-   const { i18n } = useTranslation();
+const LanguageSwitcherFooter: React.FC = () => {
+    const { t, i18n } = useTranslation();
 
-   const languages = [
-     { code: 'en', name: 'English', flag: '🇺🇸' },
-     { code: 'ru', name: 'Русский', flag: '🇷🇺' },
-   ];
+    const languages = [
+      { code: 'en', name: t('languageNames.en'), flag: '🇺🇸' },
+      { code: 'ru', name: t('languageNames.ru'), flag: '🇷🇺' },
+    ];
 
    const currentLanguage = languages.find(lang => lang.code === i18n.language) || languages[0];
 

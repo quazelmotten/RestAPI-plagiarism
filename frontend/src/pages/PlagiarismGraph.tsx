@@ -258,7 +258,7 @@ const PlagiarismGraph: React.FC = () => {
             <Flex direction="column" align="center" justify="center" py={16} color="gray.500">
               <Icon as={FiInbox} boxSize={16} mb={4} opacity={0.5} />
               <Text fontWeight="medium" fontSize="lg">{t('empty.noChecks')}</Text>
-              <Text fontSize="sm">Upload files to generate graph</Text>
+              <Text fontSize="sm">{t('common:emptyStates.uploadToGenerateGraph')}</Text>
             </Flex>
           </CardBody>
         </Card>

@@ -98,15 +98,15 @@ export function SubjectMembersDialog({ isOpen, onClose, subject }: SubjectMember
              <FormControl>
                <FormLabel fontSize="sm">{t('grantAccessToUser')}</FormLabel>
                <HStack>
-                 <Input
-                   placeholder="user@example.com"
-                   value={email}
+<Input
+                    placeholder={t('placeholders.userEmail')}
+                    value={email}
                    onChange={(e) => setEmail(e.target.value)}
                    onKeyDown={(e) => e.key === 'Enter' && handleGrant()}
                  />
-                 <IconButton
-                   aria-label="Grant access"
-                   icon={<FiUserPlus />}
+<IconButton
+                    aria-label={t('aria.grantAccess')}
+                    icon={<FiUserPlus />}
                    onClick={handleGrant}
                    isLoading={grantMutation.isPending}
                    isDisabled={!email.trim()}
@@ -158,9 +158,9 @@ export function SubjectMembersDialog({ isOpen, onClose, subject }: SubjectMember
                            {new Date(member.granted_at).toLocaleDateString()}
                          </Text>
                        </Box>
-                       <IconButton
-                         aria-label="Revoke access"
-                         icon={<FiTrash2 />}
+<IconButton
+                          aria-label={t('aria.revokeAccess')}
+                          icon={<FiTrash2 />}
                          size="sm"
                          variant="ghost"
                          colorScheme="red"

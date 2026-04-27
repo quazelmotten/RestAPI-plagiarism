@@ -28,47 +28,47 @@ const getWebSocketUrl = (taskId: string): string => {
 const stageConfig: Record<string, {
   phase: number;
   totalPhases: number;
-  label: string;
+  labelKey: string;
   color: string;
-  description: string;
-  unit: string;
-  unitPlural: string;
+  descriptionKey: string;
+  unitKey: string;
+  unitPluralKey: string;
 }> = {
   indexing: {
     phase: 1,
     totalPhases: 4,
-    label: 'Indexing Files',
+    labelKey: 'results:taskProgress:stages:indexing:label',
     color: 'blue',
-    description: 'Tokenizing source files and building the fingerprint index',
-    unit: 'file',
-    unitPlural: 'files',
+    descriptionKey: 'results:taskProgress:stages:indexing:description',
+    unitKey: 'results:taskProgress:stages:indexing:unit',
+    unitPluralKey: 'results:taskProgress:stages:indexing:unitPlural',
   },
   finding_intra_pairs: {
     phase: 2,
     totalPhases: 4,
-    label: 'Finding Intra-Task Pairs',
+    labelKey: 'results:taskProgress:stages:finding_intra_pairs:label',
     color: 'purple',
-    description: 'Comparing files within this batch for similarities',
-    unit: 'file checked',
-    unitPlural: 'files checked',
+    descriptionKey: 'results:taskProgress:stages:finding_intra_pairs:description',
+    unitKey: 'results:taskProgress:stages:finding_intra_pairs:unit',
+    unitPluralKey: 'results:taskProgress:stages:finding_intra_pairs:unitPlural',
   },
   finding_cross_pairs: {
     phase: 3,
     totalPhases: 4,
-    label: 'Finding Cross-Task Pairs',
+    labelKey: 'results:taskProgress:stages:finding_cross_pairs:label',
     color: 'pink',
-    description: 'Comparing new files against previously submitted files',
-    unit: 'file checked',
-    unitPlural: 'files checked',
+    descriptionKey: 'results:taskProgress:stages:finding_cross_pairs:description',
+    unitKey: 'results:taskProgress:stages:finding_cross_pairs:unit',
+    unitPluralKey: 'results:taskProgress:stages:finding_cross_pairs:unitPlural',
   },
   storing_results: {
     phase: 4,
     totalPhases: 4,
-    label: 'Storing Results',
+    labelKey: 'results:taskProgress:stages:storing_results:label',
     color: 'orange',
-    description: 'Persisting similarity scores to the database',
-    unit: 'pair',
-    unitPlural: 'pairs',
+    descriptionKey: 'results:taskProgress:stages:storing_results:description',
+    unitKey: 'results:taskProgress:stages:storing_results:unit',
+    unitPluralKey: 'results:taskProgress:stages:storing_results:unitPlural',
   },
 };
 
@@ -318,11 +318,11 @@ const TaskProgress: React.FC<TaskProgressProps> = ({ taskId, status: initialStat
   const stage = stageConfig[progress.status];
   if (!stage) return null;
 
-  const label = t(`results:taskProgress:stages:${progress.status}:label`);
-  const description = t(`results:taskProgress:stages:${progress.status}:description`);
+  const label = t(stage.labelKey);
+  const description = t(stage.descriptionKey);
   const unit = progress.completed === 1
-    ? t(`results:taskProgress:stages:${progress.status}:unit`)
-    : t(`results:taskProgress:stages:${progress.status}:unitPlural`);
+    ? t(stage.unitKey)
+    : t(stage.unitPluralKey);
 
   const hasProgress = progress.total > 0;
 

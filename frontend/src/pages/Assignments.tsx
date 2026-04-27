@@ -155,14 +155,14 @@ interface DraggableAssignmentRowProps {
         <Td>
           <HStack spacing={1}>
             <IconButton
-              aria-label="Edit assignment"
+              aria-label={t('common:aria.editAssignment')}
               icon={<FiEdit2 />}
               size="xs"
               variant="ghost"
               onClick={() => onEdit(assignment)}
             />
             <IconButton
-              aria-label="Delete assignment"
+              aria-label={t('common:aria.deleteAssignment')}
               icon={<FiTrash2 />}
               size="xs"
               variant="ghost"
@@ -387,7 +387,7 @@ const Assignments: React.FC = () => {
 
     const assignment = (data?.items || []).find(a => a.id === activeId);
     if (!assignment) {
-      toast({ title: 'Assignment not found', status: 'error', duration: 2000 });
+      toast({ title: t('common:errors.assignmentNotFound'), status: 'error', duration: 2000 });
       return;
     }
 
@@ -618,21 +618,21 @@ const Assignments: React.FC = () => {
                         </HStack>
                         <HStack spacing={1} onClick={(e) => e.stopPropagation()}>
                           <IconButton
-                            aria-label="Edit subject"
+                            aria-label={t('common:aria.editSubject')}
                             icon={<FiEdit2 />}
                             size="xs"
                             variant="ghost"
                             onClick={() => openEditSubject(subject)}
                           />
                           <IconButton
-                            aria-label="Manage members"
+                            aria-label={t('common:aria.manageMembers')}
                             icon={<FiUsers />}
                             size="xs"
                             variant="ghost"
                             onClick={() => setManagingSubject(subject)}
                           />
                           <IconButton
-                            aria-label="Delete subject"
+                            aria-label={t('common:aria.deleteSubject')}
                             icon={<FiTrash2 />}
                             size="xs"
                             variant="ghost"

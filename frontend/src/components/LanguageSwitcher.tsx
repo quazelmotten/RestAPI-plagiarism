@@ -3,11 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { FiGlobe } from 'react-icons/fi';
 
 const LanguageSwitcher = () => {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const languages = [
-    { code: 'en', name: 'English', flag: '🇺🇸' },
-    { code: 'ru', name: 'Русский', flag: '🇷🇺' },
+    { code: 'en', name: t('languageNames.en'), flag: '🇺🇸' },
+    { code: 'ru', name: t('languageNames.ru'), flag: '🇷🇺' },
   ];
 
   const currentLanguage = languages.find(lang => lang.code === i18n.language) || languages[0];
@@ -25,7 +25,7 @@ const LanguageSwitcher = () => {
         as={Button}
         variant="ghost"
         size="md"
-        aria-label="Switch language"
+        aria-label={t('switchLanguage')}
         leftIcon={<FiGlobe />}
       >
         {currentLanguage.flag}

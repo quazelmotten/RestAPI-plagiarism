@@ -74,8 +74,8 @@ function Login() {
   };
 
   const languages = [
-    { code: 'en', name: 'English', flag: '🇺🇸' },
-    { code: 'ru', name: 'Русский', flag: '🇷🇺' },
+    { code: 'en', name: t('languageNames.en'), flag: '🇺🇸' },
+    { code: 'ru', name: t('languageNames.ru'), flag: '🇷🇺' },
   ];
 
   const currentLanguage = languages.find(lang => lang.code === i18n.language) || languages[0];
@@ -132,24 +132,24 @@ function Login() {
                 : t('createAccountSignUp')
               }
             </Text>
-            <FormControl isRequired>
-              <FormLabel>{t('email')}</FormLabel>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@university.edu"
-              />
-            </FormControl>
-            <FormControl isRequired>
-              <FormLabel>{t('password')}</FormLabel>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-              />
-            </FormControl>
+<FormControl isRequired>
+  <FormLabel>{t('email')}</FormLabel>
+  <Input
+    type="email"
+    value={email}
+    onChange={(e) => setEmail(e.target.value)}
+    placeholder={t('placeholders.email')}
+  />
+</FormControl>
+<FormControl isRequired>
+  <FormLabel>{t('password')}</FormLabel>
+  <Input
+    type="password"
+    value={password}
+    onChange={(e) => setPassword(e.target.value)}
+    placeholder={t('placeholders.password')}
+  />
+</FormControl>
             <Button
               type="submit"
               colorScheme="brand"

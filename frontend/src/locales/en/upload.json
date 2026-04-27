@@ -27,5 +27,11 @@
     "failed": "Upload failed"
   },
   "fileLimitDescription": "Max {{max}} files",
-  "filtered": "filtered"
+  "filtered": "filtered",
+  "dialogs": {
+    "pendingUploadLeave": "You have {{count}} file(s) pending upload. Are you sure you want to leave this page? Your files will be lost."
+  },
+  "buttons": {
+    "leavePage": "Leave Page"
+  }
 }

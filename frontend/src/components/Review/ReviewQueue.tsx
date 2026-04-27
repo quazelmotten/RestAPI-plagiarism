@@ -132,8 +132,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
       setSelectedIndex(0);
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to fetch review queue',
+        title: t('common:toasts.failedToFetchQueue'),
         status: 'error',
         duration: 3000,
       });
@@ -203,7 +202,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
   const handleBulkConfirm = async () => {
     const threshold = parseFloat(bulkThreshold);
     if (isNaN(threshold) || threshold < 0 || threshold > 1) {
-      toast({ title: 'Invalid threshold', description: 'Please enter a value between 0 and 1', status: 'error', duration: 3000 });
+      toast({ title: t('common:toasts.invalidThreshold'), description: t('common:toasts.thresholdRange'), status: 'error', duration: 3000 });
       return;
     }
 
@@ -213,25 +212,25 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
         null,
         { params: { threshold } }
       );
-      toast({ title: 'Bulk Confirm Complete', description: `Confirmed ${response.data.confirmed_pairs} pairs`, status: 'success', duration: 5000 });
+      toast({ title: t('common:toasts.bulkConfirmComplete'), description: t('common:toasts.pairsConfirmed', { count: response.data.confirmed_pairs }), status: 'success', duration: 5000 });
       onBulkClose();
       refetchStatus();
       refetchPairs();
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to bulk confirm', status: 'error', duration: 3000 });
+      toast({ title: t('common:toasts.failedToBulkConfirm'), status: 'error', duration: 3000 });
     }
   };
 
   const handleBulkClear = async () => {
     const threshold = parseFloat(bulkClearThreshold);
     if (isNaN(threshold) || threshold < 0 || threshold > 1) {
-      toast({ title: 'Invalid threshold', description: 'Please enter a value between 0 and 1', status: 'error', duration: 3000 });
+      toast({ title: t('common:toasts.invalidThreshold'), description: t('common:toasts.thresholdRange'), status: 'error', duration: 3000 });
       return;
     }
 
     try {
       const response = await bulkClearMutation.mutateAsync({ assignmentId, threshold });
-      toast({ title: 'Bulk Clear Complete', description: `Cleared ${response.confirmed_pairs} pairs`, status: 'success', duration: 5000 });
+      toast({ title: t('common:toasts.bulkClearComplete'), description: t('common:toasts.pairsCleared', { count: response.confirmed_pairs }), status: 'success', duration: 5000 });
       onBulkClearClose();
       refetchStatus();
       if (activeTab === 0) {
@@ -240,7 +239,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
         refetchPairs();
       }
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to bulk clear', status: 'error', duration: 3000 });
+      toast({ title: t('common:toasts.failedToBulkClear'), status: 'error', duration: 3000 });
     }
   };
 
@@ -271,9 +270,9 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
       link.download = result.filename;
       link.click();
       URL.revokeObjectURL(url);
-      toast({ title: 'Export Complete', description: 'HTML report downloaded', status: 'success', duration: 3000 });
+      toast({ title: t('common:toasts.exportComplete'), description: t('common:toasts.htmlReportDownloaded'), status: 'success', duration: 3000 });
     } catch (error) {
-      toast({ title: 'Export Failed', description: 'Failed to generate HTML report', status: 'error', duration: 3000 });
+      toast({ title: t('common:toasts.exportFailed'), description: t('common:toasts.failedToGenerateHtml'), status: 'error', duration: 3000 });
     }
   };
 
@@ -284,16 +283,16 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
 
   const handleItemAction = async (item: PlagiarismResult) => {
     if (!item.id) {
-      toast({ title: 'Error', description: 'Pair ID is missing', status: 'error', duration: 3000 });
+      toast({ title: t('common:errors.generic'), description: t('common:toasts.pairIdMissing'), status: 'error', duration: 3000 });
       return;
     }
     try {
       await api.post(API_ENDPOINTS.CONFIRM_PLAGIARISM(item.id));
-      toast({ title: 'Confirmed', description: 'Pair marked as plagiarism', status: 'success', duration: 1500 });
+      toast({ title: t('common:toasts.confirmed'), description: t('common:toasts.pairMarkedAsPlagiarism'), status: 'success', duration: 1500 });
       refetchStatus();
       refetchPairs();
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to confirm', status: 'error', duration: 3000 });
+      toast({ title: t('common:errors.generic'), description: t('common:toasts.failedToConfirm'), status: 'error', duration: 3000 });
     }
   };
 
@@ -342,7 +341,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
                 <HStack>
                   <Text fontSize="lg" fontWeight="bold">{t('review:reviewProgress')}</Text>
                   <Tooltip label={t('review:keyboardShortcuts')}>
-                    <Button size="sm" variant="ghost" onClick={onHelpOpen}>Shortcuts</Button>
+                    <Button size="sm" variant="ghost" onClick={onHelpOpen}>{t('common:buttons.shortcuts')}</Button>
                   </Tooltip>
                 </HStack>
                 <Text fontSize="sm" color={mutedTextColor}>
@@ -424,7 +423,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
         items={currentItems}
         isLoading={isLoading}
         isEmpty={currentItems.length === 0}
-        isEmptyMessage={activeTab === 0 ? (isComplete ? t('review:allFilesReviewed') : t('review:noPairsToReview')) : 'No pairs found'}
+        isEmptyMessage={activeTab === 0 ? (isComplete ? t('review:allFilesReviewed') : t('review:noPairsToReview')) : t('review:noPairsFound')}
         selectedIndex={selectedIndex}
         onSelectItem={handleSelectItem}
         onAction={handleItemAction}
@@ -437,11 +436,11 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
             <AlertDialogHeader>{t('common:keyboardShortcuts')}</AlertDialogHeader>
             <AlertDialogBody>
               <VStack align="stretch" spacing={2}>
-                <HStack justify="space-between"><Text fontWeight="medium">↓ / J</Text><Text color={mutedTextColor}>Next pair</Text></HStack>
-                <HStack justify="space-between"><Text fontWeight="medium">↑ / K</Text><Text color={mutedTextColor}>Previous pair</Text></HStack>
-                <HStack justify="space-between"><Text fontWeight="medium">Enter</Text><Text color={mutedTextColor}>View selected pair</Text></HStack>
-                <HStack justify="space-between"><Text fontWeight="medium">C</Text><Text color={mutedTextColor}>Confirm plagiarism</Text></HStack>
-                <HStack justify="space-between"><Text fontWeight="medium">X</Text><Text color={mutedTextColor}>Clear pair</Text></HStack>
+                <HStack justify="space-between"><Text fontWeight="medium">↓ / J</Text><Text color={mutedTextColor}>{t('common:keyboardShortcuts.nextPair')}</Text></HStack>
+                <HStack justify="space-between"><Text fontWeight="medium">↑ / K</Text><Text color={mutedTextColor}>{t('common:keyboardShortcuts.previousPair')}</Text></HStack>
+                <HStack justify="space-between"><Text fontWeight="medium">Enter</Text><Text color={mutedTextColor}>{t('common:keyboardShortcuts.viewSelectedPair')}</Text></HStack>
+                <HStack justify="space-between"><Text fontWeight="medium">C</Text><Text color={mutedTextColor}>{t('common:keyboardShortcuts.confirmPlagiarism')}</Text></HStack>
+                <HStack justify="space-between"><Text fontWeight="medium">X</Text><Text color={mutedTextColor}>{t('common:keyboardShortcuts.clearPair')}</Text></HStack>
               </VStack>
             </AlertDialogBody>
             <AlertDialogFooter>

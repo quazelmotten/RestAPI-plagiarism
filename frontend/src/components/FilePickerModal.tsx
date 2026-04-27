@@ -54,6 +54,7 @@ interface FileItemProps {
 }
 
 const FileItem: React.FC<FileItemProps> = ({ file, isSelectedA, isSelectedB, onSelectA, onSelectB, column }) => {
+  const { t } = useTranslation(['pairComparison', 'common']);
   const bgColor = useColorModeValue('white', 'gray.700');
   const hoverBg = useColorModeValue('gray.100', 'gray.600');
   const selectedBgA = useColorModeValue('blue.50', 'blue.900');
@@ -96,7 +97,7 @@ const FileItem: React.FC<FileItemProps> = ({ file, isSelectedA, isSelectedB, onS
           </Text>
           <HStack mt={1} spacing={2}>
             <Badge size="sm" colorScheme="gray" variant="subtle">
-              {file.language || 'unknown'}
+              {file.language || t('common:unknown')}
             </Badge>
             <Text fontSize="xs" color="gray.500" isTruncated>
               task: {file.task_id.substring(0, 8)}...
@@ -168,7 +169,7 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
     } catch (err: unknown) {
       const apiError = err as ApiError;
       console.error(`Error fetching files for column ${column}:`, err);
-       setError(apiError.response?.data?.detail || 'Failed to load files');
+       setError(apiError.response?.data?.detail || t('common:failedToLoadFiles'));
     } finally {
       setLoading(false);
     }

@@ -371,7 +371,7 @@ const PairComparison: React.FC = () => {
       if (apiError.response?.status !== 404) {
         console.error('Error fetching comparison data:', error);
       }
-      setContentError(error instanceof Error ? error.message : 'Failed to load comparison');
+      setContentError(error instanceof Error ? error.message : t('errors.failedToLoadComparison'));
       setCurrentPair(null);
     } finally {
       setLoadingContent(false);
@@ -494,7 +494,7 @@ const PairComparison: React.FC = () => {
             </Tooltip>
             <Tooltip label={filterEmpty ? t('page.tooltip.showEmptyLines') : t('page.tooltip.hideEmptyLines')} placement="bottom">
               <IconButton
-                aria-label={filterEmpty ? 'Show empty lines' : 'Hide empty lines'}
+                aria-label={filterEmpty ? t('page.aria.showEmptyLines') : t('page.aria.hideEmptyLines')}
                 icon={filterEmpty ? <FiEye /> : <FiFilter />}
                 size="sm"
                 variant={filterEmpty ? 'solid' : 'ghost'}
@@ -601,23 +601,23 @@ const PairComparison: React.FC = () => {
                   <VStack align="stretch" spacing={3}>
                     <HStack justify="space-between">
                       <Text fontWeight="medium">Ctrl/Cmd + N</Text>
-                      <Text color="gray.500">Next match</Text>
+                      <Text color="gray.500">{t('keyboardShortcuts.nextMatch')}</Text>
                     </HStack>
                     <HStack justify="space-between">
                       <Text fontWeight="medium">Ctrl/Cmd + P</Text>
-                      <Text color="gray.500">Previous match</Text>
+                      <Text color="gray.500">{t('keyboardShortcuts.previousMatch')}</Text>
                     </HStack>
                     <HStack justify="space-between">
                       <Text fontWeight="medium">Ctrl/Cmd + C</Text>
-                      <Text color="gray.500">Toggle comments</Text>
+                      <Text color="gray.500">{t('keyboardShortcuts.toggleComments')}</Text>
                     </HStack>
                     <HStack justify="space-between">
                       <Text fontWeight="medium">Ctrl/Cmd + S</Text>
-                      <Text color="gray.500">Toggle scroll sync</Text>
+                      <Text color="gray.500">{t('keyboardShortcuts.toggleScrollSync')}</Text>
                     </HStack>
                      <HStack justify="space-between">
                        <Text fontWeight="medium">{t('escape')}</Text>
-                       <Text color="gray.500">Close modal (or file picker)</Text>
+                       <Text color="gray.500">{t('keyboardShortcuts.closeModal')}</Text>
                      </HStack>
                   </VStack>
                 </ModalBody>

@@ -710,10 +710,10 @@ const Upload: React.FC = () => {
                       <option value="50">50</option>
                       <option value="100">100</option>
                     </Select>
-                    <Text fontSize="xs" color={mutedColor}>
-                      {showingStart}-{showingEnd} {t('common:of', { total: filteredFiles.length })}
-                      {searchQuery && ` (filtered)`}
-                    </Text>
+<Text fontSize="xs" color={mutedColor}>
+                       {showingStart}-{showingEnd} {t('common:of', { total: filteredFiles.length })}
+                       {searchQuery && ` ${t('filtered')}`}
+                     </Text>
                   </HStack>
                 </Flex>
 
@@ -846,25 +846,25 @@ const Upload: React.FC = () => {
              <AlertDialogHeader fontSize="lg" fontWeight="bold">
                {t('common:areYouSure')}
              </AlertDialogHeader>
-             <AlertDialogBody>
-               You have {files.length} file(s) pending upload. Are you sure you want to leave this page? Your files will be lost.
-             </AlertDialogBody>
+<AlertDialogBody>
+  {t('dialogs.pendingUploadLeave', { count: files.length })}
+</AlertDialogBody>
              <AlertDialogFooter>
                <Button ref={cancelRef} onClick={() => setIsNavigationBlocked(false)}>
                  {t('common:cancel')}
                </Button>
-               <Button
-                 colorScheme="red"
-                 onClick={() => {
-                   setIsNavigationBlocked(false);
-                   if (targetPath) {
-                     window.location.href = targetPath;
-                   }
-                 }}
-                 ml={3}
-               >
-                 Leave Page
-               </Button>
+<Button
+  colorScheme="red"
+  onClick={() => {
+    setIsNavigationBlocked(false);
+    if (targetPath) {
+      window.location.href = targetPath;
+    }
+  }}
+  ml={3}
+>
+  {t('buttons.leavePage')}
+</Button>
              </AlertDialogFooter>
            </AlertDialogContent>
          </AlertDialogOverlay>

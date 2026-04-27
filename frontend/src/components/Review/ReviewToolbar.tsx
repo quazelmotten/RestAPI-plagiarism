@@ -64,7 +64,7 @@ export const ReviewToolbar: React.FC<ReviewToolbarProps> = ({
               <FiSearch />
             </InputLeftElement>
             <Input
-              placeholder="Search files..."
+              placeholder={t('common:placeholders.searchFiles')}
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
             />
@@ -73,7 +73,7 @@ export const ReviewToolbar: React.FC<ReviewToolbarProps> = ({
           <Input
             size="sm"
             w="120px"
-            placeholder="≤55%"
+            placeholder={t('common:placeholders.similarityFilter')}
             value={similarityFilter}
             onChange={(e) => setSimilarityFilter(e.target.value)}
           />
@@ -91,7 +91,7 @@ export const ReviewToolbar: React.FC<ReviewToolbarProps> = ({
           </Select>
 
           <IconButton
-            aria-label="Previous page"
+            aria-label={t('common:aria.previousPage')}
             icon={<FiChevronLeft />}
             size="sm"
             onClick={onPrevPage}
@@ -101,7 +101,7 @@ export const ReviewToolbar: React.FC<ReviewToolbarProps> = ({
             {page + 1} / {totalPages}
           </Text>
           <IconButton
-            aria-label="Next page"
+            aria-label={t('common:aria.nextPage')}
             icon={<FiChevronRight />}
             size="sm"
             onClick={onNextPage}

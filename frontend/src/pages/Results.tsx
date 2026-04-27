@@ -162,7 +162,7 @@ const Results: React.FC = () => {
               <Flex direction="column" align="center" justify="center" py={16} color="gray.500">
                 <Icon as={FiInbox} boxSize={16} mb={4} opacity={0.5} />
                 <Text fontWeight="medium" fontSize="lg">{t('noChecks')}</Text>
-                <Text fontSize="sm">Upload files to get started</Text>
+                <Text fontSize="sm">{t('uploadToGetStarted')}</Text>
               </Flex>
             </CardBody>
           </Card>
@@ -187,8 +187,8 @@ const Results: React.FC = () => {
                           <Text isTruncated fontSize="sm">
                             {selectedTaskListItem.task_id.substring(0, 12)}...
                           </Text>
-                          <Tooltip label={taskIdCopied ? 'Copied!' : 'Copy task ID'} placement="top">
-                            <Tooltip label={taskIdCopied ? 'Copied!' : 'Copy task ID'} placement="top">
+<Tooltip label={taskIdCopied ? t('labels.copied') : t('aria.copyTaskId')} placement="top">
+  <Tooltip label={taskIdCopied ? t('labels.copied') : t('aria.copyTaskId')} placement="top">
                               <IconButton
                                 aria-label="Copy task ID"
                                 icon={taskIdCopied ? <FiCheck color="green.500" /> : <FiCopy />}
@@ -232,7 +232,7 @@ const Results: React.FC = () => {
                           leftIcon={<FiDownload />}
                           variant="outline"
                           onClick={() => {
-                            const headers = ['File A', 'File B', 'Similarity', 'Task ID'];
+                            const headers = [t('csv.fileA'), t('csv.fileB'), t('csv.similarity'), t('csv.taskId')];
                             const rows = selectedTask.results.map(r => [
                               r.file_a.filename,
                               r.file_b.filename,

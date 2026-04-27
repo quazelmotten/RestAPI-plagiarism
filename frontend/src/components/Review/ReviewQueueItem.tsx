@@ -35,16 +35,16 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
     try {
       await api.post(API_ENDPOINTS.CONFIRM_PLAGIARISM(item.id));
       toast({
-        title: 'Confirmed',
-        description: 'Both files marked as plagiarism',
+        title: t('review:confirmed'),
+        description: t('review:pairMarkedAsPlagiarism'),
         status: 'success',
         duration: 2000,
       });
       onAction?.();
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to confirm',
+        title: t('common:errors.generic'),
+        description: t('review:failedToAction', { action: 'confirm' }),
         status: 'error',
         duration: 3000,
       });

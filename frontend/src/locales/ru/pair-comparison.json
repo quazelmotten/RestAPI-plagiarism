@@ -36,6 +36,8 @@
       "aria": {
         "showComments": "Показать комментарии",
         "hideComments": "Скрыть комментарии",
+        "showEmptyLines": "Показать пустые строки",
+        "hideEmptyLines": "Скрыть пустые строки",
         "unlockScrollSync": "Синхронизация прокрутки",
         "lockScrollSync": "Синхронизация прокрутки",
         "matchStatistics": "Статистика совпадений",

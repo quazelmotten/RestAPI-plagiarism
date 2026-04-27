@@ -39,7 +39,7 @@ const Profile: React.FC = () => {
   return (
     <Box maxW="md" mx="auto" mt={8} p={4}>
       <Heading mb={6}>{t('profile')}</Heading>
-      <Text mb={4}>Email: {user.email}</Text>
+      <Text mb={4}>{t('labels.email')} {user.email}</Text>
       <form onSubmit={handleChangePassword}>
         <VStack spacing={4} align="stretch">
           <FormControl isRequired>

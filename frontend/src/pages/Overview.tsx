@@ -177,9 +177,9 @@ const Overview: React.FC = () => {
                 <StatLabel>{t('highSimilarity')}</StatLabel>
               </HStack>
               <StatNumber color="red.500">{highSimilarity}</StatNumber>
-              <Text fontSize="sm" color="gray.500">
-                ≥80% {t('similarityDetected')}
-              </Text>
+<Text fontSize="sm" color="gray.500">
+  {t('highSimilarityThreshold')} {t('similarityDetected')}
+</Text>
             </Stat>
           </CardBody>
         </Card>
@@ -213,7 +213,7 @@ const Overview: React.FC = () => {
             <Flex direction="column" align="center" justify="center" py={12} color="gray.500">
               <Icon as={FiInbox} boxSize={16} mb={4} opacity={0.5} />
               <Text fontWeight="medium" fontSize="lg">{t('noActivity')}</Text>
-              <Text fontSize="sm">Upload files to see activity</Text>
+              <Text fontSize="sm">{t('common:emptyStates.uploadToSeeActivity')}</Text>
             </Flex>
           ) : (
             <Box flex={1} minH={0} overflowY="auto">

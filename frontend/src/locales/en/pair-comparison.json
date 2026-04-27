@@ -36,6 +36,8 @@
       "aria": {
         "showComments": "Show comments",
         "hideComments": "Hide comments",
+        "showEmptyLines": "Show empty lines",
+        "hideEmptyLines": "Hide empty lines",
         "unlockScrollSync": "Unlock scroll sync",
         "lockScrollSync": "Lock scroll sync",
         "matchStatistics": "Match statistics",

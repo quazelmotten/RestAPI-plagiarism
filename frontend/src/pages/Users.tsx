@@ -236,7 +236,7 @@ const Users: React.FC = () => {
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Enter new password"
+                placeholder={t('placeholders.newPassword')}
               />
             </FormControl>
           </ModalBody>

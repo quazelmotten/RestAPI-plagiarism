@@ -8,6 +8,7 @@ import {
   Spinner,
   useColorModeValue,
 } from '@chakra-ui/react';
+import { useTranslation } from 'react-i18next';
 import ReviewQueueItem from './ReviewQueueItem';
 import type { PlagiarismResult } from '../../types';
 
@@ -25,11 +26,13 @@ export const ReviewList: React.FC<ReviewListProps> = ({
   items,
   isLoading,
   isEmpty,
-  isEmptyMessage = 'No pairs found',
+  isEmptyMessage,
   selectedIndex,
   onSelectItem,
   onAction,
 }) => {
+  const { t } = useTranslation(['common', 'review']);
+  const defaultEmptyMessage = t('labels.noPairsFound');
   const mutedTextColor = useColorModeValue("gray.500", "gray.400");
   const defaultBorderColor = useColorModeValue('gray.200', 'gray.600');
   const hoverBorderColor = useColorModeValue('brand.300', 'brand.400');
@@ -48,7 +51,7 @@ export const ReviewList: React.FC<ReviewListProps> = ({
     return (
       <Card flex="1" display="flex" flexDirection="column" minH={0}>
         <CardBody display="flex" alignItems="center" justifyContent="center" flex={1}>
-          <Text color={mutedTextColor}>{isEmptyMessage}</Text>
+          <Text color={mutedTextColor}>{isEmptyMessage || defaultEmptyMessage}</Text>
         </CardBody>
       </Card>
     );

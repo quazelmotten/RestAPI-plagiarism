@@ -249,7 +249,7 @@ const Header: React.FC = () => {
           </Flex>
 
           <IconButton
-            aria-label="Toggle dark mode"
+            aria-label={t('common:aria.toggleDarkMode')}
             icon={colorMode === 'light' ? <FiMoon /> : <FiSun />}
             onClick={() => {
               toggleColorMode();

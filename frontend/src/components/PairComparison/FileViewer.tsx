@@ -119,7 +119,7 @@ const getMatchBorder = (match: PlagiarismMatch | null): string => {
 const getMatchTooltip = (match: PlagiarismMatch | null, t: (key: string, opts?: any) => string): string => {
   if (!match) return '';
   const ptype = match.plagiarism_type;
-  const label = ptype ? t(`page.matchTypes.${ptype}`, `Type ${ptype}`) : t('page.match');
+  const label = ptype ? t(`page.matchTypes.${ptype}`) : t('page.match');
   if (match.description) {
     return `${label}: ${match.description}`;
   }
@@ -312,7 +312,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
                     )}
                   </Box>
                   {matchInfo?.match?.plagiarism_type && matchInfo.match.plagiarism_type >= 2 && (
-                      <Tooltip label={t(`page.matchTypes.${matchInfo.match.plagiarism_type}`, `Type ${matchInfo.match.plagiarism_type}`)} placement="top">
+                      <Tooltip label={t(`page.matchTypes.${matchInfo.match.plagiarism_type}`)} placement="top">
                       <Badge
                         size="sm"
                         colorScheme={

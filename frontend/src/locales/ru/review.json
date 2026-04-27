@@ -1,10 +1,12 @@
 {
   "reviewProgress": "Прогресс проверки",
   "pairsReviewed": "{{reviewed}} / {{total}} пар проверено",
+  "filesConfirmed": "{{confirmed}} / {{total}} файлов подтверждено",
   "unreviewed": "не проверено",
   "complete": "Завершено ✓",
   "bulkConfirm": "Автоматическая проверка",
   "bulkClear": "Автоматическая очистка",
+  "clearAllAndFinish": "Очистить всё и завершить проверку",
   "exportHtml": "Экспорт HTML",
   "refresh": "Обновить",
   "filters": "Фильтры:",
@@ -65,5 +67,6 @@
   "confirm": "Подтвердить",
   "clear": "Очистить",
   "reviewInDetail": "Подробнее",
-  "topSimilarities": "Топ схожести"
+  "topSimilarities": "Топ схожести",
+  "vs": "против"
 }

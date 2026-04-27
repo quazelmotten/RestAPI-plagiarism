@@ -206,7 +206,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
         return res.data;
       } catch (err: unknown) {
         const axiosErr = err as { response?: { data?: { error_details?: string } } };
-        const msg = axiosErr.response?.data?.error_details || 'No access to this assignment';
+        const msg = axiosErr.response?.data?.error_details || t('common:errors.noAccess');
         throw new Error(msg);
       }
     },
@@ -215,7 +215,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
 
   useEffect(() => {
     if (queryError) {
-      const msg = queryError instanceof Error ? queryError.message : 'No access to this assignment';
+      const msg = queryError instanceof Error ? queryError.message : t('common:errors.noAccess');
       toast({ title: t('common:error'), description: msg, status: 'error', duration: 5000 });
     }
   }, [queryError, toast, t]);
@@ -328,7 +328,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
   const onDrop = useCallback(
     (acceptedFiles: File[], rejected: { file: File }[]) => {
       if (rejected.length > 0) {
-        toast({ title: `${rejected.length} ${t('rejected')}`, status: 'warning', duration: 4000 });
+        toast({ title: `${rejected.length} ${t('upload:rejected')}`, description: t('upload:fileLimitDescription', { max: MAX_FILES }), status: 'warning', duration: 4000 });
       }
       setFiles((prev) => {
         const existingKeys = new Set(prev.map(getFileKey));
@@ -449,7 +449,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
       const res = await api.get(API_ENDPOINTS.FILE_CONTENT(fileId));
       setFileContent(res.data.content ?? '');
     } catch {
-      setFileContent('// Failed to load file content');
+      setFileContent(t('common:errors.failedToLoad'));
     } finally {
       setLoadingFileContent(false);
     }
@@ -478,7 +478,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
   }
 
   if (!assignmentData) {
-    const errorMessage = queryError instanceof Error ? queryError.message : (t('common:noAccess') || 'No access to this assignment');
+    const errorMessage = queryError instanceof Error ? queryError.message : t('common:errors.noAccess');
     return (
       <Box textAlign="center" py={12}>
         <Text fontSize="lg" color="red.500">{errorMessage}</Text>
@@ -506,10 +506,6 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
       onMouseDown={(e: React.MouseEvent) => handleResizeStart(col, e)}
     />
   );
-
-  // Compute current page display range
-  const pageStart = pairsPage * PAIRS_PER_PAGE + 1;
-  const pageEnd = Math.min((pairsPage + 1) * PAIRS_PER_PAGE, totalPairsCount);
 
   return (
     <Box display="flex" flexDirection="column" flex={1} minH={0} overflow="hidden" position="relative">
@@ -576,7 +572,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                     <Button colorScheme="brand" size="xs" onClick={handleUpload} isLoading={isUploading} loadingText={t('uploading')} leftIcon={<FiCheckCircle />}>
                       {t('upload', { count: files.length, size: formatFileSize(totalSize) })}
                     </Button>
-                    <IconButton aria-label="Clear files" icon={<FiX />} size="xs" variant="ghost" colorScheme="red" onClick={() => setFiles([])} isDisabled={isUploading} />
+                    <IconButton aria-label={t('common:aria.clearFiles')} icon={<FiX />} size="xs" variant="ghost" colorScheme="red" onClick={() => setFiles([])} isDisabled={isUploading} />
                   </HStack>
                 )}
               </Flex>
@@ -662,7 +658,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                     <Text fontSize="sm" fontWeight="semibold">{t('common:all')} {t('common:tasks')}</Text>
                     <Badge colorScheme="blue" fontSize="xs">{aggFilesCount} {t('common:files')}</Badge>
                     <Badge fontSize="xs">{assignmentData.total_pairs} {t('common:pairs')}</Badge>
-                    {aggHighCount > 0 && <Badge colorScheme="red" fontSize="xs">{aggHighCount} high</Badge>}
+                    {aggHighCount > 0 && <Badge colorScheme="red" fontSize="xs">{aggHighCount} {t('common:labels.high')}</Badge>}
                     <Badge colorScheme={getSimilarityColor(aggAvgSim)} fontSize="xs">{(aggAvgSim * 100).toFixed(1)}% avg</Badge>
                   </>
                 ) : (
@@ -737,12 +733,12 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                   </InputGroup>
                   <Select size="sm" w="160px" value={similarityFilter} onChange={(e) => setSimilarityFilter(e.target.value)}>
                     <option value="all">{t('common:all')}</option>
-                    <option value="high">High (&ge;80%)</option>
-                    <option value="medium">Medium (50-80%)</option>
-                    <option value="low">Low (&lt;50%)</option>
+                    <option value="high">{t('common:labels.highOption')}</option>
+                    <option value="medium">{t('common:labels.mediumOption')}</option>
+                    <option value="low">{t('common:labels.lowOption')}</option>
                   </Select>
                   <Text fontSize="sm" color={mutedColor}>
-                    {pageStart}–{pageEnd} of {totalPairsCount}
+                    {t('common:labels.of', { total: totalPairsCount })}
                   </Text>
                 </HStack>
 
@@ -794,31 +790,31 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                 {/* Server-side pagination */}
                 <HStack justify="center" py={2} flexShrink={0} spacing={2}>
                   <IconButton
-                    aria-label="First page"
+                    aria-label={t('common:aria.firstPage')}
                     icon={<Icon as={FiChevronLeft} />}
                     size="sm" variant="ghost"
                     isDisabled={pairsPage === 0 || isFetching}
                     onClick={() => setPairsPage(0)}
                   />
                   <IconButton
-                    aria-label="Previous page"
+                    aria-label={t('common:aria.previousPage')}
                     icon={<Icon as={FiChevronLeft} transform="rotate(0deg)" />}
                     size="sm" variant="ghost"
                     isDisabled={pairsPage === 0 || isFetching}
                     onClick={() => setPairsPage(p => Math.max(0, p - 1))}
                   />
                   <Text fontSize="xs" color={mutedColor} minW="100px" textAlign="center">
-                    Page {pairsPage + 1} / {totalPages}
+                    {t('common:pageOf', { current: pairsPage + 1, total: totalPages })}
                   </Text>
                   <IconButton
-                    aria-label="Next page"
+                    aria-label={t('common:aria.nextPage')}
                     icon={<Icon as={FiChevronLeft} transform="rotate(180deg)" />}
                     size="sm" variant="ghost"
                     isDisabled={pairsPage >= totalPages - 1 || isFetching}
                     onClick={() => setPairsPage(p => Math.min(totalPages - 1, p + 1))}
                   />
                   <IconButton
-                    aria-label="Last page"
+                    aria-label={t('common:aria.lastPage')}
                     icon={<Icon as={FiChevronLeft} transform="rotate(180deg)" />}
                     size="sm" variant="ghost"
                     isDisabled={pairsPage >= totalPages - 1 || isFetching}
@@ -828,13 +824,13 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                     <Input
                       size="xs"
                       w="60px"
-                      placeholder="Go to..."
+                      placeholder={t('common:placeholders.goToPage')}
                       value={pairsGoPage}
                       onChange={(e) => setPairsGoPage(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') handlePairsGoToPage(); }}
                     />
                     <Button size="xs" onClick={handlePairsGoToPage} isDisabled={!pairsGoPage || isFetching}>
-                      Go
+                      {t('common:buttons.go')}
                     </Button>
                   </HStack>
                 </HStack>
@@ -861,7 +857,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                 <HStack spacing={3} mb={3} flexShrink={0} flexWrap="wrap">
                   <InputGroup size="sm" maxW="250px">
                     <InputLeftElement pointerEvents="none"><Icon as={FiSearch} color={mutedColor} /></InputLeftElement>
-                    <Input placeholder="Filter by filename..." value={fileFilterName} onChange={(e) => setFileFilterName(e.target.value)} />
+                    <Input placeholder={t('common:placeholders.filterByFilename')} value={fileFilterName} onChange={(e) => setFileFilterName(e.target.value)} />
                   </InputGroup>
                   <Select size="sm" w="180px" value={fileFilterTask} onChange={(e) => { setFileFilterTask(e.target.value); setFilesPage(0); }}>
                     <option value="">{t('review:allTasks')}</option>
