@@ -353,7 +353,7 @@ const Sidebar: React.FC = () => {
         h="full"
         w={{ base: 0, lg: SIDEBAR_WIDTH_PX }}
         bg={bgColor}
-        borderRight={{ base: 'none', lg: '1px' }}
+        borderRight="1px"
         borderColor={borderColor}
         py={6}
         px={4}

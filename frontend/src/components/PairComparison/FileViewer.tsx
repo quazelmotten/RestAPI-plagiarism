@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useRef, useEffect } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import {
   Card,
   CardBody,
@@ -12,7 +12,6 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { Highlight, themes } from 'prism-react-renderer';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
 import type { PlagiarismMatch } from '../../types';
 import {
@@ -120,7 +119,7 @@ const getMatchBorder = (match: PlagiarismMatch | null): string => {
 const getMatchTooltip = (match: PlagiarismMatch | null, t: (key: string, opts?: any) => string): string => {
   if (!match) return '';
   const ptype = match.plagiarism_type;
-  const label = ptype ? t(`page.matchTypes.${ptype}`) : t('page.match');
+  const label = ptype ? t(`page.matchTypes.${ptype}`, `Type ${ptype}`) : t('page.match');
   if (match.description) {
     return `${label}: ${match.description}`;
   }
@@ -170,9 +169,6 @@ const FileViewer: React.FC<FileViewerProps> = ({
   const textColor = useColorModeValue('gray.800', 'gray.100');
   const lineNumberColor = useColorModeValue('gray.500', 'gray.400');
   const syntaxTheme = colorMode === 'dark' ? themes.vsDark : themes.vsLight;
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const LINE_HEIGHT = 24; // px per line (font-size sm + py)
 
   const lines = useMemo(() => content.split('\n'), [content]);
 
@@ -221,20 +217,6 @@ const FileViewer: React.FC<FileViewerProps> = ({
     onJumpToMatch(lineNumber, targetViewportOffset, isFileA);
   }, [scrollContainerRef, onJumpToMatch, isFileA]);
 
-  const virtualizer = useVirtualizer({
-    count: displayedLines.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => LINE_HEIGHT,
-    overscan: 20,
-  });
-
-  // Sync the external scrollContainerRef with our internal ref
-  useEffect(() => {
-    if (containerRef.current && scrollContainerRef) {
-      (scrollContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = containerRef.current;
-    }
-  }, [scrollContainerRef]);
-
   return (
     <Card flex={1} display="flex" flexDirection="column" overflow="hidden">
       <CardBody p={0} flex={1} display="flex" flexDirection="column" overflow="hidden">
@@ -244,7 +226,7 @@ const FileViewer: React.FC<FileViewerProps> = ({
              <Badge colorScheme={isFileA ? 'blue' : 'green'}>{language || t('common:unknown')}</Badge>
           </HStack>
           <Box
-            ref={containerRef}
+            ref={scrollContainerRef}
             flex={1}
             overflowY="auto"
             overflowX="auto"
@@ -252,112 +234,104 @@ const FileViewer: React.FC<FileViewerProps> = ({
             fontSize="sm"
             minW={0}
           >
-            <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
-              {virtualizer.getVirtualItems().map((virtualRow) => {
-                const { originalIdx, originalLineNumber, line } = displayedLines[virtualRow.index];
-                const matchInfo = lineMatchMap[originalIdx];
-                const isHovered = matchInfo !== null && matchInfo.matchIndex === hoveredMatchIndex;
-                const tooltip = getMatchTooltip(matchInfo?.match ?? null, t);
-                const bg = getMatchBg(matchInfo?.match ?? null, isHovered);
-                const border = getMatchBorder(matchInfo?.match ?? null);
+            {displayedLines.map(({ originalIdx, originalLineNumber, line }, displayIdx) => {
+              const matchInfo = lineMatchMap[originalIdx];
+              const isHovered = matchInfo !== null && matchInfo.matchIndex === hoveredMatchIndex;
+               const tooltip = getMatchTooltip(matchInfo?.match ?? null, t);
+              const bg = getMatchBg(matchInfo?.match ?? null, isHovered);
+              const border = getMatchBorder(matchInfo?.match ?? null);
 
-                return (
-                  <Flex
-                    key={originalIdx}
-                    ref={(el) => getLineRef(originalIdx, el)}
-                    position="absolute"
-                    top={0}
-                    left={0}
-                    width="100%"
-                    transform={`translateY(${virtualRow.start}px)`}
-                    bg={bg}
-                    borderLeftWidth={matchInfo ? 4 : 0}
-                    borderLeftColor={border}
-                    onMouseEnter={() => onHoverMatch(matchInfo ? matchInfo.matchIndex : null)}
-                    onMouseLeave={() => onHoverMatch(null)}
-                    onClick={(e) => matchInfo && handleClick(originalLineNumber, e)}
-                    cursor={matchInfo ? 'pointer' : 'default'}
-                    role={matchInfo ? 'button' : undefined}
-                    tabIndex={matchInfo ? 0 : undefined}
-                    minW="fit-content"
-                    title={tooltip || undefined}
-                    onKeyDown={(e) => {
-                      if (matchInfo && (e.key === 'Enter' || e.key === ' ')) {
-                        e.preventDefault();
-                        handleClick(originalLineNumber, e);
-                      }
-                    }}
+              return (
+                <Flex
+                  key={originalIdx}
+                  ref={(el) => getLineRef(originalIdx, el)}
+                  bg={bg}
+                  borderLeftWidth={matchInfo ? 4 : 0}
+                  borderLeftColor={border}
+                  onMouseEnter={() => onHoverMatch(matchInfo ? matchInfo.matchIndex : null)}
+                  onMouseLeave={() => onHoverMatch(null)}
+                  onClick={(e) => matchInfo && handleClick(originalLineNumber, e)}
+                  cursor={matchInfo ? 'pointer' : 'default'}
+                  role={matchInfo ? 'button' : undefined}
+                  tabIndex={matchInfo ? 0 : undefined}
+                  minW="fit-content"
+                  title={tooltip || undefined}
+                  onKeyDown={(e) => {
+                    if (matchInfo && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      handleClick(originalLineNumber, e);
+                    }
+                  }}
+                >
+                  <Box
+                    w="50px"
+                    minW="50px"
+                    bg={lineNumberBg}
+                    textAlign="right"
+                    pr={2}
+                    py={0.5}
+                    color={lineNumberColor}
+                    fontSize="xs"
+                    borderRightWidth={1}
+                    borderRightColor={borderColor}
+                    userSelect="none"
                   >
-                    <Box
-                      w="50px"
-                      minW="50px"
-                      bg={lineNumberBg}
-                      textAlign="right"
-                      pr={2}
-                      py={0.5}
-                      color={lineNumberColor}
-                      fontSize="xs"
-                      borderRightWidth={1}
-                      borderRightColor={borderColor}
-                      userSelect="none"
-                    >
-                      {originalLineNumber}
-                    </Box>
-                    <Box
-                      flex={1}
-                      pl={3}
-                      py={0.5}
-                      whiteSpace="pre-wrap"
-                      wordBreak="break-word"
-                      color={textColor}
-                      minWidth={0}
-                    >
-                      {syntaxHighlight ? (
-                        <Highlight
-                          code={line}
-                          language={prismLanguageMap[language] || 'text'}
-                          theme={syntaxTheme}
-                        >
-                          {({ tokens, getLineProps, getTokenProps }) => (
-                            <>
-                              {tokens.map((lineTokens, lineIdx) => (
-                                <span key={lineIdx} {...getLineProps({ line: lineTokens })}>
-                                  {lineTokens.map((token, tokenIdx) => (
-                                    <span key={tokenIdx} {...getTokenProps({ token })}>
-                                      {token.content}
-                                    </span>
-                                  ))}
-                                </span>
-                              ))}
-                            </>
-                          )}
-                        </Highlight>
-                      ) : (
-                        line || ' '
-                      )}
-                    </Box>
-                    {matchInfo?.match?.plagiarism_type && matchInfo.match.plagiarism_type >= 2 && (
-                        <Tooltip label={t(`page.matchTypes.${matchInfo.match.plagiarism_type}`)} placement="top">
-                        <Badge
-                          size="sm"
-                          colorScheme={
-                            matchInfo.match.plagiarism_type === 2 ? 'yellow' :
-                            matchInfo.match.plagiarism_type === 3 ? 'blue' :
-                            matchInfo.match.plagiarism_type === 4 ? 'red' : 'gray'
-                          }
-                          mr={2}
-                          alignSelf="center"
-                          fontSize="2xs"
-                          opacity={0.8}
-                        >
-                          T{matchInfo.match.plagiarism_type}
-                        </Badge>
-                      </Tooltip>
+                    {originalLineNumber}
+                  </Box>
+                  <Box
+                    flex={1}
+                    pl={3}
+                    py={0.5}
+                    whiteSpace="pre-wrap"
+                    wordBreak="break-word"
+                    color={textColor}
+                    minWidth={0}
+                  >
+                    {syntaxHighlight ? (
+                      <Highlight
+                        code={line}
+                        language={prismLanguageMap[language] || 'text'}
+                        theme={syntaxTheme}
+                      >
+                        {({ tokens, getLineProps, getTokenProps }) => (
+                          <>
+                            {tokens.map((lineTokens, lineIdx) => (
+                              <span key={lineIdx} {...getLineProps({ line: lineTokens })}>
+                                {lineTokens.map((token, tokenIdx) => (
+                                  <span key={tokenIdx} {...getTokenProps({ token })}>
+                                    {token.content}
+                                  </span>
+                                ))}
+                              </span>
+                            ))}
+                          </>
+                        )}
+                      </Highlight>
+                    ) : (
+                      line || ' '
                     )}
-                  </Flex>
-                );
-              })}
-            </div>
+                  </Box>
+                  {matchInfo?.match?.plagiarism_type && matchInfo.match.plagiarism_type >= 2 && (
+                      <Tooltip label={t(`page.matchTypes.${matchInfo.match.plagiarism_type}`, `Type ${matchInfo.match.plagiarism_type}`)} placement="top">
+                      <Badge
+                        size="sm"
+                        colorScheme={
+                          matchInfo.match.plagiarism_type === 2 ? 'yellow' :
+                          matchInfo.match.plagiarism_type === 3 ? 'blue' :
+                          matchInfo.match.plagiarism_type === 4 ? 'red' : 'gray'
+                        }
+                        mr={2}
+                        alignSelf="center"
+                        fontSize="2xs"
+                        opacity={0.8}
+                      >
+                        T{matchInfo.match.plagiarism_type}
+                      </Badge>
+                    </Tooltip>
+                  )}
+                </Flex>
+              );
+            })}
           </Box>
         </Flex>
       </CardBody>
