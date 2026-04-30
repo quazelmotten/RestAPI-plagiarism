@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from src.app import app
+from app import app
 
 from auth.models import User
 from auth.service import create_access_token, get_password_hash

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -34,10 +34,11 @@ function Login() {
   const toast = useToast();
   const { t, i18n } = useTranslation();
 
-  if (isAuthenticated()) {
-    navigate('/dashboard');
-    return null;
-  }
+  useEffect(() => {
+    if (isAuthenticated()) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,8 +58,8 @@ function Login() {
           status: 'success',
           duration: 3000,
         });
+        navigate('/dashboard', { replace: true });
       }
-      // Navigation is handled automatically at the top of the component
     } catch (error: unknown) {
       const message = error instanceof Error 
         ? error.message 

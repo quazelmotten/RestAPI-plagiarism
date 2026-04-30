@@ -29,7 +29,7 @@ import { FiZap, FiDownload, FiRefreshCw, FiChevronLeft, FiChevronRight, FiHelpCi
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../../services/api';
 import type { ReviewQueueResponse, PlagiarismResult, BulkConfirmResponse, ReviewStatusSummary } from '../../types';
-import { useExportReview, useReviewStatus, usePairsByStatus, useBulkClear } from '../../hooks/useGrading';
+import { useExportReview, useReviewStatus, usePairsByStatus, useBulkClear, useExportPdf, useExportAllPdf } from '../../hooks/useGrading';
 import { usePagination } from '../../hooks/usePagination';
 import { ReviewTabs } from './ReviewTabs';
 import { ReviewToolbar } from './ReviewToolbar';
@@ -73,6 +73,8 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
   // Mutations
   const bulkClearMutation = useBulkClear();
   const exportReview = useExportReview();
+  const exportPdfMutation = useExportPdf();
+  const exportAllPdfMutation = useExportAllPdf();
 
   // Colors for dark mode
   const mutedTextColor = useColorModeValue("gray.500", "gray.400");
@@ -259,22 +261,38 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const threshold = similarityFilter === 'all' ? 0.3 : parseFloat(similarityFilter) || 0.3;
-      const result = await exportReview.mutateAsync({ assignmentId, threshold });
-      const blob = new Blob([result.html_content], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = result.filename;
-      link.click();
-      URL.revokeObjectURL(url);
-      toast({ title: t('common:toasts.exportComplete'), description: t('common:toasts.htmlReportDownloaded'), status: 'success', duration: 3000 });
-    } catch (error) {
-      toast({ title: t('common:toasts.exportFailed'), description: t('common:toasts.failedToGenerateHtml'), status: 'error', duration: 3000 });
-    }
-  };
+const handleExport = async () => {
+     try {
+       const threshold = similarityFilter === 'all' ? 0.3 : parseFloat(similarityFilter) || 0.3;
+       const result = await exportReview.mutateAsync({ assignmentId, threshold });
+       const blob = new Blob([result.html_content], { type: 'text/html' });
+       const url = URL.createObjectURL(blob);
+       const link = document.createElement('a');
+       link.href = url;
+       link.download = result.filename;
+       link.click();
+       URL.revokeObjectURL(url);
+       toast({ title: t('common:toasts.exportComplete'), description: t('common:toasts.htmlReportDownloaded'), status: 'success', duration: 3000 });
+     } catch (error) {
+       toast({ title: t('common:toasts.exportFailed'), description: t('common:toasts.failedToGenerateHtml'), status: 'error', duration: 3000 });
+     }
+   };
+
+   const handleExportPdfPair = async (resultId: string) => {
+     if (!resultId) {
+       toast({ title: t('common:errors.generic'), description: t('review:noResultId'), status: 'error', duration: 3000 });
+       return;
+     }
+     
+     try {
+       // Call the PDF export endpoint - the mutation handles the download
+       await exportPdfMutation.mutateAsync({ assignmentId, resultId });
+       // Success toast is shown automatically by the mutation
+     } catch (error) {
+       console.error('PDF export error:', error);
+       toast({ title: t('common:toasts.exportFailed'), description: t('review:pdfExportFailed'), status: 'error', duration: 3000 });
+     }
+   };
 
   const handleSelectItem = (item: PlagiarismResult, index: number) => {
     setSelectedIndex(index);
@@ -427,6 +445,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
         selectedIndex={selectedIndex}
         onSelectItem={handleSelectItem}
         onAction={handleItemAction}
+        onExportPdf={handleExportPdfPair}
       />
 
       {/* Keyboard Shortcuts Help Dialog */}

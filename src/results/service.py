@@ -4,6 +4,7 @@ Results domain service - business logic for similarity results.
 
 import html
 from datetime import UTC, datetime
+from typing import AsyncGenerator
 from uuid import UUID
 
 from shared.models import Assignment, PlagiarismTask, ReviewNote, SimilarityResult
@@ -131,14 +132,18 @@ class ResultService:
             created_at=now,
         )
 
-    async def confirm_plagiarism(self, result_id: str) -> ResultItem:
+    async def confirm_plagiarism(self, result_id: str, current_user) -> ResultItem:
         """Confirm plagiarism for a pair - marks disposition and both files as confirmed."""
+        from uuid import UUID
+
         result = await self.db.get(SimilarityResult, UUID(result_id))
         if not result:
             raise NotFoundError("Result not found")
 
         result.review_disposition = "plagiarism"
         result.reviewed_at = datetime.now(UTC)
+        result.reviewed_by = current_user.id
+        result.detection_source = "manual"
 
         file_a = await self.db.get(FileModel, result.file_a_id)
         file_b = await self.db.get(FileModel, result.file_b_id)
@@ -153,7 +158,7 @@ class ResultService:
 
         return await self.repo._map_to_result_item(result)
 
-    async def clear_pair(self, result_id: str) -> ResultItem:
+    async def clear_pair(self, result_id: str, current_user) -> ResultItem:
         """Clear a pair - marks as reviewed but not plagiarism."""
         result = await self.db.get(SimilarityResult, UUID(result_id))
         if not result:
@@ -161,13 +166,15 @@ class ResultService:
 
         result.review_disposition = "clear"
         result.reviewed_at = datetime.now(UTC)
+        result.reviewed_by = current_user.id
+        result.detection_source = "manual"
 
         await self.db.commit()
         await self.db.refresh(result)
 
         return await self.repo._map_to_result_item(result)
 
-    async def undo_review(self, result_id: str) -> ResultItem:
+    async def undo_review(self, result_id: str, current_user) -> ResultItem:
         """Undo review - resets disposition to unreviewed."""
         result = await self.db.get(SimilarityResult, UUID(result_id))
         if not result:
@@ -177,6 +184,8 @@ class ResultService:
 
         result.review_disposition = None
         result.reviewed_at = None
+        result.reviewed_by = None
+        result.detection_source = None
 
         if previous_disposition == "plagiarism":
             file_a = await self.db.get(FileModel, result.file_a_id)
@@ -192,11 +201,11 @@ class ResultService:
         return await self.repo._map_to_result_item(result)
 
     # Keep skip_pair as alias for clear_pair for backward compatibility
-    async def skip_pair(self, result_id: str) -> ResultItem:
+    async def skip_pair(self, result_id: str, current_user) -> ResultItem:
         """Skip a pair - marks as reviewed but not confirmed (alias for clear_pair)."""
-        return await self.clear_pair(result_id)
+        return await self.clear_pair(result_id, current_user)
 
-    async def bulk_confirm(self, assignment_id: str, threshold: float) -> BulkConfirmResponse:
+    async def bulk_confirm(self, assignment_id: str, threshold: float, current_user) -> BulkConfirmResponse:
         """Bulk confirm all pairs above threshold."""
         query = (
             select(SimilarityResult)
@@ -224,6 +233,8 @@ class ResultService:
 
             r.review_disposition = "bulk_confirmed"
             r.reviewed_at = datetime.now(UTC)
+            r.reviewed_by = current_user.id
+            r.detection_source = "manual"
 
             confirmed_pairs += 1
 
@@ -237,7 +248,7 @@ class ResultService:
             skipped_pairs=len(results) - confirmed_pairs,
         )
 
-    async def bulk_clear(self, assignment_id: str, threshold: float) -> BulkConfirmResponse:
+    async def bulk_clear(self, assignment_id: str, threshold: float, current_user) -> BulkConfirmResponse:
         """Clear all unreviewed pairs below threshold (set as not plagiarized)."""
         query = (
             select(SimilarityResult)
@@ -257,6 +268,8 @@ class ResultService:
             if r.review_disposition is None:
                 r.review_disposition = "clear"
                 r.reviewed_at = datetime.now(UTC)
+                r.reviewed_by = current_user.id
+                r.detection_source = "manual"
                 cleared_pairs += 1
             else:
                 skipped_pairs += 1
@@ -837,3 +850,106 @@ class ResultService:
                 )
 
         return "\n".join(html_lines)
+
+    async def build_report_payload(
+        self,
+        assignment_id: str,
+        result_id: str,
+        current_user,
+    ) -> dict:
+        """Build the payload dict for the PDF template for a single result."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        from uuid import UUID
+
+        from auth.models import User
+
+        result = await self.db.get(SimilarityResult, UUID(result_id))
+        if not result:
+            raise NotFoundError("Result not found")
+
+        assignment = await self.db.get(Assignment, UUID(assignment_id))
+        if not assignment:
+            raise NotFoundError("Assignment not found")
+
+        file_a = await self.db.get(FileModel, result.file_a_id)
+        file_b = await self.db.get(FileModel, result.file_b_id)
+        if not file_a or not file_b:
+            logger.error(f"Files not found for result {result_id}: file_a={file_a}, file_b={file_b}")
+            raise NotFoundError("File not found")
+
+        reviewer_email = None
+        if result.reviewed_by:
+            reviewer_id = str(result.reviewed_by) if result.reviewed_by else None
+            if reviewer_id:
+                reviewer = await self.db.get(User, UUID(reviewer_id))
+                if reviewer:
+                    reviewer_email = reviewer.email
+
+        matches = result.matches or []
+        logger.info(f"build_report_payload: matches type={type(matches)}, len={len(matches) if isinstance(matches, list) else 'N/A'}")
+        if matches and len(matches) > 0:
+            logger.info(f"build_report_payload: first match type={type(matches[0])}, value={str(matches[0])[:200]}")
+
+        assignment_data = {
+            "id": str(assignment.id),
+            "name": assignment.name,
+        }
+
+        file_a_data = {
+            "id": str(file_a.id),
+            "filename": file_a.filename,
+            "file_path": file_a.file_path,
+            "created_at": file_a.created_at.isoformat() if file_a.created_at else "",
+        }
+
+        file_b_data = {
+            "id": str(file_b.id),
+            "filename": file_b.filename,
+            "file_path": file_b.file_path,
+            "created_at": file_b.created_at.isoformat() if file_b.created_at else "",
+        }
+
+        result_data = {
+            "reviewed_at": result.reviewed_at.isoformat() if result.reviewed_at else None,
+            "detection_source": result.detection_source,
+        }
+
+        from reports.generator import build_report_payload as generate_payload
+
+        return await generate_payload(
+            result_data,
+            file_a_data,
+            file_b_data,
+            assignment_data,
+            matches,
+            reviewer_email,
+        )
+
+    async def iter_report_payloads(
+        self,
+        assignment_id: str,
+        current_user,
+    ) -> AsyncGenerator[tuple[dict, str], None]:
+        """Yield payload dicts for all confirmed pairs in an assignment."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        query = (
+            select(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(SimilarityResult.review_disposition == "plagiarism")
+            .order_by(SimilarityResult.ast_similarity.desc())
+        )
+        result = await self.db.execute(query)
+        results = result.scalars().all()
+
+        for r in results:
+            try:
+                payload = await self.build_report_payload(assignment_id, str(r.id), current_user)
+                yield payload, str(r.id)
+            except Exception as e:
+                logger.error(f"Failed to build payload for result {r.id}: {e}")
+                continue

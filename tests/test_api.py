@@ -1,7 +1,7 @@
 import os
 import sys
 import tempfile
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -12,6 +12,7 @@ _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_project_root, "src"))
 
 from app import app  # noqa: E402
+import database as db_module
 
 
 @pytest.fixture(scope="session")
@@ -79,20 +80,27 @@ def set_env_vars(test_storage_dir):
 @pytest_asyncio.fixture
 async def client():
     """Async test client fixture."""
-    # Ensure minimal app state to avoid startup dependencies
     from clients.redis_client import RedisClient
+
+    mock_session = MagicMock()
+    mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+    mock_session.commit = AsyncMock()
+    mock_session.close = AsyncMock()
+
+    async def mock_get_session():
+        yield mock_session
+
+    app.dependency_overrides[db_module.get_async_session] = mock_get_session
 
     if not hasattr(app.state, "redis_client"):
         app.state.redis_client = RedisClient()
     if not hasattr(app.state, "rabbitmq"):
-        # Create a minimal dummy RabbitMQ with is_connected attribute
         class DummyRabbitMQ:
             is_connected = False
             publish_message = AsyncMock()
 
         app.state.rabbitmq = DummyRabbitMQ()
     if not hasattr(app.state, "ws_manager"):
-        # Dummy ws manager with start method (noop)
         class DummyWSManager:
             async def start(self):
                 pass
@@ -105,6 +113,8 @@ async def client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+    app.dependency_overrides.clear()
 
 
 class TestHealthEndpoint:

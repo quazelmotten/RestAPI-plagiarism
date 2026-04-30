@@ -3,20 +3,21 @@ import {
   HStack, Text, Badge, Button, useToast, IconButton, Tooltip, useColorModeValue
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
-import { FiCheck, FiX, FiEye } from 'react-icons/fi';
+import { FiCheck, FiX, FiEye, FiDownload } from 'react-icons/fi';
 import api, { API_ENDPOINTS } from '../../services/api';
 import type { PlagiarismResult } from '../../types';
 
 interface ReviewQueueItemProps {
-  item: PlagiarismResult;
-  index: number;
-  onReview: (pair: PlagiarismResult, allPairs?: PlagiarismResult[]) => void;
-  onAction?: () => void;
-}
+   item: PlagiarismResult;
+   index: number;
+   onReview: (pair: PlagiarismResult, allPairs?: PlagiarismResult[]) => void;
+   onAction?: () => void;
+   onExportPdf?: (resultId: string) => void;
+ }
 
 const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({ 
-  item, index, onReview, onAction 
-}) => {
+   item, index, onReview, onAction, onExportPdf 
+ }) => {
   const { t } = useTranslation(['review']);
   const [confirming, setConfirming] = useState(false);
   const [skipping, setSkipping] = useState(false);
@@ -114,12 +115,12 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
       </Badge>
       
       <HStack spacing={1}>
-        <Tooltip label="Review in detail">
+<Tooltip label="Review in detail">
           <IconButton
             size="sm"
             icon={<FiEye />}
             aria-label={`Review ${item.file_a.filename} vs ${item.file_b.filename}`}
-            onClick={() => onReview(item)}
+            onClick={(e) => { e.stopPropagation(); onReview(item); }}
             _focus={{ boxShadow: 'outline' }}
           />
         </Tooltip>
@@ -129,7 +130,7 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
             size="sm"
             colorScheme="green"
             leftIcon={<FiCheck />}
-            onClick={handleConfirm}
+            onClick={(e) => { e.stopPropagation(); handleConfirm(); }}
             isLoading={confirming}
             _focus={{ boxShadow: 'outline' }}
           >
@@ -137,17 +138,34 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
           </Button>
         </Tooltip>
         
-        <Tooltip label={t('review:clearNoPlagiarism')}>
+<Tooltip label={t('review:clearNoPlagiarism')}>
           <Button
             size="sm"
             colorScheme="gray"
-            onClick={handleSkip}
+            onClick={(e) => { e.stopPropagation(); handleSkip(); }}
             isLoading={skipping}
             _focus={{ boxShadow: 'outline' }}
           >
             {t('review:clear')}
-          </Button>
-        </Tooltip>
+            </Button>
+          </Tooltip>
+          
+          {/* Export PDF button - for any pair with results */}
+          {item.ast_similarity > 0 && onExportPdf && (
+            <Tooltip label={t('review:exportPdf')}>
+              <Button
+                size="sm"
+                variant="outline"
+                leftIcon={<FiDownload />}
+                colorScheme="teal"
+                onClick={(e) => { e.stopPropagation(); onExportPdf?.(item.id || ''); }}
+                _focus={{ boxShadow: 'outline' }}
+                isDisabled={!item.id}
+              >
+                {t('review:exportPdf')}
+              </Button>
+            </Tooltip>
+          )}
       </HStack>
     </HStack>
   );

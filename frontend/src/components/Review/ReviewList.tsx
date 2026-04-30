@@ -13,14 +13,15 @@ import ReviewQueueItem from './ReviewQueueItem';
 import type { PlagiarismResult } from '../../types';
 
 interface ReviewListProps {
-  items: PlagiarismResult[];
-  isLoading: boolean;
-  isEmpty: boolean;
-  isEmptyMessage?: string;
-  selectedIndex: number;
-  onSelectItem: (item: PlagiarismResult, index: number) => void;
-  onAction: (item: PlagiarismResult) => void;
-}
+   items: PlagiarismResult[];
+   isLoading: boolean;
+   isEmpty: boolean;
+   isEmptyMessage?: string;
+   selectedIndex: number;
+   onSelectItem: (item: PlagiarismResult, index: number) => void;
+   onAction: (item: PlagiarismResult) => void;
+   onExportPdf: (resultId: string) => void;
+ }
 
 export const ReviewList: React.FC<ReviewListProps> = ({
   items,
@@ -30,6 +31,7 @@ export const ReviewList: React.FC<ReviewListProps> = ({
   selectedIndex,
   onSelectItem,
   onAction,
+  onExportPdf,
 }) => {
   const { t } = useTranslation(['common', 'review']);
   const defaultEmptyMessage = t('labels.noPairsFound');
@@ -57,31 +59,32 @@ export const ReviewList: React.FC<ReviewListProps> = ({
     );
   }
 
-  return (
-    <Card flex="1" display="flex" flexDirection="column" minH={0}>
-      <Box flex="1" overflowY="auto" minH={0}>
-        <VStack align="stretch" spacing={2} p={2}>
-          {items.map((item, idx) => (
-            <Box
-              key={item.id || `${item.file_a?.id}-${item.file_b?.id}`}
-              borderWidth={selectedIndex === idx ? '2px' : '1px'}
-              borderColor={selectedIndex === idx ? 'brand.500' : defaultBorderColor}
-              borderRadius="md"
-              transition="border-color 0.15s"
-              cursor="pointer"
-              _hover={{ borderColor: hoverBorderColor }}
-              onClick={() => onSelectItem(item, idx)}
-            >
-              <ReviewQueueItem
-                item={item}
-                index={idx}
-                onReview={(pair) => onSelectItem(pair, idx)}
-                onAction={() => onAction(item)}
-              />
-            </Box>
-          ))}
-        </VStack>
-      </Box>
-    </Card>
-  );
+return (
+     <Card flex="1" display="flex" flexDirection="column" minH={0}>
+       <Box flex="1" overflowY="auto" minH={0}>
+         <VStack align="stretch" spacing={2} p={2}>
+           {items.map((item, idx) => (
+             <Box
+               key={item.id || `${item.file_a?.id}-${item.file_b?.id}`}
+               borderWidth={selectedIndex === idx ? '2px' : '1px'}
+               borderColor={selectedIndex === idx ? 'brand.500' : defaultBorderColor}
+               borderRadius="md"
+               transition="border-color 0.15s"
+               cursor="pointer"
+               _hover={{ borderColor: hoverBorderColor }}
+               onClick={() => onSelectItem(item, idx)}
+             >
+               <ReviewQueueItem
+                 item={item}
+                 index={idx}
+                 onReview={(pair) => onSelectItem(pair, idx)}
+                 onAction={() => onAction(item)}
+                 onExportPdf={() => onExportPdf(item.id || '')}
+               />
+             </Box>
+           ))}
+         </VStack>
+       </Box>
+     </Card>
+   );
 };

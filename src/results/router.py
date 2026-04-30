@@ -184,7 +184,7 @@ async def confirm_plagiarism(
     current_user: User = Depends(get_current_user),
 ):
     """Confirm plagiarism for a pair - marks both files as confirmed."""
-    return await result_service.confirm_plagiarism(str(result_id))
+    return await result_service.confirm_plagiarism(str(result_id), current_user)
 
 
 @router.post(
@@ -209,7 +209,7 @@ async def skip_pair(
     current_user: User = Depends(get_current_user),
 ):
     """Skip a pair - marks as reviewed but not confirmed."""
-    return await result_service.skip_pair(str(result_id))
+    return await result_service.skip_pair(str(result_id), current_user)
 
 
 @router.post(
@@ -235,7 +235,7 @@ async def bulk_confirm(
     current_user: User = Depends(get_current_user),
 ):
     """Bulk confirm all pairs above threshold. Admin only."""
-    return await result_service.bulk_confirm(str(assignment_id), threshold)
+    return await result_service.bulk_confirm(str(assignment_id), threshold, current_user)
 
 
 @router.post(
@@ -259,7 +259,7 @@ async def bulk_clear(
     current_user: User = Depends(get_current_user),
 ):
     """Bulk clear all pairs above threshold. Admin only."""
-    return await result_service.bulk_clear(str(assignment_id), threshold)
+    return await result_service.bulk_clear(str(assignment_id), threshold, current_user)
 
 
 @router.get(
@@ -390,7 +390,7 @@ async def clear_pair(
     current_user: User = Depends(get_current_user),
 ):
     """Clear a pair - marks as reviewed but not plagiarism."""
-    return await result_service.clear_pair(str(result_id))
+    return await result_service.clear_pair(str(result_id), current_user)
 
 
 @router.post(
@@ -415,7 +415,7 @@ async def undo_review(
     current_user: User = Depends(get_current_user),
 ):
     """Undo review - reset pair to unreviewed."""
-    return await result_service.undo_review(str(result_id))
+    return await result_service.undo_review(str(result_id), current_user)
 
 
 @router.get(
@@ -471,3 +471,130 @@ async def get_pairs_by_status(
 ):
     """Get pairs by status for an assignment."""
     return await result_service.get_pairs_by_status(str(assignment_id), status, limit, offset)
+
+
+@router.get("/assignments/{assignment_id}/reports/{result_id}/pdf")
+async def export_single_pdf(
+    assignment_id: uuid.UUID,
+    result_id: uuid.UUID,
+    result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Export a single plagiarism report as PDF."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    from fastapi.responses import StreamingResponse
+    import io
+
+    try:
+        payload = await result_service.build_report_payload(
+            str(assignment_id),
+            str(result_id),
+            current_user,
+        )
+        logger.info(f"PDF payload keys: {payload.keys()}")
+        logger.info(f"PDF payload matches count: {len(payload.get('matches', []))}")
+
+        from reports.generator import render_report_html, html_to_pdf
+        html = render_report_html(payload)
+        logger.info(f"PDF HTML generated: {len(html)} bytes")
+
+        pdf_bytes = await html_to_pdf(html)
+        logger.info(f"PDF generated: {len(pdf_bytes)} bytes")
+
+        filename = f"{payload['file_a']['filename']}_vs_{payload['file_b']['filename']}.pdf"
+
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(pdf_bytes)),
+            },
+        )
+    except Exception as e:
+        logger.error(f"PDF export error: {e}", exc_info=True)
+        raise
+
+
+@router.get("/assignments/{assignment_id}/reports/pdf-zip")
+async def export_all_pdfs_zip(
+    assignment_id: uuid.UUID,
+    task_id: str | None = None,
+    result_service: ResultService = Depends(get_result_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Export all confirmed plagiarism pairs for an assignment as a ZIP archive.
+    Optionally filter by task_id to export only pairs from a specific task."""
+    import zipfile
+    import io
+    import logging
+    from fastapi.responses import StreamingResponse
+    
+    logger = logging.getLogger(__name__)
+    
+    # Build query - filter by assignment and confirmed status
+    from shared.models import PlagiarismTask, SimilarityResult
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    
+    query = (
+        select(SimilarityResult)
+        .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+        .where(PlagiarismTask.assignment_id == assignment_id)
+        .where(SimilarityResult.review_disposition.in_(["plagiarism", "bulk_confirmed"]))
+        .options(selectinload(SimilarityResult.file_a), selectinload(SimilarityResult.file_b))
+    )
+    
+    # Filter by task_id if provided
+    if task_id:
+        query = query.where(SimilarityResult.task_id == task_id)
+    
+    result = await result_service.db.execute(query)
+    results = result.scalars().all()
+    result_list = list(results)
+    
+    if not result_list:
+        return StreamingResponse(
+            io.BytesIO(b""),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="assignment_{assignment_id}_reports.zip'},
+        )
+    
+    # Collect payloads
+    from reports.generator import render_report_html, html_to_pdf
+    
+    pdf_list = []
+    for result in result_list:
+        try:
+            payload = await result_service.build_report_payload(
+                str(assignment_id),
+                str(result.id),
+                current_user,
+            )
+            html = render_report_html(payload)
+            pdf_bytes = await html_to_pdf(html)
+            filename = f"{payload['file_a']['filename']}_vs_{payload['file_b']['filename']}.pdf"
+            pdf_list.append((filename, pdf_bytes))
+        except Exception as e:
+            logger.error(f"Error generating PDF for {result.id}: {e}")
+            continue
+    
+    # Create ZIP
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+        for filename, pdf_bytes in pdf_list:
+            zip_file.writestr(filename, pdf_bytes)
+    
+    zip_buffer.seek(0)
+    zip_content = zip_buffer.getvalue()
+    
+    return StreamingResponse(
+        io.BytesIO(zip_content),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{"task_" + task_id if task_id else "assignment_" + str(assignment_id)}_reports.zip',
+            "Content-Length": str(len(zip_content)),
+        },
+    )

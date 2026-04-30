@@ -45,6 +45,7 @@ import SimilarityDistribution from '../components/Results/SimilarityDistribution
 import ResultsList from '../components/Results/ResultsList';
 import ErrorBoundary from '../components/ErrorBoundary';
 import TaskPickerModal from '../components/Results/TaskPickerModal';
+import { useExportAllPdf } from '../hooks/useGrading';
 
 const getStatusIcon = (status: string) => {
   switch (status) {
@@ -101,7 +102,19 @@ const Results: React.FC = () => {
   }, [refetchTasks]);
 
   const { copied: taskIdCopied, copy: copyTaskId } = useCopyToClipboard();
-
+  
+  const exportAllPdfMutation = useExportAllPdf();
+  
+  const handleExportAllPdfs = async (taskId?: string) => {
+    if (!selectedTaskId) return;
+    try {
+      await exportAllPdfMutation.mutateAsync({ assignmentId: selectedTaskId, taskId });
+      // The mutation handles the download automatically
+    } catch (error) {
+      console.error('Export PDFs error:', error);
+    }
+  };
+  
   const getStats = () => {
     if (!selectedTask) return { high: 0, medium: 0, low: 0, avg: 0 };
 
@@ -253,9 +266,27 @@ const Results: React.FC = () => {
                           }}
                          >
                            {t('exportCSV')}
-                         </Button>
-                      )}
-                  </HStack>
+                          </Button>
+                       )}
+                       <Button
+                         size="sm"
+                         leftIcon={<FiDownload />}
+                         variant="outline"
+                         onClick={() => handleExportAllPdfs(selectedTaskId)}
+                         isLoading={exportAllPdfMutation.isPending}
+                       >
+                         {t('exportPDFs')}
+                       </Button>
+                       <Button
+                         size="sm"
+                         leftIcon={<FiDownload />}
+                         variant="ghost"
+                         onClick={() => handleExportAllPdfs()}
+                         isLoading={exportAllPdfMutation.isPending}
+                       >
+                         {t('exportAllPDFs')}
+                       </Button>
+                     </HStack>
 
 
                </HStack>

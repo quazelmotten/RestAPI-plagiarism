@@ -2,6 +2,12 @@
 Tests for schema models - importing directly from domain modules.
 """
 
+import os
+import sys
+
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_project_root, "src"))
+
 from files.schemas import FileContentResponse, FileResponse, FileUploadInfo
 from results.schemas import ResultItem, ResultsListResponse, TaskResultsResponse
 from tasks.schemas import (

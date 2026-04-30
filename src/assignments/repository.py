@@ -3,6 +3,7 @@ Assignments domain repository - data access for assignments.
 """
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 from shared.models import Assignment, File, PlagiarismTask, Subject
 from sqlalchemy import func, select
@@ -146,7 +147,6 @@ class SubjectRepository:
             )
             for row in rows
         ]
-
         return SubjectWithAssignments(
             id=str(subject.id),
             name=subject.name,
@@ -155,71 +155,6 @@ class SubjectRepository:
             assignments_count=assignments_count,
             assignments=assignments,
         )
-        assignments_count = assignments_count_result.scalar_one()
-
-        tasks_count_subq = (
-            select(
-                PlagiarismTask.assignment_id,
-                func.count().label("tasks_count"),
-            )
-            .where(PlagiarismTask.assignment_id.isnot(None))
-            .group_by(PlagiarismTask.assignment_id)
-            .subquery()
-        )
-
-        files_count_subq = (
-            select(
-                PlagiarismTask.assignment_id,
-                func.count(File.id).label("files_count"),
-            )
-            .join(File, File.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id.isnot(None))
-            .group_by(PlagiarismTask.assignment_id)
-            .subquery()
-        )
-
-        query = (
-            select(
-                Assignment,
-                func.coalesce(tasks_count_subq.c.tasks_count, 0).label("tasks_count"),
-                func.coalesce(files_count_subq.c.files_count, 0).label("files_count"),
-            )
-            .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
-            .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
-            .where(Assignment.subject_id == subject_id)
-            .where(Assignment.deleted_at.is_(None))
-            .order_by(Assignment.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-
-        result = await self.db.execute(query)
-        rows = result.all()
-
-        assignments = [
-            AssignmentResponse(
-                id=str(row.Assignment.id),
-                name=row.Assignment.name,
-                description=row.Assignment.description,
-                subject_id=str(row.Assignment.subject_id) if row.Assignment.subject_id else None,
-                created_at=row.Assignment.created_at.isoformat()
-                if row.Assignment.created_at
-                else None,
-                tasks_count=row.tasks_count,
-                files_count=row.files_count,
-            )
-            for row in rows
-        ]
-
-        return SubjectWithAssignments(
-            id=str(subject.id),
-            name=subject.name,
-            description=subject.description,
-            created_at=subject.created_at.isoformat() if subject.created_at else None,
-            assignments_count=assignments_count,
-            assignments=assignments,
-        )
-
     async def get_all_subjects(self, limit: int = 50, offset: int = 0) -> PaginatedResponse:
         """Get all subjects with assignment counts."""
         assignments_count_subq = (
@@ -568,7 +503,7 @@ class AssignmentRepository:
         file_offset: int = 0,
     ) -> AssignmentFullResponse | None:
         """Get full assignment details with all tasks, files, results, and stats."""
-        assignment = await self.db.get(Assignment, assignment_id)
+        assignment = await self.db.get(Assignment, UUID(assignment_id))
         if not assignment or assignment.deleted_at is not None:
             return None
 
@@ -578,62 +513,6 @@ class AssignmentRepository:
             .select_from(PlagiarismTask)
             .where(PlagiarismTask.assignment_id == assignment_id)
             .where(PlagiarismTask.deleted_at.is_(None))  # Filter out deleted tasks
-        )
-        tasks_count = tasks_count_result.scalar_one()
-
-        files_count_result = await self.db.execute(
-            select(func.count())
-            .select_from(File)
-            .join(PlagiarismTask, File.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id == assignment_id)
-            .where(File.deleted_at.is_(None))  # Filter out deleted files
-        )
-        files_count = files_count_result.scalar_one()
-
-        # Get aggregated results using ResultRepository
-        result_repo = ResultRepository(self.db)
-        agg_data = await result_repo.get_assignment_results(
-            assignment_id=assignment_id,
-            task_id=task_id,
-            limit=limit,
-            offset=offset,
-            file_limit=file_limit,
-            file_offset=file_offset,
-        )
-
-        if agg_data is None:
-            return AssignmentFullResponse(
-                id=str(assignment.id),
-                name=assignment.name,
-                description=assignment.description,
-                subject_id=str(assignment.subject_id) if assignment.subject_id else None,
-                created_at=assignment.created_at.isoformat() if assignment.created_at else None,
-                tasks_count=tasks_count,
-                files_count=files_count,
-                tasks=[],
-                files=[],
-                total_files=0,
-                results=[],
-                total_pairs=0,
-                total_results=0,
-                overall_stats=None,
-            )
-
-        return AssignmentFullResponse(
-            id=str(assignment.id),
-            name=assignment.name,
-            description=assignment.description,
-            subject_id=str(assignment.subject_id) if assignment.subject_id else None,
-            created_at=assignment.created_at.isoformat() if assignment.created_at else None,
-            tasks_count=tasks_count,
-            files_count=files_count,
-            tasks=agg_data["tasks"],
-            files=agg_data["files"],
-            total_files=agg_data["total_files"],
-            results=agg_data["results"],
-            total_pairs=agg_data["total_pairs"],
-            total_results=agg_data["total_results"],
-            overall_stats=agg_data["overall_stats"],
         )
         tasks_count = tasks_count_result.scalar_one()
 

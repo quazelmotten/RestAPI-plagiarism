@@ -137,3 +137,45 @@ export function usePairsByStatus(assignmentId: string, status: string, limit = 1
     enabled: !!assignmentId,
   });
 }
+
+export function useExportPdf() {
+  return useMutation({
+    mutationFn: async ({ assignmentId, resultId }: { assignmentId: string; resultId: string }) => {
+      const res = await api.get(API_ENDPOINTS.EXPORT_PDF(assignmentId, resultId), {
+        responseType: 'arraybuffer',
+      });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `pair_${resultId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      return true;
+    },
+  });
+}
+
+export function useExportAllPdf() {
+  return useMutation({
+    mutationFn: async ({ assignmentId, taskId }: { assignmentId: string, taskId?: string }) => {
+      const res = await api.get(API_ENDPOINTS.EXPORT_PDF_ZIP(assignmentId, taskId), {
+        responseType: 'arraybuffer',
+      });
+      const blob = new Blob([res.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = taskId 
+        ? `task_${taskId}_reports.zip` 
+        : `assignment_${assignmentId}_reports.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      return true;
+    },
+  });
+}

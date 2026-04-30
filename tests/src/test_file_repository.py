@@ -3,10 +3,16 @@ Unit tests for FileRepository.
 Tests file-related database operations.
 """
 
+import os
+import sys
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(_project_root, "src"))
+
 import pytest
+
 from shared.models import File, PlagiarismTask
 
 from files.repository import FileRepository

@@ -65,6 +65,7 @@ export interface PlagiarismResult {
   ast_similarity: number;
   matches: PlagiarismMatch[];
   created_at: string;
+  review_disposition?: string; // 'plagiarism', 'clear', 'bulk_confirmed', or null
 }
 
 export interface PlagiarismNetwork {

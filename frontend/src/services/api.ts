@@ -30,6 +30,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Important for HttpOnly cookies to work
 });
 
 api.interceptors.request.use(
@@ -52,7 +53,10 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        await refreshToken();
+        const response = await api.post('/auth/refresh', {});
+        if (response.data.access_token) {
+          setToken(response.data.access_token);
+        }
         // Retry original request with new token
         return api(originalRequest);
       } catch (e) {

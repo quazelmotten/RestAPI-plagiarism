@@ -56,6 +56,7 @@ import {
   FiChevronUp,
   FiChevronLeft,
   FiList,
+  FiDownload,
 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../../services/api';
@@ -66,6 +67,7 @@ import SimilarityDistribution from '../../components/Results/SimilarityDistribut
 import PairComparisonModal from '../../components/PairComparisonModal';
 import ReviewQueue from '../../components/Review/ReviewQueue';
 import { useAssignmentInfo } from '../../contexts/AssignmentContext';
+import { useExportAllPdf } from '../../hooks/useGrading';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024;
 const MAX_FILES = 1000;
@@ -235,6 +237,8 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
     }
     return () => setAssignmentInfo(null);
   }, [assignmentData?.name, assignmentData?.files_count, assignmentData?.tasks_count, setAssignmentInfo]);
+
+  const exportAllPdfMutation = useExportAllPdf();
 
   // Files are server-paginated, with client-side filter/sort on the current page
   const displayedFiles = useMemo((): AssignmentFullFile[] => {
@@ -591,26 +595,42 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                        <Th fontSize="xs" isNumeric>{t('assignments:pairs')}</Th>
                        <Th fontSize="xs" isNumeric>{t('assignments:high')}</Th>
                        <Th fontSize="xs" isNumeric>{t('assignments:avgSim')}</Th>
+                       <Th fontSize="xs" isNumeric>{t('results:exportPdf')}</Th>
                      </Tr>
                   </Thead>
                   <Tbody>
-                    <Tr
-                      bg={selectedTaskId === '' ? selectedRowBg : undefined}
-                      cursor="pointer"
-                      onClick={() => setSelectedTaskId('')}
-                      _hover={{ bg: selectedTaskId === '' ? selectedRowHoverBg : hoverBg }}
-                      fontWeight={selectedTaskId === '' ? 'semibold' : 'normal'}
-                    >
-                       <Td px={2}>{selectedTaskId === '' && <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />}</Td>
-                       <Td fontSize="sm">{t('assignments:allTasksAggregated')}</Td>
-                       <Td><Badge colorScheme="blue" fontSize="xs">{t(`status:combined`)}</Badge></Td>
-                      <Td fontSize="sm" isNumeric>{aggFilesCount}</Td>
-                      <Td fontSize="sm" isNumeric>{assignmentData.total_pairs}</Td>
-                      <Td fontSize="sm" isNumeric color={aggHighCount > 0 ? 'red.500' : undefined}>{aggHighCount}</Td>
-                      <Td fontSize="sm" isNumeric>
-                        <Badge colorScheme={getSimilarityColor(aggAvgSim)} fontSize="xs">{(aggAvgSim * 100).toFixed(1)}%</Badge>
-                      </Td>
-                    </Tr>
+                     <Tr
+                       bg={selectedTaskId === '' ? selectedRowBg : undefined}
+                       cursor="pointer"
+                       onClick={() => setSelectedTaskId('')}
+                       _hover={{ bg: selectedTaskId === '' ? selectedRowHoverBg : hoverBg }}
+                       fontWeight={selectedTaskId === '' ? 'semibold' : 'normal'}
+                     >
+                        <Td px={2}>{selectedTaskId === '' && <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />}</Td>
+                        <Td fontSize="sm">{t('assignments:allTasksAggregated')}</Td>
+                        <Td><Badge colorScheme="blue" fontSize="xs">{t(`status:combined`)}</Badge></Td>
+                       <Td fontSize="sm" isNumeric>{aggFilesCount}</Td>
+                       <Td fontSize="sm" isNumeric>{assignmentData.total_pairs}</Td>
+                       <Td fontSize="sm" isNumeric color={aggHighCount > 0 ? 'red.500' : undefined}>{aggHighCount}</Td>
+                       <Td fontSize="sm" isNumeric>
+                         <Badge colorScheme={getSimilarityColor(aggAvgSim)} fontSize="xs">{(aggAvgSim * 100).toFixed(1)}%</Badge>
+                       </Td>
+                       <Td isNumeric>
+                         <IconButton
+                           aria-label={t('results:exportPdf')}
+                           icon={<FiDownload />}
+                           size="xs"
+                           variant="ghost"
+                           colorScheme="blue"
+                           isLoading={exportAllPdfMutation.isPending}
+                           isDisabled={assignmentData.total_pairs === 0}
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             exportAllPdfMutation.mutate({ assignmentId: assignmentId! });
+                           }}
+                         />
+                       </Td>
+                     </Tr>
                     {assignmentData.tasks.map((task) => (
                       <Tr
                         key={task.task_id}
@@ -637,6 +657,21 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                           <Badge colorScheme={getSimilarityColor(task.avg_similarity ?? 0)} fontSize="xs">
                             {((task.avg_similarity ?? 0) * 100).toFixed(1)}%
                           </Badge>
+                        </Td>
+                        <Td isNumeric>
+                          <IconButton
+                            aria-label={t('results:exportPdf')}
+                            icon={<FiDownload />}
+                            size="xs"
+                            variant="ghost"
+                            colorScheme="blue"
+                            isLoading={exportAllPdfMutation.isPending}
+                            isDisabled={(task.total_pairs ?? 0) === 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              exportAllPdfMutation.mutate({ assignmentId: assignmentId!, taskId: task.task_id });
+                            }}
+                          />
                         </Td>
                       </Tr>
                     ))}

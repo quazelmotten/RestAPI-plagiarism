@@ -31,8 +31,14 @@ export const API_ENDPOINTS = {
   CLEARED_PAIRS: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/cleared-pairs`,
   PLAGIARISM_PAIRS: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/plagiarism-pairs`,
   UNCONFIRM_FILE: (fileId: string) => `/plagiarism/files/${fileId}/unconfirm`,
-  EXPORT_REVIEW: (assignmentId: string, threshold: number) => 
+  EXPORT_REVIEW: (assignmentId: string, threshold: number) =>
     `/plagiarism/assignments/${assignmentId}/export-review?threshold=${threshold}`,
+
+  // PDF Export
+  EXPORT_PDF: (assignmentId: string, resultId: string) =>
+    `/plagiarism/assignments/${assignmentId}/reports/${resultId}/pdf`,
+  EXPORT_PDF_ZIP: (assignmentId: string, taskId?: string) =>
+    `/plagiarism/assignments/${assignmentId}/reports/pdf-zip${taskId ? `?task_id=${taskId}` : ''}`,
 
   // File notes
   FILE_NOTES: (fileId: string) => `/plagiarism/files/${fileId}/notes`,

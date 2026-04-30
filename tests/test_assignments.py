@@ -49,6 +49,19 @@ async def client():
                 pass
 
         app.state.ws_manager = DummyWSManager()
+    if not hasattr(app.state, "s3_storage"):
+
+        class DummyS3Storage:
+            async def upload_file(self, *args, **kwargs):
+                return {"path": "s3://test/file", "hash": "abc123"}
+            async def upload_file_async(self, *args, **kwargs):
+                return {"path": "s3://test/file", "hash": "abc123"}
+            async def download_file(self, *args, **kwargs):
+                return b"test content"
+            async def delete_file(self, *args, **kwargs):
+                pass
+
+        app.state.s3_storage = DummyS3Storage()
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

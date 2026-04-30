@@ -1,0 +1,465 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Plagiarism Report – {{ assignment.name }}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: #ffffff;
+      color: #1a202c;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1a202c 0%, #2d3748 60%, #2f855a 100%);
+      color: #fff;
+      padding: 32px 40px 28px;
+    }
+
+    .header-top {
+      margin-bottom: 20px;
+    }
+
+    .header-top:after {
+      content: '';
+      display: table;
+      clear: both;
+    }
+
+    .header-left {
+      float: left;
+    }
+
+    .header-right {
+      float: right;
+      margin-top: 4px;
+    }
+
+    .logo {
+      font-family: 'Courier New', Courier, monospace;
+      font-weight: bold;
+      font-size: 28px;
+      letter-spacing: 0.02em;
+      display: inline;
+      vertical-align: middle;
+    }
+
+    .logo .logo-plagi { color: #ffffff; }
+    .logo .logo-type { color: #48bb78; }
+    .logo .logo-cursor { color: #48bb78; }
+
+    .header-badge {
+      display: inline-block;
+      background: rgba(72, 187, 120, 0.15);
+      border: 1px solid rgba(72, 187, 120, 0.3);
+      color: #9ae6b4;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 5px 14px;
+      border-radius: 20px;
+    }
+
+    .header-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .header-subtitle {
+      font-size: 12px;
+      color: #a0aec0;
+    }
+
+    .content {
+      padding: 32px 40px;
+    }
+
+    .meta-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin-bottom: 28px;
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .meta-table td {
+      padding: 8px 24px;
+      width: 50%;
+      vertical-align: top;
+    }
+
+    .meta-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #718096;
+      margin-bottom: 2px;
+    }
+
+    .meta-value {
+      font-size: 12px;
+      color: #1a202c;
+      font-weight: 500;
+    }
+
+    .meta-value.filename {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      color: #2b6cb0;
+      background: #ebf8ff;
+      padding: 2px 8px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .match-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      margin-bottom: 24px;
+      overflow: hidden;
+      page-break-inside: avoid;
+    }
+
+    .match-header {
+      padding: 14px 20px;
+      background: linear-gradient(to right, #f7fafc, #edf2f7);
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .match-header:after {
+      content: '';
+      display: table;
+      clear: both;
+    }
+
+    .match-header-left {
+      float: left;
+    }
+
+    .match-header-right {
+      float: right;
+      margin-top: 2px;
+    }
+
+    .match-number {
+      background: #2d3748;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: inline-block;
+      text-align: center;
+      line-height: 26px;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+
+    .match-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #2d3748;
+      vertical-align: middle;
+    }
+
+    .similarity-badge {
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      display: inline-block;
+    }
+
+    .similarity-high {
+      background: #fff5f5;
+      color: #c53030;
+      border: 1px solid #feb2b2;
+    }
+
+    .similarity-medium {
+      background: #fffff0;
+      color: #975a16;
+      border: 1px solid #f6e05e;
+    }
+
+    .similarity-low {
+      background: #f0fff4;
+      color: #276749;
+      border: 1px solid #9ae6b4;
+    }
+
+    .code-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .code-table td {
+      width: 50%;
+      vertical-align: top;
+      padding: 0;
+    }
+
+    .code-table td:first-child {
+      border-right: 2px solid #e2e8f0;
+    }
+
+    .code-file-header {
+      padding: 8px 14px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .code-file-header.file-a {
+      background: #ebf8ff;
+      color: #2b6cb0;
+      border-bottom-color: #bee3f8;
+    }
+
+    .code-file-header.file-b {
+      background: #faf5ff;
+      color: #6b46c1;
+      border-bottom-color: #e9d8fd;
+    }
+
+    .code-body {
+      padding: 10px 14px;
+      background: #fcfcfc;
+    }
+
+    pre {
+      margin: 0;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 10px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      color: #2d3748;
+    }
+
+    .highlight {
+      background: #fefcbf;
+      border-bottom: 2px solid #ecc94b;
+      padding: 1px 0;
+    }
+
+    .line-num {
+      color: #a0aec0;
+      user-select: none;
+    }
+
+    .match-footer {
+      padding: 10px 20px;
+      background: #f7fafc;
+      border-top: 1px solid #e2e8f0;
+      font-size: 10px;
+      color: #718096;
+    }
+
+    .match-footer:after {
+      content: '';
+      display: table;
+      clear: both;
+    }
+
+    .footer-left {
+      float: left;
+    }
+
+    .footer-right {
+      float: right;
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+
+    .dot-a { background: #3182ce; }
+    .dot-b { background: #805ad5; }
+
+    .footer {
+      margin-top: 32px;
+      padding: 16px 40px;
+      background: #f7fafc;
+      border-top: 1px solid #e2e8f0;
+      font-size: 9px;
+      color: #a0aec0;
+    }
+
+    .footer:after {
+      content: '';
+      display: table;
+      clear: both;
+    }
+
+    .footer-logo {
+      font-family: 'Courier New', Courier, monospace;
+      font-weight: bold;
+      font-size: 11px;
+      float: left;
+    }
+
+    .footer-logo .logo-plagi { color: #2d3748; }
+    .footer-logo .logo-type { color: #48bb78; }
+
+    .footer-info {
+      float: right;
+      line-height: 14px;
+    }
+
+    .no-matches {
+      text-align: center;
+      padding: 48px 20px;
+      color: #718096;
+    }
+
+    .no-matches .check-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .match-card { page-break-inside: avoid; }
+      .header, .footer { page-break-after: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-top">
+        <span class="logo">
+          <span class="logo-plagi">plagi</span><span class="logo-type">type</span><span class="logo-cursor">_</span>
+        </span>
+      <div class="header-right">
+        <span class="header-badge">Plagiarism Detection Report</span>
+      </div>
+    </div>
+    <div class="header-title">{{ assignment.name }}</div>
+    <div class="header-subtitle">Assignment ID: {{ assignment.id }}</div>
+  </div>
+
+  <div class="content">
+    <table class="meta-table">
+      <tr>
+        <td>
+          <div class="meta-label">File A</div>
+          <div class="meta-value filename">{{ file_a.filename }}</div>
+        </td>
+        <td>
+          <div class="meta-label">File B</div>
+          <div class="meta-value filename">{{ file_b.filename }}</div>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <div class="meta-label">Uploaded (File A)</div>
+          <div class="meta-value">{{ file_a.uploaded }}</div>
+        </td>
+        <td>
+          <div class="meta-label">Uploaded (File B)</div>
+          <div class="meta-value">{{ file_b.uploaded }}</div>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <div class="meta-label">Confirmed by</div>
+          <div class="meta-value">{{ reviewer if reviewer else "Auto-detected" }}</div>
+        </td>
+        <td>
+          <div class="meta-label">Detection source</div>
+          <div class="meta-value">{{ detection_source }}</div>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <div class="meta-label">Review date</div>
+          <div class="meta-value">{{ reviewed_at }}</div>
+        </td>
+        <td>
+          <div class="meta-label">Total matches</div>
+          <div class="meta-value">{{ matches | length }}</div>
+        </td>
+      </tr>
+    </table>
+
+    {% if matches %}
+    {% for m in matches %}
+    <div class="match-card">
+      <div class="match-header">
+        <div class="match-header-left">
+          <span class="match-number">{{ loop.index }}</span>
+          <span class="match-label">Code Match</span>
+        </div>
+        <div class="match-header-right">
+          {% set sim = ((m.similarity or 0) * 100) | round(1) %}
+          {% if sim >= 70 %}
+            <span class="similarity-badge similarity-high">{{ sim }}% similar</span>
+          {% elif sim >= 40 %}
+            <span class="similarity-badge similarity-medium">{{ sim }}% similar</span>
+          {% else %}
+            <span class="similarity-badge similarity-low">{{ sim }}% similar</span>
+          {% endif %}
+        </div>
+      </div>
+      <table class="code-table">
+        <tr>
+          <td>
+            <div class="code-file-header file-a">File A &mdash; {{ file_a.filename }}</div>
+            <div class="code-body"><pre>{{ m.file1_html | safe }}</pre></div>
+          </td>
+          <td>
+            <div class="code-file-header file-b">File B &mdash; {{ file_b.filename }}</div>
+            <div class="code-body"><pre>{{ m.file2_html | safe }}</pre></div>
+          </td>
+        </tr>
+      </table>
+      <div class="match-footer">
+        <span class="footer-left"><span class="dot dot-a"></span> File A: lines {{ m.file1.start_line }}&ndash;{{ m.file1.end_line }}</span>
+        <span class="footer-right"><span class="dot dot-b"></span> File B: lines {{ m.file2.start_line }}&ndash;{{ m.file2.end_line }}</span>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="no-matches">
+      <div class="check-icon">&#10003;</div>
+      <div style="font-size: 16px; font-weight: 600; color: #2d3748; margin-bottom: 6px;">No Matches Found</div>
+      <div>No plagiarized code fragments were detected between the submitted files.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="footer">
+    <span class="footer-logo">
+      <span class="logo-plagi">plagi</span><span class="logo-type">type</span><span style="color: #48bb78;">_</span>
+    </span>
+    <span class="footer-info">Generated on {{ reviewed_at }} &middot; {{ detection_source }} detection</span>
+  </div>
+</body>
+</html>

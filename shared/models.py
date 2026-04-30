@@ -157,6 +157,8 @@ class SimilarityResult(SharedBase):
     matches: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     review_disposition: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    detection_source: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships to files

@@ -16,9 +16,17 @@ FROM python:3.11-bullseye as base
 
 WORKDIR /app
 
+# Install system dependencies for WeasyPrint (PDF generation)
+RUN apt-get update && apt-get install -y \
+    libpango-1.0-0 \
+    libcairo2 \
+    libgdk-pixbuf2.0-0 \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Python dependencies
 COPY ./src/requirements.txt ./
-RUN apt update && pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
 # Copy Python source
 COPY ./src ./

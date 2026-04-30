@@ -49,6 +49,9 @@ class TestResultServiceClearPair:
         mock_db.commit = AsyncMock()
         mock_db.refresh = AsyncMock()
 
+        mock_user = MagicMock()
+        mock_user.id = "test-user-id"
+
         with patch(
             "results.service.ResultRepository._map_to_result_item", new_callable=AsyncMock
         ) as mock_map:
@@ -57,7 +60,7 @@ class TestResultServiceClearPair:
             from results.service import ResultService
 
             service = ResultService(mock_db)
-            result = await service.clear_pair(str(uuid.uuid4()))
+            result = await service.clear_pair(str(uuid.uuid4()), mock_user)
 
             assert mock_result.review_disposition == "clear"
             assert mock_result.reviewed_at is not None
@@ -82,6 +85,9 @@ class TestResultServiceConfirmPlagiarism:
         mock_db.commit = AsyncMock()
         mock_db.refresh = AsyncMock()
 
+        mock_user = MagicMock()
+        mock_user.id = "test-user-id"
+
         with patch(
             "results.service.ResultRepository._map_to_result_item", new_callable=AsyncMock
         ) as mock_map:
@@ -90,7 +96,7 @@ class TestResultServiceConfirmPlagiarism:
             from results.service import ResultService
 
             service = ResultService(mock_db)
-            result = await service.confirm_plagiarism(str(uuid.uuid4()))
+            result = await service.confirm_plagiarism(str(uuid.uuid4()), mock_user)
 
             assert mock_result.review_disposition == "plagiarism"
             assert mock_result.reviewed_at is not None
@@ -114,6 +120,9 @@ class TestResultServiceUndoReview:
         mock_db.commit = AsyncMock()
         mock_db.refresh = AsyncMock()
 
+        mock_user = MagicMock()
+        mock_user.id = "test-user-id"
+
         with patch(
             "results.service.ResultRepository._map_to_result_item", new_callable=AsyncMock
         ) as mock_map:
@@ -122,7 +131,7 @@ class TestResultServiceUndoReview:
             from results.service import ResultService
 
             service = ResultService(mock_db)
-            result = await service.undo_review(str(uuid.uuid4()))
+            result = await service.undo_review(str(uuid.uuid4()), mock_user)
 
             assert mock_result.review_disposition is None
             assert mock_result.reviewed_at is None
@@ -144,6 +153,9 @@ class TestResultServiceUndoReview:
         mock_db.commit = AsyncMock()
         mock_db.refresh = AsyncMock()
 
+        mock_user = MagicMock()
+        mock_user.id = "test-user-id"
+
         with patch(
             "results.service.ResultRepository._map_to_result_item", new_callable=AsyncMock
         ) as mock_map:
@@ -152,7 +164,7 @@ class TestResultServiceUndoReview:
             from results.service import ResultService
 
             service = ResultService(mock_db)
-            result = await service.undo_review(str(uuid.uuid4()))
+            result = await service.undo_review(str(uuid.uuid4()), mock_user)
 
             assert mock_file_a.is_confirmed is False
             assert mock_file_b.is_confirmed is False
