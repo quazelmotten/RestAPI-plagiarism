@@ -133,7 +133,8 @@ tree-sitter-go
 tree-sitter-rust
 redis==5.0.1
 xxhash
-weasyprint==60.2
+weasyprint==60.2  # Legacy PDF generator (optional if using playwright)
+playwright>=1.40  # Fast PDF generation via Chromium
 passlib==1.7.4
 python-jose[cryptography]>=3.4.0
 cffi==2.0.0

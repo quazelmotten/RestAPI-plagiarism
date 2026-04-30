@@ -856,8 +856,18 @@ class ResultService:
         assignment_id: str,
         result_id: str,
         current_user,
+        file_a: FileModel | None = None,
+        file_b: FileModel | None = None,
     ) -> dict:
-        """Build the payload dict for the PDF template for a single result."""
+        """Build the payload dict for the PDF template for a single result.
+
+        Args:
+            assignment_id: Assignment ID
+            result_id: Result ID
+            current_user: Current user
+            file_a: Optional pre-loaded file_a (to avoid re-query)
+            file_b: Optional pre-loaded file_b (to avoid re-query)
+        """
         import logging
         logger = logging.getLogger(__name__)
 
@@ -873,8 +883,11 @@ class ResultService:
         if not assignment:
             raise NotFoundError("Assignment not found")
 
-        file_a = await self.db.get(FileModel, result.file_a_id)
-        file_b = await self.db.get(FileModel, result.file_b_id)
+        # Use pre-loaded files if provided, otherwise fetch
+        if file_a is None:
+            file_a = await self.db.get(FileModel, result.file_a_id)
+        if file_b is None:
+            file_b = await self.db.get(FileModel, result.file_b_id)
         if not file_a or not file_b:
             logger.error(f"Files not found for result {result_id}: file_a={file_a}, file_b={file_b}")
             raise NotFoundError("File not found")
@@ -916,7 +929,26 @@ class ResultService:
             "detection_source": result.detection_source,
         }
 
+        # Read file contents to pass to payload builder (avoids re-reading in generator)
         from reports.generator import build_report_payload as generate_payload
+        import aiofiles
+
+        file_a_lines = None
+        file_b_lines = None
+
+        try:
+            async with aiofiles.open(file_a.file_path, "r") as f:
+                content = await f.read()
+            file_a_lines = content.splitlines(keepends=False)
+        except Exception as e:
+            logger.warning(f"Could not read file_a {file_a.file_path}: {e}")
+
+        try:
+            async with aiofiles.open(file_b.file_path, "r") as f:
+                content = await f.read()
+            file_b_lines = content.splitlines(keepends=False)
+        except Exception as e:
+            logger.warning(f"Could not read file_b {file_b.file_path}: {e}")
 
         return await generate_payload(
             result_data,
@@ -925,6 +957,8 @@ class ResultService:
             assignment_data,
             matches,
             reviewer_email,
+            file_a_lines=file_a_lines,
+            file_b_lines=file_b_lines,
         )
 
     async def iter_report_payloads(

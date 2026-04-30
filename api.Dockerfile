@@ -16,17 +16,34 @@ FROM python:3.11-bullseye as base
 
 WORKDIR /app
 
-# Install system dependencies for WeasyPrint (PDF generation)
+# Install system dependencies for WeasyPrint and Playwright (PDF generation)
+# WeasyPrint dependencies: libpango-1.0-0 libcairo2 libgdk-pixbuf2.0-0 libffi-dev
+# Playwright/Chromium dependencies: libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 libatspi2.0-0
 RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libcairo2 \
     libgdk-pixbuf2.0-0 \
     libffi-dev \
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libatspi2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY ./src/requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt
+
+# Install Playwright browser (Chromium) with system dependencies
+RUN playwright install --with-deps chromium
 
 # Copy Python source
 COPY ./src ./

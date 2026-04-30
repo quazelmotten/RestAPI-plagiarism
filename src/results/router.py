@@ -473,6 +473,20 @@ async def get_pairs_by_status(
     return await result_service.get_pairs_by_status(str(assignment_id), status, limit, offset)
 
 
+def sanitize_filename(name: str) -> str:
+    """Sanitize filename to be safe for all filesystems (FAT, NTFS, etc.)."""
+    import re
+    # Remove or replace characters that are invalid in filenames
+    # Invalid: < > : " / \ | ? *
+    sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
+    # Remove any control characters
+    sanitized = re.sub(r'[\x00-\x1f\x7f]', '', sanitized)
+    # Limit length to avoid path issues
+    if len(sanitized) > 100:
+        sanitized = sanitized[:100]
+    return sanitized
+
+
 @router.get("/assignments/{assignment_id}/reports/{result_id}/pdf")
 async def export_single_pdf(
     assignment_id: uuid.UUID,
@@ -503,7 +517,10 @@ async def export_single_pdf(
         pdf_bytes = await html_to_pdf(html)
         logger.info(f"PDF generated: {len(pdf_bytes)} bytes")
 
-        filename = f"{payload['file_a']['filename']}_vs_{payload['file_b']['filename']}.pdf"
+        # Option 2: result_id + sanitized filenames (unique + human-readable)
+        file_a_name = sanitize_filename(payload['file_a']['filename'])
+        file_b_name = sanitize_filename(payload['file_b']['filename'])
+        filename = f"{result_id}_{file_a_name}_vs_{file_b_name}.pdf"
 
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
@@ -549,7 +566,12 @@ async def export_all_pdfs_zip(
     
     # Filter by task_id if provided
     if task_id:
-        query = query.where(SimilarityResult.task_id == task_id)
+        from uuid import UUID
+        try:
+            task_uuid = UUID(task_id)
+            query = query.where(SimilarityResult.task_id == task_uuid)
+        except ValueError:
+            logger.warning(f"Invalid task_id format: {task_id}")
     
     result = await result_service.db.execute(query)
     results = result.scalars().all()
@@ -562,24 +584,44 @@ async def export_all_pdfs_zip(
             headers={"Content-Disposition": f'attachment; filename="assignment_{assignment_id}_reports.zip'},
         )
     
-    # Collect payloads
-    from reports.generator import render_report_html, html_to_pdf
-    
-    pdf_list = []
+    # Collect payloads for bulk conversion
+    from reports.generator import render_report_html, bulk_html_to_pdf
+
+    html_list = []
+
     for result in result_list:
         try:
             payload = await result_service.build_report_payload(
                 str(assignment_id),
                 str(result.id),
                 current_user,
+                file_a=result.file_a,
+                file_b=result.file_b,
             )
             html = render_report_html(payload)
-            pdf_bytes = await html_to_pdf(html)
-            filename = f"{payload['file_a']['filename']}_vs_{payload['file_b']['filename']}.pdf"
-            pdf_list.append((filename, pdf_bytes))
+            # Option 2: result.id + sanitized filenames (unique + human-readable)
+            file_a_name = sanitize_filename(payload['file_a']['filename'])
+            file_b_name = sanitize_filename(payload['file_b']['filename'])
+            filename = f"{result.id}_{file_a_name}_vs_{file_b_name}.pdf"
+            html_list.append((filename, html))
         except Exception as e:
-            logger.error(f"Error generating PDF for {result.id}: {e}")
+            logger.error(f"Error building payload for {result.id}: {e}")
             continue
+
+    # Bulk convert all HTMLs to PDFs
+    try:
+        pdf_list = await bulk_html_to_pdf(html_list)
+    except Exception as e:
+        logger.error(f"Error in bulk PDF conversion: {e}")
+        # Fallback to individual conversion
+        pdf_list = []
+        for filename, html in html_list:
+            try:
+                from reports.generator import html_to_pdf
+                pdf_bytes = await html_to_pdf(html)
+                pdf_list.append((filename, pdf_bytes))
+            except Exception as e2:
+                logger.error(f"Error generating PDF for {filename}: {e2}")
     
     # Create ZIP
     zip_buffer = io.BytesIO()
