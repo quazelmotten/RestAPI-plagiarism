@@ -510,11 +510,8 @@ async def export_single_pdf(
         logger.info(f"PDF payload keys: {payload.keys()}")
         logger.info(f"PDF payload matches count: {len(payload.get('matches', []))}")
 
-        from reports.generator import render_report_html, html_to_pdf
-        html = render_report_html(payload)
-        logger.info(f"PDF HTML generated: {len(html)} bytes")
-
-        pdf_bytes = await html_to_pdf(html)
+        from reports.generator import generate_report_pdf
+        pdf_bytes = await generate_report_pdf(payload)
         logger.info(f"PDF generated: {len(pdf_bytes)} bytes")
 
         # Option 2: result_id + sanitized filenames (unique + human-readable)
@@ -548,14 +545,14 @@ async def export_all_pdfs_zip(
     import io
     import logging
     from fastapi.responses import StreamingResponse
-    
+
     logger = logging.getLogger(__name__)
-    
+
     # Build query - filter by assignment and confirmed status
     from shared.models import PlagiarismTask, SimilarityResult
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
-    
+
     query = (
         select(SimilarityResult)
         .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
@@ -563,7 +560,7 @@ async def export_all_pdfs_zip(
         .where(SimilarityResult.review_disposition.in_(["plagiarism", "bulk_confirmed"]))
         .options(selectinload(SimilarityResult.file_a), selectinload(SimilarityResult.file_b))
     )
-    
+
     # Filter by task_id if provided
     if task_id:
         from uuid import UUID
@@ -572,25 +569,26 @@ async def export_all_pdfs_zip(
             query = query.where(SimilarityResult.task_id == task_uuid)
         except ValueError:
             logger.warning(f"Invalid task_id format: {task_id}")
-    
+
     result = await result_service.db.execute(query)
     results = result.scalars().all()
     result_list = list(results)
-    
+
     if not result_list:
         return StreamingResponse(
             io.BytesIO(b""),
             media_type="application/zip",
             headers={"Content-Disposition": f'attachment; filename="assignment_{assignment_id}_reports.zip'},
         )
-    
-    # Collect payloads for bulk conversion
-    from reports.generator import render_report_html, bulk_html_to_pdf
 
-    html_list = []
+    # Collect payloads and generate PDFs
+    from reports.generator import generate_report_pdf
+
+    pdf_list = []
 
     for result in result_list:
         try:
+            logger.info(f"Processing result {result.id}")
             payload = await result_service.build_report_payload(
                 str(assignment_id),
                 str(result.id),
@@ -598,45 +596,47 @@ async def export_all_pdfs_zip(
                 file_a=result.file_a,
                 file_b=result.file_b,
             )
-            html = render_report_html(payload)
+            logger.info(f"Payload built for {result.id}")
+
             # Option 2: result.id + sanitized filenames (unique + human-readable)
             file_a_name = sanitize_filename(payload['file_a']['filename'])
             file_b_name = sanitize_filename(payload['file_b']['filename'])
             filename = f"{result.id}_{file_a_name}_vs_{file_b_name}.pdf"
-            html_list.append((filename, html))
+
+            # Generate PDF using the appropriate backend
+            logger.info(f"Generating PDF for {filename}")
+            pdf_bytes = await generate_report_pdf(payload)
+            logger.info(f"PDF generated: {len(pdf_bytes)} bytes")
+
+            pdf_list.append((filename, pdf_bytes))
         except Exception as e:
-            logger.error(f"Error building payload for {result.id}: {e}")
+            logger.error(f"Error generating PDF for {result.id}: {e}", exc_info=True)
             continue
 
-    # Bulk convert all HTMLs to PDFs
-    try:
-        pdf_list = await bulk_html_to_pdf(html_list)
-    except Exception as e:
-        logger.error(f"Error in bulk PDF conversion: {e}")
-        # Fallback to individual conversion
-        pdf_list = []
-        for filename, html in html_list:
-            try:
-                from reports.generator import html_to_pdf
-                pdf_bytes = await html_to_pdf(html)
-                pdf_list.append((filename, pdf_bytes))
-            except Exception as e2:
-                logger.error(f"Error generating PDF for {filename}: {e2}")
-    
+    logger.info(f"Generated {len(pdf_list)} PDFs")
+
     # Create ZIP
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
         for filename, pdf_bytes in pdf_list:
             zip_file.writestr(filename, pdf_bytes)
-    
+
     zip_buffer.seek(0)
     zip_content = zip_buffer.getvalue()
-    
+
+    # Determine filename for ZIP
+    if task_id:
+        zip_filename = f"task_{task_id}_reports.zip"
+    else:
+        zip_filename = f"assignment_{assignment_id}_reports.zip"
+
+    logger.info(f"Returning ZIP: {zip_filename} ({len(zip_content)} bytes)")
+
     return StreamingResponse(
         io.BytesIO(zip_content),
         media_type="application/zip",
         headers={
-            "Content-Disposition": f'attachment; filename="{"task_" + task_id if task_id else "assignment_" + str(assignment_id)}_reports.zip',
+            "Content-Disposition": f'attachment; filename="{zip_filename}"',
             "Content-Length": str(len(zip_content)),
         },
     )
