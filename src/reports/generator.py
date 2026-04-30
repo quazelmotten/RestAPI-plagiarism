@@ -3,22 +3,11 @@ Report generation - PDF report building and rendering.
 """
 
 import html as html_escape
-import io
 import os
-from typing import Any, AsyncGenerator
 
 import aiofiles
-from fastapi.concurrency import run_in_threadpool
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
-from jinja2 import Environment, FileSystemLoader
-
-TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
-
-env = Environment(
-    loader=FileSystemLoader(TEMPLATE_DIR),
-    autoescape="html",
-)
 
 # Match colors for pair comparison (light, readable)
 MATCH_COLORS = [
@@ -69,65 +58,26 @@ def generate_snippet_html(lines, start_line, end_line, start_col, end_col, conte
         result.append(f"{line_num:4d}: {formatted}")
     return "\n".join(result)
 
-# PDF backend options: "weasyprint", "playwright", or "fpdf2"
-# Note: This is now a function to allow runtime changes via environment variable
+# PDF backend: fpdf2 only
 def get_pdf_backend():
-    """Get the configured PDF backend (supports runtime changes via PDF_BACKEND env var)."""
-    return os.getenv("PDF_BACKEND", "playwright").lower()
-
-
-# Playwright browser instance (lazy-loaded)
-_playwright_browser = None
-
-
-def render_report_html(context: dict) -> str:
-    """Render the Jinja2 template with the given context."""
-    import sys
-    import logging
-    logger = logging.getLogger(__name__)
-    try:
-        template = env.get_template("report.html.jinja2")
-        result = template.render(**context)
-        print(f"DEBUG render_report_html: Rendered HTML size={len(result)} bytes", flush=True, file=sys.stderr)
-        return result
-    except Exception as e:
-        logger.error(f"Template render error: {e}")
-        raise
+    """Get the configured PDF backend (fpdf2 only)."""
+    return os.getenv("PDF_BACKEND", "fpdf2").lower()
 
 
 async def html_to_pdf(html_content: str) -> bytes:
-    """Convert HTML content to PDF using configured backend (playwright, weasyprint, or fpdf2).
+    """Convert HTML content to PDF using fpdf2 (simplified HTML conversion).
 
-    Note: This function expects HTML content. For fpdf2 with context dict, use generate_report_pdf() instead.
+    Note: For best results, use generate_report_pdf() with context dict instead.
     """
-    import logging
-    import sys
-    logger = logging.getLogger(__name__)
-
-    try:
-        backend = get_pdf_backend()
-        print(f"DEBUG html_to_pdf: Starting conversion ({len(html_content)} bytes) using {backend}", flush=True, file=sys.stderr)
-
-        if backend == "playwright":
-            result = await html_to_pdf_playwright(html_content)
-        elif backend == "fpdf2":
-            result = await html_to_pdf_fpdf2(html_content)
-        else:
-            result = await html_to_pdf_weasyprint(html_content)
-
-        print(f"DEBUG html_to_pdf: Done ({len(result)} bytes)", flush=True, file=sys.stderr)
-        return result
-    except Exception as e:
-        print(f"DEBUG html_to_pdf: ERROR {e}", flush=True, file=sys.stderr)
-        logger.error(f"PDF conversion error: {e}")
-        raise
+    # Direct fpdf2 conversion (no backend switching needed)
+    return await html_to_pdf_fpdf2(html_content)
 
 
 async def generate_report_pdf(context: dict) -> bytes:
-    """Generate PDF report from context dict using configured backend.
+    """Generate PDF report from context dict using fpdf2.
 
-    This is the preferred function for generating PDF reports as it allows
-    backends like fpdf2 to use the context directly without HTML conversion.
+    This function generates PDF reports directly from context dict using fpdf2
+    (no HTML conversion needed).
 
     Args:
         context: Dict with assignment, file_a, file_b, matches, etc.
@@ -135,81 +85,7 @@ async def generate_report_pdf(context: dict) -> bytes:
     Returns:
         PDF bytes
     """
-    import logging
-    import sys
-    logger = logging.getLogger(__name__)
-
-    try:
-        backend = get_pdf_backend()
-        print(f"DEBUG generate_report_pdf: Starting with backend={backend}", flush=True, file=sys.stderr)
-
-        if backend == "fpdf2":
-            result = await generate_pdf_fpdf2(context)
-        else:
-            # Use HTML-based backends (playwright or weasyprint)
-            html_content = render_report_html(context)
-            result = await html_to_pdf(html_content)
-
-        print(f"DEBUG generate_report_pdf: Done ({len(result)} bytes)", flush=True, file=sys.stderr)
-        return result
-    except Exception as e:
-        print(f"DEBUG generate_report_pdf: ERROR {e}", flush=True, file=sys.stderr)
-        logger.error(f"PDF generation error: {e}")
-        raise
-
-
-async def get_playwright_browser():
-    """Get or create a shared Playwright browser instance."""
-    global _playwright_browser
-
-    if _playwright_browser is None:
-        from playwright.async_api import async_playwright
-
-        p = await async_playwright().start()
-        _playwright_browser = await p.chromium.launch(args=['--no-sandbox'])
-
-    return _playwright_browser
-
-
-async def close_playwright_browser():
-    """Close the shared Playwright browser instance."""
-    global _playwright_browser
-
-    if _playwright_browser is not None:
-        await _playwright_browser.close()
-        _playwright_browser = None
-
-
-async def html_to_pdf_playwright(html_content: str, browser=None) -> bytes:
-    """Convert HTML to PDF using Playwright (Chromium).
-
-    Args:
-        html_content: HTML string to convert
-        browser: Optional shared browser instance (for bulk operations)
-    """
-    if browser is None:
-        browser = await get_playwright_browser()
-
-    page = await browser.new_page()
-    await page.set_content(html_content)
-
-    pdf_bytes = await page.pdf(
-        format='A4',
-        print_background=True,
-        margin={'top': '0', 'right': '0', 'bottom': '0', 'left': '0'}
-    )
-
-    await page.close()
-    return pdf_bytes
-
-
-async def html_to_pdf_weasyprint(html_content: str) -> bytes:
-    """Convert HTML to PDF using WeasyPrint (legacy)."""
-    from weasyprint import HTML
-
-    return await run_in_threadpool(
-        lambda: HTML(string=html_content).write_pdf()
-    )
+    return await generate_pdf_fpdf2(context)
 
 
 class ReportPDF(FPDF):
@@ -669,73 +545,11 @@ async def bulk_html_to_pdf(html_list):
     Returns:
         List of (filename, pdf_bytes) tuples
     """
-    backend = get_pdf_backend()
-
-    if backend == "playwright":
-        return await _bulk_playwright(html_list)
-    elif backend == "fpdf2":
-        return await _bulk_fpdf2(html_list)
-    else:
-        return await _bulk_weasyprint(html_list)
-
-
-async def _bulk_fpdf2(html_list):
-    """Bulk convert using fpdf2 (sequential)."""
+    # fpdf2 only - sequential conversion
     results = []
     for filename, html_content in html_list:
         pdf_bytes = await html_to_pdf_fpdf2(html_content)
         results.append((filename, pdf_bytes))
-    return results
-
-
-async def _bulk_playwright(html_list):
-    """Bulk convert using Playwright with shared browser."""
-    from playwright.async_api import async_playwright
-
-    results = []
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(args=['--no-sandbox'])
-        for filename, html_content in html_list:
-            page = await browser.new_page()
-            await page.set_content(html_content)
-            pdf_bytes = await page.pdf(
-                format='A4',
-                print_background=True,
-                margin={'top': '0', 'right': '0', 'bottom': '0', 'left': '0'}
-            )
-            await page.close()
-            results.append((filename, pdf_bytes))
-
-        await browser.close()
-
-    return results
-
-
-async def _bulk_weasyprint(html_list):
-    """Bulk convert using WeasyPrint (sequential)."""
-    from weasyprint import HTML
-
-    results = []
-    for filename, html_content in html_list:
-        pdf_bytes = await run_in_threadpool(
-            lambda h=html_content: HTML(string=h).write_pdf()
-        )
-        results.append((filename, pdf_bytes))
-
-    return results
-
-
-async def _bulk_weasyprint(html_list: list[tuple[str, str]]) -> list[tuple[str, bytes]]:
-    """Bulk convert using WeasyPrint (sequential)."""
-    from weasyprint import HTML
-
-    results = []
-    for filename, html_content in html_list:
-        pdf_bytes = await run_in_threadpool(
-            lambda h=html_content: HTML(string=h).write_pdf()
-        )
-        results.append((filename, pdf_bytes))
-
     return results
 
 
