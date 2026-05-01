@@ -51,6 +51,7 @@ function Login() {
           status: 'success',
           duration: 3000,
         });
+        navigate('/dashboard', { replace: true });
       } else {
         await login(email, password);
         toast({

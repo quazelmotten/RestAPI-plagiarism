@@ -136,7 +136,7 @@ class TestAuthRouterIntegration:
     @patch("auth.service.AuthService.get_user_by_email")
     @patch("auth.service.AuthService.create_user")
     def test_register_new_user(self, mock_create_user, mock_get_user, mock_user):
-        """Test registering a new user."""
+        """Test registering a new user gets auto-signed in with tokens."""
         mock_get_user.return_value = None
         mock_create_user.return_value = mock_user
 
@@ -145,12 +145,15 @@ class TestAuthRouterIntegration:
         )
 
         assert response.status_code == 201
-        assert response.json()["email"] == "test@example.com"
+        json_data = response.json()
+        assert "access_token" in json_data
+        assert json_data["access_token"] != ""
+        assert json_data["user"]["email"] == "test@example.com"
         assert mock_create_user.called
 
     @patch("auth.service.AuthService.get_user_by_email")
     def test_register_existing_user(self, mock_get_user, mock_user):
-        """Test registering an existing user returns same response."""
+        """Test registering an existing user returns user info without tokens."""
         mock_get_user.return_value = mock_user
 
         response = client.post(
@@ -158,7 +161,9 @@ class TestAuthRouterIntegration:
         )
 
         assert response.status_code == 201
-        assert response.json()["email"] == "test@example.com"
+        json_data = response.json()
+        assert json_data["access_token"] == ""
+        assert json_data["user"]["email"] == "test@example.com"
 
     @patch("auth.service.AuthService.authenticate_user")
     @patch("auth.service.AuthService.update_last_login")

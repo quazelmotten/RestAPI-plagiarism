@@ -89,6 +89,10 @@ export const login = async (email: string, password: string) => {
 
 export const register = async (email: string, password: string) => {
   const response = await api.post('/auth/register', { email, password });
+  // Save the access token from registration (auto sign-in)
+  if (response.data.access_token) {
+    setToken(response.data.access_token);
+  }
   return response.data;
 };
 

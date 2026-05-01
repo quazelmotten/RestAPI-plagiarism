@@ -35,24 +35,24 @@ security = HTTPBearer(auto_error=False)
 
 @router.post(
     "/register",
-    response_model=UserResponse,
+    response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(register_rate_limit)],
 )
-async def register(request: RegisterRequest) -> UserResponse:
-    """Register a new user.
-    For security, always returns success regardless of whether email existed.
-    In production, this would send a verification email.
+async def register(request: RegisterRequest, response: Response) -> TokenResponse:
+    """Register a new user and automatically sign them in.
+    
+    Returns JWT tokens for immediate authentication.
+    For security, if the email already exists, returns user info without tokens.
     """
     existing_user = await AuthService.get_user_by_email(request.email)
     if existing_user:
-        return UserResponse(
-            id=str(existing_user.id),
-            email=existing_user.email,
-            is_global_admin=existing_user.is_global_admin,
-            role=existing_user.role.value if existing_user.role else None,
-            created_at=existing_user.created_at,
-            last_login=existing_user.last_login,
+        # Email already exists - don't issue tokens, just return user info
+        return TokenResponse(
+            access_token="",
+            token_type="bearer",
+            expires_in=0,
+            user=AuthService.user_to_response(existing_user),
         )
 
     new_user = await AuthService.create_user(
@@ -61,7 +61,26 @@ async def register(request: RegisterRequest) -> UserResponse:
         is_global_admin=False,
     )
     logger.info("User registered: %s", new_user.email)
-    return AuthService.user_to_response(new_user)
+    
+    # Automatically sign in the user by issuing tokens
+    token_response = AuthService.create_token_response(new_user)
+    
+    # Set refresh token in HttpOnly cookie
+    # Only use secure=True in production (HTTPS)
+    if token_response.refresh_token:
+        response.set_cookie(
+            key="refresh_token",
+            value=token_response.refresh_token,
+            httponly=True,
+            secure=settings.is_production,
+            samesite="lax",
+            max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+            path="/",
+        )
+        # Remove refresh token from JSON response
+        token_response.refresh_token = None
+    
+    return token_response
 
 
 @router.post(
@@ -92,7 +111,7 @@ async def login(request: LoginRequest, response: Response) -> TokenResponse:
             key="refresh_token",
             value=token_response.refresh_token,
             httponly=True,
-            secure=True,
+            secure=settings.is_production,
             samesite="lax",
             max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
             path="/",
@@ -131,13 +150,13 @@ async def refresh_token(
         )
     logger.info("Token refreshed for user")
 
-    # Set new refresh token in HttpOnly Secure cookie (rotation)
+    # Set new refresh token in HttpOnly cookie (rotation)
     if token_response.refresh_token:
         response.set_cookie(
             key="refresh_token",
             value=token_response.refresh_token,
             httponly=True,
-            secure=True,
+            secure=settings.is_production,
             samesite="lax",
             max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
             path="/",

@@ -64,7 +64,7 @@ async def create_assignment(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new assignment. Admin only."""
-    result = assignment_service.create_assignment(data)
+    result = assignment_service.create_assignment(data, user_id=str(current_user.id))
     if hasattr(result, "__await__"):
         result = await result
     return result
@@ -370,7 +370,7 @@ async def create_subject(
     current_user: User = Depends(get_current_user),
 ):
     """Create a new subject. Admin only."""
-    return await subject_service.create_subject(data)
+    return await subject_service.create_subject(data, user_id=str(current_user.id))
 
 
 @subject_router.get(

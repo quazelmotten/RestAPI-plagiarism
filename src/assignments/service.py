@@ -17,6 +17,7 @@ from assignments.schemas import (
     SubjectUpdate,
     SubjectWithAssignments,
 )
+from assignments.subject_access import SubjectAccessService
 from schemas.common import PaginatedResponse
 
 
@@ -25,16 +26,19 @@ class SubjectService:
         self.db = db
         self.repo = SubjectRepository(db)
 
-    async def create_subject(self, data: SubjectCreate) -> SubjectResponse:
+    async def create_subject(self, data: SubjectCreate, user_id: str | None = None) -> SubjectResponse:
         existing = await self.repo.get_subject_by_name(data.name)
         if existing:
             return existing
         subject_id = str(uuid.uuid4())
-        return await self.repo.create_subject(
+        subject = await self.repo.create_subject(
             subject_id=subject_id,
             name=data.name,
             description=data.description,
         )
+        if user_id:
+            await SubjectAccessService.grant_access(user_id, subject_id, granted_by=user_id)
+        return subject
 
     async def get_subject(self, subject_id: str) -> SubjectResponse | None:
         return await self.repo.get_subject(subject_id)
@@ -87,14 +91,19 @@ class AssignmentService:
         self.db = db
         self.repo = AssignmentRepository(db)
 
-    async def create_assignment(self, data: AssignmentCreate) -> AssignmentResponse:
+    async def create_assignment(
+        self, data: AssignmentCreate, user_id: str | None = None
+    ) -> AssignmentResponse:
         assignment_id = str(uuid.uuid4())
-        return await self.repo.create_assignment(
+        assignment = await self.repo.create_assignment(
             assignment_id=assignment_id,
             name=data.name,
             description=data.description,
             subject_id=data.subject_id,
         )
+        if user_id and data.subject_id:
+            await SubjectAccessService.grant_access(user_id, data.subject_id, granted_by=user_id)
+        return assignment
 
     async def get_assignment(self, assignment_id: str) -> AssignmentResponse | None:
         return await self.repo.get_assignment(assignment_id)
