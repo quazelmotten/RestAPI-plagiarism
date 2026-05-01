@@ -18,5 +18,6 @@
   "viewAllAssignments": "View All Assignments",
   "users": "Users",
   "recent": "Recent",
-  "detail": "Detail"
+  "detail": "Detail",
+  "recentNoTasks": "No recent tasks"
 }

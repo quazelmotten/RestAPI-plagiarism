@@ -18,5 +18,6 @@
   "viewAllAssignments": "Все задания",
   "users": "Пользователи",
   "recent": "Недавние",
-  "detail": "Детали"
+  "detail": "Детали",
+  "recentNoTasks": "Нет недавних задач"
 }

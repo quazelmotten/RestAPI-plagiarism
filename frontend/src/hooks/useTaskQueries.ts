@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import api, { API_ENDPOINTS } from '../services/api';
 import type { TaskListItem, TaskDetails } from '../types';
 
@@ -27,6 +27,21 @@ export function useTasksList(options?: { selectedTaskId?: string }) {
     staleTime: 10_000,
     gcTime: 5 * 60_000,
     refetchInterval: 5000,
+  });
+}
+
+export function useRecentTasksList(opts?: { enabled?: boolean; staleTime?: number }): UseQueryResult<TasksListResponse> {
+  return useQuery<TasksListResponse>({
+    queryKey: ['tasks', 'recent'],
+    queryFn: async () => {
+      const response = await api.get<{ items: TaskListItem[] }>(API_ENDPOINTS.TASKS);
+      const taskList = response.data.items ?? [];
+      taskList.sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime());
+      return { items: taskList };
+    },
+    enabled: opts?.enabled ?? false,
+    staleTime: opts?.staleTime ?? 10_000,
+    gcTime: 5 * 60_000,
   });
 }
 

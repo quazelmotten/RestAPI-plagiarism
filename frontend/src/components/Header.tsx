@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Flex,
@@ -14,7 +14,7 @@ import {
   Badge,
   HStack,
   VStack,
-  Tooltip,
+  Spinner,
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router';
@@ -25,7 +25,7 @@ import { useAssignmentInfo } from '../contexts/AssignmentContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSidebar } from '../contexts/SidebarContext';
 import { SIDEBAR_WIDTH_PX } from '../constants/layout';
-import { useTasksList } from '../hooks/useTaskQueries';
+import { useRecentTasksList } from '../hooks/useTaskQueries';
 import { getStatusColorScheme } from '../utils/statusColors';
 
 
@@ -73,13 +73,12 @@ const Header: React.FC = () => {
   const location = useLocation();
   const bgColor = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
-  const mutedColor = useColorModeValue('gray.500', 'gray.400');
 
-  const { data: tasksData } = useTasksList();
+  const recentTasksQuery = useRecentTasksList({ enabled: false });
   const recentTasks = useMemo(() => {
-    const items = tasksData?.items ?? [];
+    const items = recentTasksQuery.data?.items ?? [];
     return items.slice(0, 5);
-  }, [tasksData]);
+  }, [recentTasksQuery.data]);
 
   const pageTitle = useMemo(() => {
     const path = location.pathname;
@@ -90,15 +89,6 @@ const Header: React.FC = () => {
     }
     return t('overview');
   }, [location.pathname, t]);
-
-  const routeAssignmentInfo = useMemo(() => {
-    const path = location.pathname;
-    const match = path.match(/^\/dashboard\/assignments\/([^\/]+)$/);
-    if (match) {
-      return { assignmentId: match[1] };
-    }
-    return null;
-  }, [location.pathname]);
 
   const breadcrumbs = useMemo(() => {
     const path = location.pathname;
@@ -168,67 +158,87 @@ const Header: React.FC = () => {
 
         <Flex align="center" gap={{ base: 2, md: 4 }} flexShrink={0}>
 
-           {recentTasks.length > 0 && (
-             <Menu>
-               <MenuButton
-                 as={Button}
-                 size="xs"
-                 variant="ghost"
-                 rightIcon={<FiChevronDown />}
-                 leftIcon={<FiClock />}
-                 display={{ base: 'none', md: 'flex' }}
-               >
-                 {t('recent')}
-               </MenuButton>
-               <MenuList maxH="400px" overflowY="auto" minW="340px" maxW="400px">
-                 {recentTasks.map(task => (
-                   <MenuItem
-                     key={task.task_id}
-                     onClick={() => navigate(`/dashboard/results?task=${task.task_id}`)}
-                     _hover={{ bg: 'gray.50' }}
-                   >
-                     <VStack align="start" spacing={1} w="100%" maxW="100%" overflow="hidden">
-                       <HStack justify="space-between" w="100%">
-                         <HStack spacing={2} minW={0}>
-                           {getStatusIcon(task.status)}
-                           <Text fontSize="sm" isTruncated fontFamily="monospace">
-                             {task.task_id.substring(0, 12)}...
-                           </Text>
-                         </HStack>
-<Badge size="sm" colorScheme={getStatusColorScheme(task.status)} flexShrink={0}>
-                            {t(`status:${task.status}`)}
-                          </Badge>
-                       </HStack>
-                       {(task.subject_name || task.assignment_name) && (
-                         <HStack spacing={2} w="100%" overflow="hidden">
-                           {task.subject_name && (
-                             <Text fontSize="2xs" color="purple.600" bg="purple.50" px={1} borderRadius="sm" isTruncated maxW="100%">
-                               {task.subject_name}
-                             </Text>
-                           )}
-                           {task.assignment_name && (
-                             <Text fontSize="2xs" color="blue.600" bg="blue.50" px={1} borderRadius="sm" isTruncated maxW="100%">
-                               {task.assignment_name}
-                             </Text>
-                           )}
-                         </HStack>
-                       )}
-<HStack justify="space-between" w="100%">
-                          <Text fontSize="2xs" color="gray.500">
-                            {t('common:files')}: {task.files_count ?? 0}
-                          </Text>
-                          {task.progress && task.total_pairs > 0 && (
-                            <Text fontSize="2xs" color="gray.500">
-                              {t('common:pairs')}: {task.progress.display}
+           <Menu
+              onOpen={() => {
+                if (!recentTasksQuery.data || recentTasksQuery.isStale) {
+                  recentTasksQuery.refetch();
+                }
+              }}
+            >
+                <MenuButton
+                  as={Button}
+                  size="xs"
+                  variant="ghost"
+                  rightIcon={<FiChevronDown />}
+                  leftIcon={<FiClock />}
+                  display={{ base: 'none', md: 'flex' }}
+                >
+                  {t('recent')}
+                </MenuButton>
+                <MenuList maxH="400px" overflowY="auto" minW="340px" maxW="400px">
+                  {recentTasksQuery.isFetching && (
+                    <Flex justify="center" align="center" p={4}>
+                      <Spinner size="sm" />
+                      <Text ml={2} fontSize="sm" color="gray.500">{t('common:loading')}</Text>
+                    </Flex>
+                  )}
+                  {recentTasksQuery.isError && (
+                    <Box p={4} color="red.500" fontSize="sm">
+                      {t('common:errorLoading')}
+                    </Box>
+                  )}
+                  {!recentTasksQuery.isFetching && !recentTasksQuery.isError && recentTasks.length === 0 && (
+                    <Box p={4} fontSize="sm" color="gray.500">
+                      {t('recentNoTasks')}
+                    </Box>
+                  )}
+                  {!recentTasksQuery.isFetching && !recentTasksQuery.isError && recentTasks.map(task => (
+                    <MenuItem
+                      key={task.task_id}
+                      onClick={() => navigate(`/dashboard/results?task=${task.task_id}`)}
+                      _hover={{ bg: 'gray.50' }}
+                    >
+                      <VStack align="start" spacing={1} w="100%" maxW="100%" overflow="hidden">
+                        <HStack justify="space-between" w="100%">
+                          <HStack spacing={2} minW={0}>
+                            {getStatusIcon(task.status)}
+                            <Text fontSize="sm" isTruncated fontFamily="monospace">
+                              {task.task_id.substring(0, 12)}...
                             </Text>
-                          )}
+                          </HStack>
+                          <Badge size="sm" colorScheme={getStatusColorScheme(task.status)} flexShrink={0}>
+                             {t(`status:${task.status}`)}
+                           </Badge>
                         </HStack>
-                     </VStack>
-                   </MenuItem>
-                 ))}
-               </MenuList>
-            </Menu>
-          )}
+                        {(task.subject_name || task.assignment_name) && (
+                          <HStack spacing={2} w="100%" overflow="hidden">
+                            {task.subject_name && (
+                              <Text fontSize="2xs" color="purple.600" bg="purple.50" px={1} borderRadius="sm" isTruncated maxW="100%">
+                                {task.subject_name}
+                              </Text>
+                            )}
+                            {task.assignment_name && (
+                              <Text fontSize="2xs" color="blue.600" bg="blue.50" px={1} borderRadius="sm" isTruncated maxW="100%">
+                                {task.assignment_name}
+                              </Text>
+                            )}
+                          </HStack>
+                        )}
+                        <HStack justify="space-between" w="100%">
+                           <Text fontSize="2xs" color="gray.500">
+                             {t('common:files')}: {task.files_count ?? 0}
+                           </Text>
+                           {task.progress && task.total_pairs > 0 && (
+                             <Text fontSize="2xs" color="gray.500">
+                               {t('common:pairs')}: {task.progress.display}
+                             </Text>
+                           )}
+                         </HStack>
+                      </VStack>
+                    </MenuItem>
+                  ))}
+                </MenuList>
+             </Menu>
 
           <Flex
             bg={useColorModeValue('gray.100', 'gray.700')}
