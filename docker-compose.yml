@@ -96,9 +96,6 @@ services:
       # Plagiarism Settings
       DEFAULT_PLAGIARISM_THRESHOLD: ${DEFAULT_PLAGIARISM_THRESHOLD:-0.75}
       SUPPORTED_LANGUAGES: ${SUPPORTED_LANGUAGES:-python,java,cpp,c,javascript}
-
-      # PDF Generation (playwright is ~15x faster than weasyprint)
-      PDF_BACKEND: ${PDF_BACKEND:-playwright}
       MAX_FILE_SIZE: ${MAX_FILE_SIZE:-1048576}
       MAX_FILES_PER_BATCH: ${MAX_FILES_PER_BATCH:-100}
       
