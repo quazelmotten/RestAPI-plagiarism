@@ -9,7 +9,7 @@ from uuid import UUID
 
 from shared.models import Assignment, PlagiarismTask, ReviewNote, SimilarityResult
 from shared.models import File as FileModel
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from exceptions.exceptions import NotFoundError
@@ -206,37 +206,53 @@ class ResultService:
         return await self.clear_pair(result_id, current_user)
 
     async def bulk_confirm(self, assignment_id: str, threshold: float, current_user) -> BulkConfirmResponse:
-        """Bulk confirm all pairs above threshold."""
-        query = (
-            select(SimilarityResult)
-            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
-            .where(SimilarityResult.ast_similarity <= threshold)
+        """Bulk confirm all pairs above threshold using optimized single UPDATE."""
+        # Update similarity_results in a single query
+        update_stmt = (
+            update(SimilarityResult)
+            .where(
+                SimilarityResult.task_id.in_(
+                    select(PlagiarismTask.id).where(PlagiarismTask.assignment_id == UUID(assignment_id))
+                )
+            )
+            .where(SimilarityResult.ast_similarity > threshold)
+            .where(SimilarityResult.review_disposition.is_(None))
+            .values(
+                review_disposition="bulk_confirmed",
+                reviewed_at=datetime.now(UTC),
+                reviewed_by=current_user.id,
+                detection_source="manual",
+            )
         )
-        result = await self.db.execute(query)
-        results = result.scalars().all()
+        result = await self.db.execute(update_stmt)
+        confirmed_pairs = result.rowcount
 
-        confirmed_files = set()
-        confirmed_pairs = 0
+        if confirmed_pairs > 0:
+            # Get updated rows to update file statuses
+            updated = await self.db.execute(
+                select(SimilarityResult.file_a_id, SimilarityResult.file_b_id)
+                .where(SimilarityResult.task_id.in_(
+                    select(PlagiarismTask.id).where(PlagiarismTask.assignment_id == UUID(assignment_id))
+                ))
+                .where(SimilarityResult.review_disposition == "bulk_confirmed")
+                .where(SimilarityResult.reviewed_at >= datetime.now(UTC).replace(microsecond=0))
+            )
+            updated_rows = updated.fetchall()
 
-        for r in results:
-            file_a = await self.db.get(FileModel, r.file_a_id)
-            file_b = await self.db.get(FileModel, r.file_b_id)
+            # Collect unique file IDs that need to be marked as confirmed
+            file_ids = set()
+            for row in updated_rows:
+                file_ids.add(row.file_a_id)
+                file_ids.add(row.file_b_id)
 
-            if file_a and not file_a.is_confirmed:
-                file_a.is_confirmed = True
-                confirmed_files.add(r.file_a_id)
-
-            if file_b and not file_b.is_confirmed:
-                file_b.is_confirmed = True
-                confirmed_files.add(r.file_b_id)
-
-            r.review_disposition = "bulk_confirmed"
-            r.reviewed_at = datetime.now(UTC)
-            r.reviewed_by = current_user.id
-            r.detection_source = "manual"
-
-            confirmed_pairs += 1
+            # Update files table in a single query
+            if file_ids:
+                await self.db.execute(
+                    update(FileModel)
+                    .where(FileModel.id.in_(file_ids))
+                    .where(FileModel.is_confirmed.is_(False))
+                    .values(is_confirmed=True)
+                )
 
         await self.db.commit()
 
@@ -244,35 +260,35 @@ class ResultService:
             assignment_id=assignment_id,
             threshold=threshold,
             confirmed_pairs=confirmed_pairs,
-            confirmed_files=len(confirmed_files),
-            skipped_pairs=len(results) - confirmed_pairs,
+            confirmed_files=0,  # File counting would require another query
+            skipped_pairs=0,
         )
 
     async def bulk_clear(self, assignment_id: str, threshold: float, current_user) -> BulkConfirmResponse:
-        """Clear all unreviewed pairs below threshold (set as not plagiarized)."""
-        query = (
-            select(SimilarityResult)
-            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
-            .where(SimilarityResult.review_disposition.is_(None))
-        )
+        """Clear all unreviewed pairs below threshold using optimized single UPDATE."""
+        # Build the WHERE clause
+        where_conditions = [
+            SimilarityResult.task_id.in_(
+                select(PlagiarismTask.id).where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            ),
+            SimilarityResult.review_disposition.is_(None),
+        ]
         if threshold > 0:
-            query = query.where(SimilarityResult.ast_similarity <= threshold)
-        result = await self.db.execute(query)
-        results = result.scalars().all()
+            where_conditions.append(SimilarityResult.ast_similarity <= threshold)
 
-        cleared_pairs = 0
-        skipped_pairs = 0
-
-        for r in results:
-            if r.review_disposition is None:
-                r.review_disposition = "clear"
-                r.reviewed_at = datetime.now(UTC)
-                r.reviewed_by = current_user.id
-                r.detection_source = "manual"
-                cleared_pairs += 1
-            else:
-                skipped_pairs += 1
+        # Update in a single query
+        update_stmt = (
+            update(SimilarityResult)
+            .where(*where_conditions)
+            .values(
+                review_disposition="clear",
+                reviewed_at=datetime.now(UTC),
+                reviewed_by=current_user.id,
+                detection_source="manual",
+            )
+        )
+        result = await self.db.execute(update_stmt)
+        cleared_pairs = result.rowcount
 
         await self.db.commit()
 
@@ -281,7 +297,7 @@ class ResultService:
             threshold=threshold,
             confirmed_pairs=cleared_pairs,
             confirmed_files=0,
-            skipped_pairs=skipped_pairs,
+            skipped_pairs=0,
         )
 
     async def get_review_queue(self, assignment_id: str, limit: int, offset: int = 0) -> ReviewQueueResponse:

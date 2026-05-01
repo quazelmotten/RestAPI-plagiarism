@@ -45,6 +45,8 @@ services:
       DB_USER: ${DB_USER:-plagiarism_user}
       DB_PASS: ${DB_PASS}
     command: sh -c "cd /app/database && alembic upgrade head"
+    volumes:
+      - ./database:/app/database
     depends_on:
       postgres:
         condition: service_healthy
