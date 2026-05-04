@@ -59,7 +59,7 @@ api.interceptors.response.use(
         }
         // Retry original request with new token
         return api(originalRequest);
-      } catch (e) {
+} catch (_unused) {
         // Refresh failed – clear tokens and redirect
         removeToken();
         window.location.href = `${getBasePath()}/login`;
@@ -123,7 +123,7 @@ export const refreshToken = async () => {
 export const logout = async () => {
   try {
     await api.post('/auth/logout');
-  } catch (e) {
+} catch (_unused) {
     // ignore errors, still clear local tokens
   }
   removeToken();
@@ -151,6 +151,37 @@ export const updateUserGlobalRole = async (userId: string, isGlobalAdmin: boolea
 
 export const adminChangePassword = async (userId: string, newPassword: string) => {
   await api.post(`/auth/users/${userId}/change-password`, { new_password: newPassword });
+};
+
+export const updateUserProfile = async (data: { username?: string; email?: string }) => {
+  const response = await api.put('/auth/users/me', data);
+  return response.data;
+};
+
+// API Key management
+export const listApiKeys = async () => {
+  const response = await api.get('/auth/api-keys');
+  return response.data;
+};
+
+export const createApiKey = async (data: { name?: string; expires_in_days?: number } = {}) => {
+  const response = await api.post('/auth/api-keys', data);
+  return response.data;
+};
+
+export const deleteApiKey = async (keyId: string) => {
+  await api.delete(`/auth/api-keys/${keyId}`);
+};
+
+// Admin: List all API keys for all users
+export const listAllApiKeys = async () => {
+  const response = await api.get('/auth/api-keys/all');
+  return response.data;
+};
+
+export const updateApiKey = async (keyId: string, data: { name?: string; expires_in_days?: number }) => {
+  const response = await api.patch(`/auth/api-keys/${keyId}`, data);
+  return response.data;
 };
 
 export const restoreAssignment = (id: string) => 

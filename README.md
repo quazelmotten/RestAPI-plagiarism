@@ -164,6 +164,54 @@ When the API is running, visit:
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 
+### API Key Authentication
+
+The API supports authentication via API keys in addition to JWT tokens. This is useful for programmatic access, CI/CD pipelines, and third-party integrations.
+
+#### Creating an API Key
+
+1. Login via `/auth/login` to get a JWT token
+2. POST to `/auth/api-keys` with `{"name": "my-key-name", "expires_in_days": 30}`
+3. Save the returned `raw_key` value - it won't be shown again!
+
+Example:
+```bash
+# First, get a JWT token
+curl -X POST http://localhost:8000/plagitype/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"your-password"}'
+
+# Use the token to create an API key
+curl -X POST http://localhost:8000/plagitype/auth/api-keys \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"My API Key","expires_in_days":30}'
+```
+
+#### Using an API Key
+
+Include the `X-API-Key` header in your requests:
+
+```bash
+curl -H "X-API-Key: YOUR_API_KEY" \
+  http://localhost:8000/plagitype/plagiarism/tasks
+```
+
+#### Managing API Keys
+
+- **List keys**: `GET /auth/api-keys` (requires authentication)
+- **Create key**: `POST /auth/api-keys` (requires authentication)
+- **Revoke key**: `DELETE /auth/api-keys/{key_id}` (requires authentication)
+
+API keys can also be managed through the web UI in the Settings page at `/dashboard/settings`.
+
+#### Security Notes
+
+- API keys have the same permissions as the user who created them
+- Keys are hashed (SHA-256) before storage - the raw key is only returned once during creation
+- Expired keys are automatically rejected
+- Revoked keys are permanently deleted
+
 ## 🏗️ Architecture
 
 The system uses a producer-consumer pattern:

@@ -5,6 +5,8 @@ A React SPA frontend for the Plagiarism Detection API built with React 18, TypeS
 ## Features
 
 - **Teacher Dashboard**: Overview, Students, Submissions, Plagiarism Graph, and Upload pages
+- **User Settings**: Manage API keys, view account information
+- **API Key Management**: Create, view, and revoke API keys for programmatic access
 - **Plagiarism Visualization**: Interactive network graph using Cytoscape.js
 - **File Upload**: Drag & drop file uploads with multiple file support
 - **Responsive Design**: Mobile-friendly interface
@@ -52,7 +54,8 @@ frontend/
 │   │   ├── Students.tsx
 │   │   ├── Submissions.tsx
 │   │   ├── PlagiarismGraph.tsx
-│   │   └── Upload.tsx
+│   │   ├── Upload.tsx
+│   │   └── Settings.tsx  # API key management
 │   ├── services/       # API client
 │   ├── types/          # TypeScript types
 │   ├── App.tsx         # Main app
@@ -74,6 +77,14 @@ VITE_API_URL=http://localhost:8000
 
 The frontend expects these FastAPI endpoints:
 
+**Auth Endpoints:**
+- `POST /auth/login` - Login and get JWT token
+- `GET /auth/me` - Get current user info
+- `GET /auth/api-keys` - List API keys
+- `POST /auth/api-keys` - Create new API key
+- `DELETE /auth/api-keys/{key_id}` - Revoke API key
+
+**Plagiarism Endpoints:**
 - `GET /plagiarism/check` - Submit files for plagiarism check
 - `GET /plagiarism/tasks` - List all tasks
 - `GET /plagiarism/{task_id}/results` - Get task results

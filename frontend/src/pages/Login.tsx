@@ -21,7 +21,7 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import { FiGlobe } from 'react-icons/fi';
-import { login, register, isAuthenticated } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 
@@ -33,19 +33,20 @@ function Login() {
   const navigate = useNavigate();
   const toast = useToast();
   const { t, i18n } = useTranslation();
+  const { login: authLogin, register: authRegister, isAuthenticated } = useAuth();
 
   useEffect(() => {
-    if (isAuthenticated()) {
+    if (isAuthenticated) {
       navigate('/dashboard', { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, isAuthenticated]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
       if (viewMode === 'signup') {
-        await register(email, password);
+        await authRegister(email, password);
         toast({
           title: t('registrationSuccessful'),
           status: 'success',
@@ -53,7 +54,7 @@ function Login() {
         });
         navigate('/dashboard', { replace: true });
       } else {
-        await login(email, password);
+        await authLogin(email, password);
         toast({
           title: t('loginSuccessful'),
           status: 'success',

@@ -6,6 +6,7 @@ import {
   forgotPassword as apiForgotPassword,
   resetPassword as apiResetPassword,
   changePassword as apiChangePassword,
+  updateUserProfile as apiUpdateUserProfile,
   isAuthenticated as apiIsAuthenticated,
   getToken,
 } from '../services/api';
@@ -13,6 +14,7 @@ import {
 export interface User {
   id: string;
   email: string;
+  username?: string;
   is_global_admin: boolean;
   role?: string;
 }
@@ -25,6 +27,7 @@ interface AuthContextProps {
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (token: string, newPassword: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  updateProfile: (data: { username?: string; email?: string }) => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -33,7 +36,7 @@ const AuthContext = createContext<AuthContextProps | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [authVersion, setAuthVersion] = useState(0);
+  const [_authVersion, setAuthVersion] = useState(0);
 
   // On mount, if token exists, set user from token payload (lightweight)
   useEffect(() => {
@@ -41,13 +44,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const token = getToken();
       if (token) {
         try {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          setUser({
-            id: payload.sub,
-            email: payload.email,
-            is_global_admin: payload.is_global_admin,
-            role: payload.role,
-          });
+           const payload = JSON.parse(atob(token.split('.')[1]));
+           setUser({
+             id: payload.sub,
+             email: payload.email,
+             username: payload.username,
+             is_global_admin: payload.is_global_admin,
+             role: payload.role,
+           });
         } catch {
           // ignore malformed token
         }
@@ -61,6 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser({
       id: data.user.id,
       email: data.user.email,
+      username: data.user.username,
       is_global_admin: data.user.is_global_admin,
       role: data.user.role,
     });
@@ -74,14 +79,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (email: string, password: string) => {
-    await apiRegister(email, password);
-    // optional: auto‑login after registration
-    try {
-      await login(email, password);
-    } catch (e) {
-      // ignore login errors, let user login manually if needed
-      console.warn('Auto-login after registration failed', e);
-    }
+    const data = await apiRegister(email, password);
+    // apiRegister already stores token, set user from response
+    setUser({
+      id: data.user.id,
+      email: data.user.email,
+      username: data.user.username,
+      is_global_admin: data.user.is_global_admin,
+      role: data.user.role,
+    });
+    // Note: login() attempt removed because token already set and user set above
   };
 
   const forgotPassword = async (email: string) => {
@@ -96,6 +103,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await apiChangePassword(currentPassword, newPassword);
   };
 
+  const updateProfile = async (data: { username?: string; email?: string }) => {
+    const updated = await apiUpdateUserProfile(data);
+    setUser((prev) => prev ? { ...prev, ...updated } : null);
+  };
+
   // Re-evaluate on each render - reactive to login/logout via authVersion
   const isAuthenticated = apiIsAuthenticated();
 
@@ -107,6 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     forgotPassword,
     resetPassword,
     changePassword,
+    updateProfile,
     isAuthenticated,
   };
 

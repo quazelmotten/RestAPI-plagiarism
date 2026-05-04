@@ -20,6 +20,7 @@ import PlagiarismGraph from './PlagiarismGraph';
 import Upload from './Upload';
 import Results from './Results';
 import PairComparison from './PairComparison';
+import Settings from './Settings';
 
 const Dashboard: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('assignments');
@@ -33,16 +34,17 @@ const Dashboard: React.FC = () => {
             <Box flex="1" ml={{ base: 0, lg: SIDEBAR_WIDTH_PX }} display="flex" flexDirection="column" overflow="hidden">
               <Header />
               <Box as="main" p={8} pt={24} flex="1" overflow="hidden" minH={0} display="flex" flexDirection="column">
-                <Routes>
-                  <Route path="/" element={<Overview />} />
-                  <Route path="assignments" element={<Assignments />} />
-                  <Route path="assignments/:assignmentId" element={<AssignmentDetail />} />
-                  <Route path="submissions" element={<Submissions />} />
-                  <Route path="graph" element={<PlagiarismGraph />} />
-                  <Route path="upload" element={<Upload />} />
-                  <Route path="results" element={<Results />} />
-                  <Route path="pair-comparison" element={<PairComparison />} />
-                </Routes>
+                 <Routes>
+                   <Route path="/" element={<Overview />} />
+                   <Route path="assignments" element={<Assignments />} />
+                   <Route path="assignments/:assignmentId" element={<AssignmentDetail />} />
+                   <Route path="submissions" element={<Submissions />} />
+                   <Route path="graph" element={<PlagiarismGraph />} />
+                   <Route path="upload" element={<Upload />} />
+                   <Route path="results" element={<Results />} />
+                   <Route path="pair-comparison" element={<PairComparison />} />
+                   <Route path="settings" element={<Settings />} />
+                 </Routes>
               </Box>
             </Box>
           </Flex>

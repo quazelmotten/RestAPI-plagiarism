@@ -3,16 +3,21 @@ Authentication router.
 """
 
 import logging
+import uuid
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from auth.blacklist_service import blacklist_service
 from auth.dependencies import get_current_user, require_global_admin
-from auth.models import User
+from auth.models import ApiKey, User
 from auth.rate_limit import forgot_password_rate_limit, login_rate_limit, register_rate_limit
 from auth.schemas import (
     AdminChangePasswordRequest,
+    ApiKeyCreate,
+    ApiKeyCreatedResponse,
+    ApiKeyResponse,
+    ApiKeyUpdate,
     ChangePasswordRequest,
     ForgotPasswordRequest,
     GlobalRoleUpdate,
@@ -22,10 +27,12 @@ from auth.schemas import (
     ResetPasswordRequest,
     TokenResponse,
     UserResponse,
+    UserProfileUpdate,
     UsersListResponse,
 )
 from auth.service import AuthService, get_token_expiry, get_token_jti
 from config import settings
+from database import async_session_maker
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +209,18 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)) 
     return AuthService.user_to_response(current_user)
 
 
+@router.put("/users/me", response_model=UserResponse, status_code=status.HTTP_200_OK)
+async def update_current_user(
+    update_data: UserProfileUpdate,
+    current_user: User = Depends(get_current_user),
+) -> UserResponse:
+    """Update current user's profile (username and/or email)."""
+    updated = await AuthService.update_user_profile(current_user.id, update_data.username, update_data.email)
+    if not updated:
+        raise HTTPException(status_code=404, detail="User not found")
+    return AuthService.user_to_response(updated)
+
+
 @router.post(
     "/forgot-password",
     status_code=status.HTTP_200_OK,
@@ -321,3 +340,107 @@ async def admin_change_password(
             detail="Invalid user or new password invalid",
         )
     return {"message": "Password changed successfully"}
+
+
+@router.get("/api-keys", response_model=list[ApiKeyResponse], status_code=status.HTTP_200_OK)
+async def list_api_keys(current_user: User = Depends(get_current_user)) -> list[ApiKeyResponse]:
+    """List API keys for the authenticated user."""
+    keys = await AuthService.list_api_keys(current_user)
+    return [
+        ApiKeyResponse(
+            id=str(k.id),
+            name=k.name,
+            created_at=k.created_at,
+            last_used_at=k.last_used_at,
+            expires_at=k.expires_at,
+        )
+        for k in keys
+    ]
+
+
+@router.post("/api-keys", response_model=ApiKeyCreatedResponse, status_code=status.HTTP_201_CREATED)
+async def create_api_key(
+    request: ApiKeyCreate,
+    current_user: User = Depends(get_current_user),
+) -> ApiKeyCreatedResponse:
+    """Create a new API key for the authenticated user."""
+    api_key, raw_key = await AuthService.create_api_key(
+        current_user, name=request.name, expires_in_days=request.expires_in_days
+    )
+    return ApiKeyCreatedResponse(
+        id=str(api_key.id),
+        name=api_key.name,
+        created_at=api_key.created_at,
+        last_used_at=api_key.last_used_at,
+        expires_at=api_key.expires_at,
+        raw_key=raw_key,
+    )
+
+
+@router.delete("/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_api_key(
+    key_id: str,
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Revoke (delete) an API key."""
+    success = await AuthService.revoke_api_key(current_user, key_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
+    return None
+
+
+@router.patch("/api-keys/{key_id}", response_model=ApiKeyResponse, status_code=status.HTTP_200_OK)
+async def update_api_key(
+    key_id: str,
+    update_data: ApiKeyUpdate,
+    current_user: User = Depends(get_current_user),
+) -> ApiKeyResponse:
+    """Update an API key (name and/or expiration)."""
+    try:
+        key_uuid = uuid.UUID(key_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid key ID")
+    # Check ownership: user can update their own keys, or global admin can update any
+    key = await AuthService.get_api_key(key_uuid)
+    if not key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    if key.user_id != current_user.id and not current_user.is_global_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to update this key")
+    updated = await AuthService.update_api_key(
+        key_uuid,
+        name=update_data.name,
+        expires_in_days=update_data.expires_in_days
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="API key not found")
+    return ApiKeyResponse(
+        id=str(updated.id),
+        name=updated.name,
+        created_at=updated.created_at,
+        last_used_at=updated.last_used_at,
+        expires_at=updated.expires_at,
+        user_email=updated.user.email if updated.user else None,
+    )
+
+
+@router.get("/api-keys/all", response_model=list[ApiKeyResponse], status_code=status.HTTP_200_OK)
+async def list_all_api_keys(current_user: User = Depends(require_global_admin)) -> list[ApiKeyResponse]:
+    """List all API keys for all users. Global admin only."""
+    keys = await AuthService.list_all_api_keys()
+    results = []
+    for k in keys:
+        user_email = None
+        if k.user and hasattr(k.user, 'email'):
+            email = k.user.email
+            if isinstance(email, str):
+                user_email = email
+            # else ignore (e.g., MagicMock)
+        results.append(ApiKeyResponse(
+            id=str(k.id),
+            name=k.name,
+            created_at=k.created_at,
+            last_used_at=k.last_used_at,
+            expires_at=k.expires_at,
+            user_email=user_email,
+        ))
+    return results

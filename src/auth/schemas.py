@@ -68,6 +68,7 @@ class UserResponse(BaseModel):
 
     id: str
     email: str
+    username: str | None = None
     is_global_admin: bool
     role: str | None = None
     created_at: datetime
@@ -83,8 +84,28 @@ class UsersListResponse(BaseModel):
 
 class GlobalRoleUpdate(BaseModel):
     """Update user global role schema."""
-
     is_global_admin: bool
+
+
+class ApiKeyCreate(BaseModel):
+    """API key creation request schema."""
+    name: str | None = None
+    expires_in_days: int | None = None
+
+
+class ApiKeyResponse(BaseModel):
+    """API key response schema (excludes raw key)."""
+    id: str
+    name: str | None = None
+    created_at: datetime
+    last_used_at: datetime | None = None
+    expires_at: datetime | None = None
+    user_email: str | None = None
+
+
+class ApiKeyCreatedResponse(ApiKeyResponse):
+    """Response when a new API key is created; includes raw key."""
+    raw_key: str
 
 
 class SubjectAccessGrant(BaseModel):
@@ -108,6 +129,18 @@ class SubjectMember(BaseModel):
     granted_by: str | None = None
 
 
+class ApiKeyUpdate(BaseModel):
+    """API key update request schema."""
+    name: str | None = None
+    expires_in_days: int | None = None
+
+
+class UserProfileUpdate(BaseModel):
+    """User profile update request schema."""
+    username: str | None = None
+    email: str | None = None
+
+
 class SubjectMembersResponse(BaseModel):
     """Subject members list response."""
 
@@ -117,3 +150,5 @@ class SubjectMembersResponse(BaseModel):
 
 # Forward reference resolution
 TokenResponse.model_rebuild()
+
+

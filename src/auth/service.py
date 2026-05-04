@@ -2,19 +2,22 @@
 Authentication service.
 """
 
+import hashlib
 import logging
+import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from config import settings
 from database import async_session_maker
 
 from .blacklist_service import blacklist_service
-from .models import User, UserRole
+from .models import User, UserRole, ApiKey
 from .password_validation import validate_password
 from .schemas import TokenResponse, UserResponse
 
@@ -230,6 +233,22 @@ class AuthService:
         return True
 
     @staticmethod
+    async def update_user_profile(user_id: str, username: str | None = None, email: str | None = None) -> User | None:
+        """Update a user's profile (username and/or email). Returns updated user or None."""
+        async with async_session_maker() as session:
+            result = await session.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return None
+            if username is not None:
+                user.username = username
+            if email is not None:
+                user.email = email
+            await session.commit()
+            await session.refresh(user)
+            return user
+
+    @staticmethod
     def get_user_role_hierarchy() -> dict[UserRole, int]:
         """Return a mapping of UserRole to its hierarchy level (higher = more privileges)."""
         return {
@@ -436,3 +455,116 @@ class AuthService:
             user.hashed_password = get_password_hash(new_password)
             await session.commit()
         return True
+
+    @staticmethod
+    def generate_api_key() -> str:
+        """Generate a secure random API key string."""
+        return secrets.token_urlsafe(32)
+
+    @staticmethod
+    def hash_key(key: str) -> str:
+        """Hash an API key using SHA-256 for storage."""
+        return hashlib.sha256(key.encode()).hexdigest()
+
+    @staticmethod
+    async def create_api_key(user: User, name: str | None = None, expires_in_days: int | None = None) -> tuple[ApiKey, str]:
+        """Create a new API key for the user. Returns (ApiKey object, raw key)."""
+        raw_key = AuthService.generate_api_key()
+        key_hash = AuthService.hash_key(raw_key)
+        expires_at = None
+        if expires_in_days:
+            expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
+        async with async_session_maker() as session:
+            api_key = ApiKey(
+                user_id=user.id,
+                name=name,
+                key_hash=key_hash,
+                expires_at=expires_at,
+            )
+            session.add(api_key)
+            await session.commit()
+            await session.refresh(api_key)
+            return api_key, raw_key
+
+    @staticmethod
+    async def list_api_keys(user: User) -> list[ApiKey]:
+        """List all API keys for a user."""
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(ApiKey).where(ApiKey.user_id == user.id).order_by(ApiKey.created_at.desc())
+            )
+            return result.scalars().all()
+
+    @staticmethod
+    async def revoke_api_key(user: User, key_id: str) -> bool:
+        """Revoke an API key. User can revoke their own keys; global admins can revoke any key."""
+        async with async_session_maker() as session:
+            query = select(ApiKey).where(ApiKey.id == key_id)
+            if not user.is_global_admin:
+                query = query.where(ApiKey.user_id == user.id)
+            result = await session.execute(query)
+            api_key = result.scalar_one_or_none()
+            if not api_key:
+                return False
+            await session.delete(api_key)
+            await session.commit()
+            return True
+
+    @staticmethod
+    async def get_api_key(key_id: uuid.UUID) -> ApiKey | None:
+        """Get an API key by ID."""
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(ApiKey).options(selectinload(ApiKey.user)).where(ApiKey.id == key_id)
+            )
+            return result.scalar_one_or_none()
+
+    @staticmethod
+    async def update_api_key(key_id: uuid.UUID, name: str | None = None, expires_in_days: int | None = None) -> ApiKey | None:
+        """Update an API key's name and/or expiration. Returns updated key or None if not found."""
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(ApiKey).options(selectinload(ApiKey.user)).where(ApiKey.id == key_id)
+            )
+            api_key = result.scalar_one_or_none()
+            if not api_key:
+                return None
+            if name is not None:
+                api_key.name = name
+            if expires_in_days is not None:
+                api_key.expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
+            await session.commit()
+            await session.refresh(api_key)
+            return api_key
+
+    @staticmethod
+    async def get_user_by_api_key(raw_key: str) -> User | None:
+        """Resolve a raw API key to the associated user, if valid and not expired."""
+        key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(ApiKey).where(ApiKey.key_hash == key_hash)
+            )
+            api_key = result.scalar_one_or_none()
+            if not api_key:
+                return None
+            # Check expiry
+            if api_key.expires_at and api_key.expires_at < datetime.now(UTC):
+                return None
+            # Update last_used_at
+            api_key.last_used_at = datetime.now(UTC)
+            await session.commit()
+            # Return user
+            user_result = await session.execute(select(User).where(User.id == api_key.user_id))
+            return user_result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_all_api_keys() -> list[ApiKey]:
+        """List all API keys for all users. Admin only."""
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(ApiKey)
+                .options(selectinload(ApiKey.user))
+                .order_by(ApiKey.created_at.desc())
+            )
+            return result.scalars().all()

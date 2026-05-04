@@ -15,6 +15,7 @@ import {
   HStack,
   VStack,
   Spinner,
+  Avatar,
 } from '@chakra-ui/react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router';
@@ -63,7 +64,7 @@ const getStatusIcon = (status: string) => {
 };
 
 const Header: React.FC = () => {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const { colorMode, toggleColorMode } = useColorMode();
   const { t } = useTranslation(['navigation', 'common']);
   const { mode, setMode } = useViewMode();
@@ -281,16 +282,33 @@ const Header: React.FC = () => {
             variant="ghost"
             size="md"
           />
-          {/* Logout button */}
-           <Button
-             size="xs"
-             variant="ghost"
-             onClick={async () => {
-               await logout();
-             }}
-           >
-             {t('common:logout')}
-           </Button>
+           {/* User menu */}
+            {user && (
+              <Menu>
+                <MenuButton as={Box} cursor="pointer">
+                  <HStack spacing={2}>
+                    <Avatar size="sm" name={user.email} />
+                    <Text fontSize="sm" display={{ base: 'none', md: 'block' }}>
+                      {user.email}
+                    </Text>
+                  </HStack>
+                </MenuButton>
+                <MenuList>
+                   <MenuItem as={Link} to="/dashboard/settings">{t('common:settings')}</MenuItem>
+                   {user.is_global_admin && (
+                     <MenuItem as={Link} to="/dashboard/users">{t('common:adminUsers')}</MenuItem>
+                   )}
+                     <MenuItem onClick={async () => {
+                       try {
+                         await logout();
+                       } catch (e) {
+                         // ignore
+                       }
+                       navigate('/login');
+                     }}>{t('common:logout')}</MenuItem>
+                </MenuList>
+              </Menu>
+            )}
         </Flex>
       </Flex>
     </Box>
