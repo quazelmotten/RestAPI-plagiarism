@@ -61,6 +61,7 @@ def mock_database():
     """Mock database session and domain dependencies via FastAPI dependency_overrides."""
     from unittest.mock import AsyncMock, MagicMock
 
+    # Create mock session
     mock_session = AsyncMock()
     mock_execute = MagicMock()
     mock_session.execute = mock_execute
@@ -73,57 +74,64 @@ def mock_database():
     async def mock_get_async_session():
         yield mock_session
 
-    # Create mock services
-    mock_task_service = MagicMock()
-    mock_task_service.get_task = AsyncMock(return_value=None)
-    mock_task_service.get_all_tasks = AsyncMock(
-        return_value=MagicMock(items=[], total=0, limit=50, offset=0)
-    )
-    mock_task_service.create_task = AsyncMock(return_value=None)
+    # Create simple mock services that return proper async mocks
+    class MockTaskService:
+        def __init__(self):
+            self.get_task = AsyncMock(return_value=None)
+            self.get_all_tasks = AsyncMock(return_value=MagicMock(items=[], total=0, limit=50, offset=0))
+            self.create_task = AsyncMock(return_value=None)
 
-    mock_assignment_service = MagicMock()
-    mock_assignment_service.get_assignment = AsyncMock(return_value=None)
-    mock_assignment_service.get_all_assignments = AsyncMock(
-        return_value=MagicMock(items=[], total=0, limit=50, offset=0)
-    )
-    mock_assignment_service.create_assignment = AsyncMock(return_value=None)
-    mock_assignment_service.update_assignment = AsyncMock(return_value=None)
-    mock_assignment_service.delete_assignment = AsyncMock(return_value=True)
+    class MockAssignmentService:
+        def __init__(self):
+            self.get_assignment = AsyncMock(return_value=None)
+            self.get_all_assignments = AsyncMock(return_value=MagicMock(items=[], total=0, limit=50, offset=0))
+            self.create_assignment = AsyncMock(return_value=None)
+            self.update_assignment = AsyncMock(return_value=None)
+            self.delete_assignment = AsyncMock(return_value=True)
 
-    mock_file_service = MagicMock()
-    mock_file_service.get_files = AsyncMock(
-        return_value=MagicMock(items=[], total=0, limit=50, offset=0)
-    )
-    mock_file_service.get_all_file_info = AsyncMock(
-        return_value=MagicMock(items=[], total=0, limit=50, offset=0)
-    )
-    mock_file_service.get_file_similarities = AsyncMock(
-        return_value=MagicMock(items=[], total=0, limit=0, offset=0)
-    )
-    mock_file_service.get_file_content = AsyncMock(return_value=None)
+    class MockFileService:
+        def __init__(self):
+            self.get_files = AsyncMock(return_value=MagicMock(items=[], total=0, limit=50, offset=0))
+            self.get_all_file_info = AsyncMock(return_value=MagicMock(items=[], total=0, limit=50, offset=0))
+            self.get_file_similarities = AsyncMock(return_value=MagicMock(items=[], total=0, limit=0, offset=0))
+            self.get_file_content = AsyncMock(return_value=None)
 
-    mock_result_service = MagicMock()
-    mock_result_service.get_all_results = AsyncMock(
-        return_value=MagicMock(items=[], total=0, limit=50, offset=0)
-    )
-    mock_result_service.get_task_results = AsyncMock(return_value=None)
-    mock_result_service.get_file_pair = AsyncMock(return_value=None)
-    mock_result_service.get_task_histogram = AsyncMock(
-        return_value={"histogram": [], "total": 0, "bins": 200}
-    )
-    mock_result_service.analyze_file_pair = AsyncMock(return_value=None)
+    class MockResultService:
+        def __init__(self):
+            self.get_all_results = AsyncMock(return_value=MagicMock(items=[], total=0, limit=50, offset=0))
+            self.get_task_results = AsyncMock(return_value=None)
+            self.get_file_pair = AsyncMock(return_value=None)
+            self.get_task_histogram = AsyncMock(return_value={"histogram": [], "total": 0, "bins": 200})
+            self.analyze_file_pair = AsyncMock(return_value=None)
 
     # Create mock repositories
-    mock_task_repo = MagicMock()
-    mock_task_repo.get_task = AsyncMock(return_value=None)
+    class MockTaskRepo:
+        def __init__(self):
+            self.get_task = AsyncMock(return_value=None)
+            self.get_all_tasks = AsyncMock(return_value=[])
+            self.create_task = AsyncMock(return_value=None)
 
-    mock_assignment_repo = MagicMock()
-    mock_assignment_repo.get_assignment = AsyncMock(return_value=None)
+    class MockAssignmentRepo:
+        def __init__(self):
+            self.get_assignment = AsyncMock(return_value=None)
 
-    mock_file_repo = MagicMock()
-    mock_file_repo.get_file = AsyncMock(return_value=None)
+    class MockFileRepo:
+        def __init__(self):
+            self.get_file = AsyncMock(return_value=None)
 
-    mock_result_repo = MagicMock()
+    class MockResultRepo:
+        def __init__(self):
+            pass
+
+    mock_task_service = MockTaskService()
+    mock_assignment_service = MockAssignmentService()
+    mock_file_service = MockFileService()
+    mock_result_service = MockResultService()
+
+    mock_task_repo = MockTaskRepo()
+    mock_assignment_repo = MockAssignmentRepo()
+    mock_file_repo = MockFileRepo()
+    mock_result_repo = MockResultRepo()
 
     async def mock_get_task_service():
         return mock_task_service
