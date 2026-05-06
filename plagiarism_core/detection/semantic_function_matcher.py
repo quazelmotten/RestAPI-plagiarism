@@ -72,10 +72,8 @@ def _semantic_function_matches(
             if func_lines_b & used_lines_b:
                 continue
 
-            # Allow semantic matching when struct hashes differ
-            # (e.g., augmented assignment vs explicit assignment)
-            # Skip if struct hashes are the same AND semantic hashes are the same
-            # (those would be caught by function-level matching)
+            # Skip if struct hashes are the same (this is Type-2, not Type-4)
+            # Type-2 (renamed identifiers) should be caught by function-level matching
             if fa["struct_hash"] == fb["struct_hash"]:
                 continue
 

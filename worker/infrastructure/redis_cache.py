@@ -21,6 +21,7 @@ class RedisFingerprintCache(FingerprintCache):
     # Redis key prefixes
     TOKEN_PREFIX = "fp:token"      # fp:token:{hash} -> fingerprints with positions
     AST_PREFIX = "fp:ast"          # fp:ast:{hash} -> AST hashes
+    BODY_SIG_PREFIX = "fp:bsig"    # fp:bsig:{hash} -> body signatures
 
     def __init__(self, redis_client: redis.Redis, ttl: int = 604800):
         """
@@ -37,7 +38,8 @@ class RedisFingerprintCache(FingerprintCache):
         self,
         file_hash: str,
         fingerprints: list[dict[str, Any]],
-        ast_hashes: list[int]
+        ast_hashes: list[int],
+        body_signatures: list[tuple[int, int, str]] | None = None,
     ) -> bool:
         """
         Cache fingerprints and AST hashes for a file.
@@ -50,11 +52,12 @@ class RedisFingerprintCache(FingerprintCache):
             file_hash: SHA256 hash of file content
             fingerprints: List of fingerprint dicts with 'hash', 'start', 'end', 'kgram_idx'
             ast_hashes: List of AST subtree hash integers
+            body_signatures: Optional list of (start_line, end_line, signature) tuples
 
         Returns:
             True if cached successfully, False otherwise
         """
-        if not fingerprints and not ast_hashes:
+        if not fingerprints and not ast_hashes and not body_signatures:
             logger.warning(f"Not caching empty data for {file_hash[:16]}...")
             return False
 
@@ -81,6 +84,15 @@ class RedisFingerprintCache(FingerprintCache):
                 ast_key = f"{self.AST_PREFIX}:{file_hash}"
                 pipe.sadd(f"{ast_key}:hashes", *[str(h) for h in ast_hashes])
                 pipe.expire(f"{ast_key}:hashes", self.ttl)
+
+            # Cache body signatures
+            if body_signatures:
+                bsig_key = f"{self.BODY_SIG_PREFIX}:{file_hash}"
+                bsig_data = json.dumps([
+                    {"start_line": sl, "end_line": el, "signature": sig}
+                    for sl, el, sig in body_signatures
+                ])
+                pipe.set(f"{bsig_key}:data", bsig_data, ex=self.ttl)
 
             pipe.execute()
             logger.debug(f"Cached data for {file_hash[:16]}...")
@@ -144,6 +156,29 @@ class RedisFingerprintCache(FingerprintCache):
             logger.warning(f"Failed to get AST hashes for {file_hash[:16]}...: {e}")
             return None
 
+    def get_body_signatures(self, file_hash: str) -> list[tuple[int, int, str]] | None:
+        """
+        Get cached body signatures for a file.
+
+        Returns:
+            List of (start_line, end_line, signature) tuples or None if not cached
+        """
+        try:
+            bsig_key = f"{self.BODY_SIG_PREFIX}:{file_hash}"
+            raw = self.redis.get(f"{bsig_key}:data")
+            if raw is None:
+                return None
+
+            bsig_data = json.loads(raw)
+            return [
+                (item["start_line"], item["end_line"], item["signature"])
+                for item in bsig_data
+            ]
+
+        except RedisError as e:
+            logger.warning(f"Failed to get body signatures for {file_hash[:16]}...: {e}")
+            return None
+
     def has_fingerprints(self, file_hash: str) -> bool:
         """Check if fingerprints are cached for a file."""
         try:
@@ -160,9 +195,9 @@ class RedisFingerprintCache(FingerprintCache):
         Batch-fetch fingerprints and AST hashes.
 
         Returns:
-            Dict mapping file_hash -> {'fingerprints': [...], 'ast_hashes': [...], 'fingerprint_count': int}
+            Dict mapping file_hash -> {'fingerprints': [...], 'ast_hashes': [...], 'body_signatures': [...], 'fingerprint_count': int}
         """
-        result = {fh: {'fingerprints': None, 'ast_hashes': None, 'fingerprint_count': 0} for fh in file_hashes}
+        result = {fh: {'fingerprints': None, 'ast_hashes': None, 'body_signatures': None, 'fingerprint_count': 0} for fh in file_hashes}
 
         if not file_hashes:
             return result
@@ -174,15 +209,18 @@ class RedisFingerprintCache(FingerprintCache):
             for fh in file_hashes:
                 token_key = f"{self.TOKEN_PREFIX}:{fh}"
                 ast_key = f"{self.AST_PREFIX}:{fh}"
+                bsig_key = f"{self.BODY_SIG_PREFIX}:{fh}"
                 pipe.get(f"{token_key}:data")
                 pipe.exists(f"{ast_key}:hashes")
+                pipe.get(f"{bsig_key}:data")
 
             raw_results = pipe.execute()
 
             # Process results
             for i, fh in enumerate(file_hashes):
-                token_raw = raw_results[i * 2]
-                ast_exists = raw_results[i * 2 + 1]
+                token_raw = raw_results[i * 3]
+                ast_exists = raw_results[i * 3 + 1]
+                bsig_raw = raw_results[i * 3 + 2]
 
                 if token_raw:
                     fps_list = json.loads(token_raw)
@@ -208,6 +246,13 @@ class RedisFingerprintCache(FingerprintCache):
                             ast_hashes.append(h)
                     result[fh]['ast_hashes'] = ast_hashes
 
+                if bsig_raw:
+                    bsig_data = json.loads(bsig_raw)
+                    result[fh]['body_signatures'] = [
+                        (item["start_line"], item["end_line"], item["signature"])
+                        for item in bsig_data
+                    ]
+
             return result
 
         except RedisError as e:
@@ -216,13 +261,14 @@ class RedisFingerprintCache(FingerprintCache):
 
     def batch_cache(
         self,
-        items: list[tuple[str, list[dict[str, Any]], list[int]]]
+        items: list[tuple[str, list[dict[str, Any]], list[int]]] | list[tuple[str, list[dict[str, Any]], list[int], list[tuple[int, int, str]]]],
     ) -> None:
         """
         Batch-cache fingerprints and AST hashes.
 
         Args:
             items: List of (file_hash, fingerprints, ast_hashes) tuples
+                   or (file_hash, fingerprints, ast_hashes, body_signatures) tuples
         """
         if not items:
             return
@@ -230,7 +276,12 @@ class RedisFingerprintCache(FingerprintCache):
         try:
             pipe = self.redis.pipeline()
 
-            for file_hash, fingerprints, ast_hashes in items:
+            for item in items:
+                file_hash = item[0]
+                fingerprints = item[1]
+                ast_hashes = item[2]
+                body_signatures = item[3] if len(item) > 3 else None
+
                 token_key = f"{self.TOKEN_PREFIX}:{file_hash}"
 
                 if fingerprints:
@@ -249,6 +300,14 @@ class RedisFingerprintCache(FingerprintCache):
                     ast_key = f"{self.AST_PREFIX}:{file_hash}"
                     pipe.sadd(f"{ast_key}:hashes", *[str(h) for h in ast_hashes])
                     pipe.expire(f"{ast_key}:hashes", self.ttl)
+
+                if body_signatures:
+                    bsig_key = f"{self.BODY_SIG_PREFIX}:{file_hash}"
+                    bsig_data = json.dumps([
+                        {"start_line": sl, "end_line": el, "signature": sig}
+                        for sl, el, sig in body_signatures
+                    ])
+                    pipe.set(f"{bsig_key}:data", bsig_data, ex=self.ttl)
 
             pipe.execute()
 

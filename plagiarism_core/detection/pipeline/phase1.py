@@ -230,10 +230,10 @@ def _match_by_name(
                     "end_col": 0,
                 },
                 kgram_count=trim_a_end - trim_a_start + 1,
-                plagiarism_type=PlagiarismType.SEMANTIC,
+                plagiarism_type=PlagiarismType.RENAMED,
                 similarity=1.0,
                 details={"original_function": fa["name"], "matched_function": fb["name"]},
-                description=f"Semantic equivalent: {fa['name']} ↔ {fb['name']} (name-based)",
+                description=f"Renamed function: {fa['name']} ↔ {fb['name']} (cross-name)",
             )
             all_matches.append(name_match)
             for line in range(trim_a_start, trim_a_end + 1):
@@ -256,31 +256,53 @@ def _match_by_body_signature(
     lang_code,
     all_matches,
 ):
+    # Build signature index for B functions (O(n+m) instead of O(n×m))
+    sig_index = {}
+    for j, fb in enumerate(funcs_b):
+        func_lines_b = set(range(fb["start_line"], fb["end_line"] + 1))
+        if func_lines_b & covered_b:
+            continue
+        size_b = fb["end_line"] - fb["start_line"] + 1
+        if size_b < 3:
+            continue
+        fn_lines_b = lines_b[fb["start_line"] : fb["end_line"] + 1]
+        fn_shadow_b = shadow_b[fb["start_line"] : fb["end_line"] + 1]
+        try:
+            sig = _extract_body_signature("\n".join(fn_lines_b), lang_code)
+            if sig:
+                sig_index.setdefault(sig, []).append((j, size_b, fn_lines_b, fn_shadow_b))
+        except Exception:
+            continue
+
     for fa in funcs_a:
         func_lines_a = set(range(fa["start_line"], fa["end_line"] + 1))
         if func_lines_a & covered_a:
             continue
-        for _j, fb in enumerate(funcs_b):
+        size_a = fa["end_line"] - fa["start_line"] + 1
+        if size_a < 3:
+            continue
+        fn_lines_a = lines_a[fa["start_line"] : fa["end_line"] + 1]
+        fn_shadow_a = shadow_a[fa["start_line"] : fa["end_line"] + 1]
+
+        try:
+            sig_a = _extract_body_signature("\n".join(fn_lines_a), lang_code)
+        except Exception:
+            continue
+        if not sig_a:
+            continue
+
+        for j, size_b, fn_lines_b, fn_shadow_b in sig_index.get(sig_a, []):
+            fb = funcs_b[j]
             func_lines_b = set(range(fb["start_line"], fb["end_line"] + 1))
             if func_lines_b & covered_b:
                 continue
-            size_a = fa["end_line"] - fa["start_line"] + 1
-            size_b = fb["end_line"] - fb["start_line"] + 1
-            if size_a < 3 or size_b < 3:
-                continue
             if min(size_a, size_b) / max(size_a, size_b) < 0.5:
                 continue
-            fn_lines_a = lines_a[fa["start_line"] : fa["end_line"] + 1]
-            fn_lines_b = lines_b[fb["start_line"] : fb["end_line"] + 1]
-            fn_shadow_a = shadow_a[fa["start_line"] : fa["end_line"] + 1]
-            fn_shadow_b = shadow_b[fb["start_line"] : fb["end_line"] + 1]
-            try:
-                sig_a = _extract_body_signature("\n".join(fn_lines_a), lang_code)
-                sig_b = _extract_body_signature("\n".join(fn_lines_b), lang_code)
-                if not (sig_a and sig_b and sig_a == sig_b):
-                    continue
-            except Exception:
-                continue
+            
+            # Determine if this is Type-2 (renamed) or Type-4 (semantic)
+            # If function names are different but body signature matches, it's Type-2
+            is_renamed = fa["name"] != fb["name"]
+            
             prefix_len, suffix_len = _find_prefix_suffix(
                 fn_lines_a, fn_lines_b, fn_shadow_a, fn_shadow_b
             )
@@ -290,6 +312,11 @@ def _match_by_body_signature(
             trim_b_end = fb["end_line"] - suffix_len
             if trim_a_start > trim_a_end or trim_b_start > trim_b_end:
                 continue
+            
+            # Use RENAMED for different names (Type-2), SEMANTIC only for same names
+            ptype = PlagiarismType.RENAMED if is_renamed else PlagiarismType.SEMANTIC
+            desc = f"Renamed function: {fa['name']} ↔ {fb['name']} (body signature)" if is_renamed else f"Semantic equivalent (cross-name): {fa['name']} ↔ {fb['name']}"
+            
             cross_match = Match(
                 file1={
                     "start_line": trim_a_start,
@@ -304,10 +331,10 @@ def _match_by_body_signature(
                     "end_col": 0,
                 },
                 kgram_count=trim_a_end - trim_a_start + 1,
-                plagiarism_type=PlagiarismType.SEMANTIC,
+                plagiarism_type=ptype,
                 similarity=1.0,
                 details={"original_function": fa["name"], "matched_function": fb["name"]},
-                description=f"Semantic equivalent (cross-name): {fa['name']} ↔ {fb['name']}",
+                description=desc,
             )
             all_matches.append(cross_match)
             for line in range(trim_a_start, trim_a_end + 1):
@@ -325,6 +352,7 @@ def _check_body_similarity(fn_lines_a, fn_lines_b, lang_code):
         sig_b = _extract_body_signature(body_src_b, lang_code)
         if sig_a and sig_b and sig_a == sig_b:
             return True
+        # Only compute canonicalization if signatures differ
         body_canon_a = ast_canonicalize(body_src_a, lang_code)
         body_canon_b = ast_canonicalize(body_src_b, lang_code)
         if body_canon_a != body_canon_b:
@@ -423,6 +451,12 @@ def _match_by_minhash(
                 fa = next(f for f in funcs_a if f["name"] == name_a)
                 fb = next(f for f in funcs_b if f["name"] == name_b)
                 
+                # Determine if this is Type-2 (renamed) or Type-4 (semantic)
+                # If function names are different but struct_hash is the same, it's Type-2
+                is_renamed = fa["name"] != fb["name"]
+                ptype = PlagiarismType.RENAMED if is_renamed else PlagiarismType.SEMANTIC
+                desc = f"Renamed function (MinHash): {fa['name']} ↔ {fb['name']}" if is_renamed else f"Partial match (MinHash): {fa['name']} ↔ {fb['name']} (similarity: {sim:.2f})"
+                
                 partial_match = Match(
                     file1={
                         "start_line": fa["start_line"],
@@ -437,14 +471,14 @@ def _match_by_minhash(
                         "end_col": 0,
                     },
                     kgram_count=fa["end_line"] - fa["start_line"] + 1,
-                    plagiarism_type=PlagiarismType.SEMANTIC,
+                    plagiarism_type=ptype,
                     similarity=sim,
                     details={
                         "original_function": fa["name"],
                         "matched_function": fb["name"],
                         "_minhash_match": True,
                     },
-                    description=f"Partial match (MinHash): {fa['name']} ↔ {fb['name']} (similarity: {sim:.2f})",
+                    description=desc,
                 )
                 all_matches.append(partial_match)
                 matched_pairs.add(name_a)

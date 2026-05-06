@@ -81,7 +81,7 @@ class Analyzer:
         # Compute metrics (count ALL lines to be consistent with line indices in matches)
         total_lines_a = len(lines1)
         total_lines_b = len(lines2)
-        
+
         # Calculate unique covered lines (deduplicate overlapping matches)
         covered_a = set()
         covered_b = set()
@@ -191,7 +191,7 @@ class Analyzer:
         # Compute metrics (count ALL lines to be consistent with line indices in matches)
         total_lines_a = len(lines1)
         total_lines_b = len(lines2)
-        
+
         # Calculate unique covered lines (deduplicate overlapping matches)
         covered_a = set()
         covered_b = set()

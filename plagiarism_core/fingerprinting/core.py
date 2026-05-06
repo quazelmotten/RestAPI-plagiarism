@@ -202,3 +202,50 @@ def index_fingerprints(fingerprints: list[dict[str, Any]]) -> dict[int, list[dic
     for fp in fingerprints:
         index[fp["hash"]].append(fp)
     return index
+
+
+def extract_body_signatures_from_tree(
+    tree,
+    source_bytes: bytes,
+    lang_code: str = "python",
+) -> list[tuple[int, int, str]]:
+    """
+    Extract body signatures from all functions in a parsed tree.
+
+    Returns list of (start_line, end_line, signature) tuples for each function.
+    This is called during indexing so signatures can be cached.
+
+    Args:
+        tree: Parsed tree-sitter tree
+        source_bytes: Original source code as bytes
+        lang_code: Programming language code
+
+    Returns:
+        List of (start_line, end_line, signature) tuples
+    """
+    from ..detection.body_signatures import _extract_body_signature
+    from .identifiers import _find_function_scopes
+
+    try:
+        source = source_bytes.decode("utf-8", errors="ignore")
+    except Exception:
+        return []
+
+    scopes = _find_function_scopes(source, lang_code)
+    signatures = []
+
+    for scope in scopes:
+        start_byte = scope["start_byte"]
+        end_byte = scope["end_byte"]
+        start_line = scope["start_line"]
+        end_line = scope["end_line"]
+
+        func_source = source[start_byte:end_byte]
+        try:
+            sig = _extract_body_signature(func_source, lang_code)
+            if sig:
+                signatures.append((start_line, end_line, sig))
+        except Exception:
+            continue
+
+    return signatures

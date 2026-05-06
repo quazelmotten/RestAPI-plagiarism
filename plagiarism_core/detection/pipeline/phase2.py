@@ -1,5 +1,6 @@
 """Phase 2: Line matching within matched function pairs."""
 
+from ...models import Match, PlagiarismType
 from ..line_matcher import _line_level_matches
 from ..semantic_line_matcher import _semantic_line_matches
 from .helpers import _mark_covered
@@ -24,20 +25,25 @@ def run_phase2(
         fn_shadow_a = shadow_a[a_start : a_end + 1]
         fn_shadow_b = shadow_b[b_start : b_end + 1]
 
-        fn_line_matches = _line_level_matches(
-            fn_lines_a,
-            fn_lines_b,
-            fn_shadow_a,
-            fn_shadow_b,
-            min_match_lines,
-        )
-        for m in fn_line_matches:
-            m.file1["start_line"] += a_start
-            m.file1["end_line"] += a_start
-            m.file2["start_line"] += b_start
-            m.file2["end_line"] += b_start
-            _mark_covered(covered_a, m)
-            _mark_covered(covered_b, m)
+        # Skip exact line matching for Type-4 (SEMANTIC) functions
+        # Type-1 matches within Type-4 are redundant
+        if fm.plagiarism_type != PlagiarismType.SEMANTIC:
+            fn_line_matches = _line_level_matches(
+                fn_lines_a,
+                fn_lines_b,
+                fn_shadow_a,
+                fn_shadow_b,
+                min_match_lines,
+            )
+            for m in fn_line_matches:
+                m.file1["start_line"] += a_start
+                m.file1["end_line"] += a_start
+                m.file2["start_line"] += b_start
+                m.file2["end_line"] += b_start
+                _mark_covered(covered_a, m)
+                _mark_covered(covered_b, m)
+        else:
+            fn_line_matches = []
 
         local_used_a = set(range(len(fn_lines_a)))
         local_used_b = set(range(len(fn_lines_b)))

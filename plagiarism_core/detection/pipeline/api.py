@@ -2,6 +2,7 @@
 
 import logging
 
+from ...models import Match, PlagiarismType
 from ..line_matcher import _line_level_matches
 from ..merge_helpers import _merge_matches
 from ..semantic_line_matcher import _semantic_line_matches
@@ -73,19 +74,22 @@ def detect_plagiarism(source_a, source_b, lang_code="python", min_match_lines=2)
 
 
 def _filter_contained_matches(matches: list) -> list:
-    """Remove matches fully contained within larger matches (regardless of type)."""
+    """Remove matches fully contained within larger matches."""
     if not matches:
         return matches
     
+    # Sort by size (largest first) - keep larger matches
     ranges = []
     for m in matches:
+        a_size = m.file1["end_line"] - m.file1["start_line"]
+        b_size = m.file2["end_line"] - m.file2["start_line"]
         ranges.append({
             'match': m,
             'a_start': m.file1["start_line"],
             'a_end': m.file1["end_line"],
             'b_start': m.file2["start_line"],
             'b_end': m.file2["end_line"],
-            'size': (m.file1["end_line"] - m.file1["start_line"]) + (m.file2["end_line"] - m.file2["start_line"]),
+            'size': a_size + b_size,
         })
     
     ranges.sort(key=lambda x: -x['size'])
@@ -98,7 +102,20 @@ def _filter_contained_matches(matches: list) -> list:
         a_range = set(range(r['a_start'], r['a_end'] + 1))
         b_range = set(range(r['b_start'], r['b_end'] + 1))
         
+        # Check if fully contained in existing matches (both files)
         if a_range.issubset(used_a) and b_range.issubset(used_b):
+            # Keep if it's a different type (e.g., RENAMED inside EXACT is valuable)
+            existing_types = set()
+            for existing in filtered:
+                existing_range = set(range(existing.file1['start_line'], existing.file1['end_line'] + 1))
+                if a_range.issubset(existing_range):
+                    existing_types.add(existing.plagiarism_type)
+            
+            if r['match'].plagiarism_type not in existing_types:
+                # Different type - keep it
+                filtered.append(r['match'])
+                used_a.update(a_range)
+                used_b.update(b_range)
             continue
         
         filtered.append(r['match'])
@@ -119,24 +136,37 @@ def _run_phase3(
         new_a = a_range - covered_a
         new_b = b_range - covered_b
         
-        # Skip if match is fully contained in existing coverage (would create overlapping matches)
-        if not new_a or not new_b:
-            continue
-            
-        # Only add if new portion is meaningful (>50% of original or >2 lines)
         orig_size = len(a_range)
-        new_size = len(new_a)
-        if new_size >= orig_size * 0.5 or new_size >= 3:
-            new_a_range = sorted(new_a)
-            new_b_range = sorted(new_b)
-            m.file1["start_line"] = new_a_range[0]
-            m.file1["end_line"] = new_a_range[-1]
-            m.file2["start_line"] = new_b_range[0]
-            m.file2["end_line"] = new_b_range[-1]
-            all_matches.append(m)
-            covered_a.update(new_a)
-            covered_b.update(new_b)
-        # Otherwise, fully covered - no need to add
+        new_a_size = len(new_a)
+        new_b_size = len(new_b)
+        
+        # Only add if either side has meaningful new coverage
+        if new_a_size >= orig_size * 0.5 or new_a_size >= 3 or new_b_size >= orig_size * 0.5 or new_b_size >= 3:
+            # Use the smaller of the two for conservative reporting
+            if new_a_size > 0 and new_b_size > 0:
+                new_a_range = sorted(new_a)
+                new_b_range = sorted(new_b)
+                m.file1["start_line"] = new_a_range[0]
+                m.file1["end_line"] = new_a_range[-1]
+                m.file2["start_line"] = new_b_range[0]
+                m.file2["end_line"] = new_b_range[-1]
+                all_matches.append(m)
+                covered_a.update(new_a)
+                covered_b.update(new_b)
+            elif new_a_size > 0:
+                # Only A has new coverage
+                new_a_range = sorted(new_a)
+                m.file1["start_line"] = new_a_range[0]
+                m.file1["end_line"] = new_a_range[-1]
+                all_matches.append(m)
+                covered_a.update(new_a)
+            elif new_b_size > 0:
+                # Only B has new coverage - report the B portion
+                new_b_range = sorted(new_b)
+                m.file2["start_line"] = new_b_range[0]
+                m.file2["end_line"] = new_b_range[-1]
+                all_matches.append(m)
+                covered_b.update(new_b)
 
 
 def _run_phase4(

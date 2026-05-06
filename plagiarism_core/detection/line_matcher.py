@@ -57,16 +57,21 @@ def _line_level_matches(
         for start_b in candidates:
             length = 0
             ia, ib = start_a, start_b
-            while (
-                ia < len(shadow_a)
-                and ib < len(shadow_b)
-                and shadow_a_hashes[ia]
-                and shadow_b_hashes[ib]
-                and shadow_a_hashes[ia] == shadow_b_hashes[ib]
-            ):
-                length += 1
-                ia += 1
-                ib += 1
+            while ia < len(shadow_a) and ib < len(shadow_b):
+                # Skip blank/comment lines in A
+                while ia < len(shadow_a) and not shadow_a_hashes[ia]:
+                    ia += 1
+                # Skip blank/comment lines in B
+                while ib < len(shadow_b) and not shadow_b_hashes[ib]:
+                    ib += 1
+                if ia >= len(shadow_a) or ib >= len(shadow_b):
+                    break
+                if shadow_a_hashes[ia] and shadow_b_hashes[ib] and shadow_a_hashes[ia] == shadow_b_hashes[ib]:
+                    length += 1
+                    ia += 1
+                    ib += 1
+                else:
+                    break  # Mismatch - stop extending
             if length > best_len:
                 best_b, best_len = start_b, length
 
@@ -115,10 +120,16 @@ def _line_level_matches(
                 }
             )
 
+        # Minimum lines for a meaningful Type-2 detection (avoid false positives)
+        MIN_RENAMED_LINES = 3
+        
         if all_exact:
             ptype = PlagiarismType.EXACT
             desc = None
             renames = None
+        elif length < MIN_RENAMED_LINES:
+            # Too short to be a meaningful Type-2 match - skip
+            continue
         else:
             ptype = PlagiarismType.RENAMED
             renames = _extract_line_renames(lines_a, lines_b, shadow_a, shadow_b, sa, sb, length)

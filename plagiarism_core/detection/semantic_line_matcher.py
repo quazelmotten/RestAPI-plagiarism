@@ -100,6 +100,10 @@ def _semantic_line_matches(
                     canon_a_lines.append("")
                     continue
             canon = canonicalize_type4(clean_line, lang_code=lang_code)
+            # Skip if canonical form is empty or trivial
+            if not canon or canon.strip() in ("", "else:", "pass", "return", "return None"):
+                canon_a_lines.append("")
+                continue
             canon_a_lines.append(canon.strip())
     for j, line in enumerate(lines_b):
         if j in used_lines_b or not line.strip():
@@ -143,9 +147,10 @@ def _semantic_line_matches(
     visited: set[int] = set()
 
     # Common boilerplate canonical patterns that should be rejected
-    # These appear in nearly every C/C++/Java/JS competitive programming file
+    # These appear in nearly every C/C++/Java/JS/Python competitive programming file
     _common_boilerplate_hashes: set[int] = set()
     _boilerplate_patterns = [
+        # C/C++ patterns
         "int n;",
         "int t;",
         "int m;",
@@ -176,6 +181,29 @@ def _semantic_line_matches(
         "for (int i = 0; i < n; i++)",
         "for (int i=0; i<n; i++)",
         "loop (int i = 0; i < n; i++)",
+        # Python boilerplate patterns
+        "T = int(input())",
+        "T=int(input())",
+        "size = int(input())",
+        "size=int(input())",
+        "cases = int(input())",
+        "cases=int(input())",
+        "n = int(input())",
+        "n=int(input())",
+        "t = int(input())",
+        "t=int(input())",
+        "if __name__ == __main__:",
+        "if __name__==__main__:",
+        "else:",
+        "elif :",
+        "return",
+        "return None",
+        "pass",
+        "break",
+        "continue",
+        "# ",
+        "import ",
+        "from import ",
     ]
     for bp in _boilerplate_patterns:
         _common_boilerplate_hashes.add(_line_hash(bp))
@@ -185,31 +213,48 @@ def _semantic_line_matches(
     for start_a in sorted(pair_map.keys()):
         if start_a in visited:
             continue
-        for start_b in pair_map[start_a]:
+        candidates = pair_map[start_a]
+        # Try all candidates, keep the one with the longest extension
+        best_b, best_len = candidates[0], 0
+        best_positions = set()
+        for start_b in candidates:
             length = 0
+            positions = set()
             ia, ib = start_a, start_b
-            while (
-                ia < len(canon_a_lines)
-                and ib < len(canon_b_lines)
-                and canon_a_hashes[ia]
-                and canon_b_hashes[ib]
-                and canon_a_hashes[ia] == canon_b_hashes[ib]
-            ):
-                length += 1
-                visited.add(ia)
-                ia += 1
-                ib += 1
-            if length >= min_match_lines:
-                # Reject if all matched lines are common boilerplate
-                all_boilerplate = True
-                for offset in range(length):
-                    h = canon_a_hashes[start_a + offset]
-                    if h not in _common_boilerplate_hashes:
-                        all_boilerplate = False
-                        break
-                if all_boilerplate:
-                    continue
-                raw.append((start_a, start_b, length))
+            while ia < len(canon_a_lines) and ib < len(canon_b_lines):
+                # Skip blank/comment lines in A
+                while ia < len(canon_a_lines) and not canon_a_hashes[ia]:
+                    ia += 1
+                # Skip blank/comment lines in B
+                while ib < len(canon_b_lines) and not canon_b_hashes[ib]:
+                    ib += 1
+                if ia >= len(canon_a_lines) or ib >= len(canon_b_lines):
+                    break
+                if canon_a_hashes[ia] and canon_b_hashes[ib] and canon_a_hashes[ia] == canon_b_hashes[ib]:
+                    length += 1
+                    positions.add(ia)
+                    ia += 1
+                    ib += 1
+                else:
+                    break  # Mismatch - stop extending
+            if length > best_len:
+                best_b, best_len = start_b, length
+                best_positions = positions
+        
+        # Now process the best match
+        if best_len >= min_match_lines:
+            # Reject if all matched lines are common boilerplate
+            all_boilerplate = True
+            for offset in range(best_len):
+                h = canon_a_hashes[start_a + offset]
+                if h not in _common_boilerplate_hashes:
+                    all_boilerplate = False
+                    break
+            if all_boilerplate:
+                continue
+            for pos in best_positions:
+                visited.add(pos)
+            raw.append((start_a, best_b, best_len))
 
     # Greedy longest-first selection
     raw.sort(key=lambda x: -x[2])

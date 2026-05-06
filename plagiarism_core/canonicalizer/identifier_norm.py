@@ -25,7 +25,7 @@ def _collect_identifiers(root_node: Node, source_bytes: bytes) -> list[tuple[int
                 identifiers.append((node.start_byte, node.end_byte, name))
         for child in node.children:
             visit(child)
-
+    
     visit(root_node)
     return identifiers
 

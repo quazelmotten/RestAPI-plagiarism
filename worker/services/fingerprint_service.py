@@ -3,7 +3,7 @@ Fingerprint service - manages file fingerprinting and caching.
 
 Responsible for:
 - Ensuring files are fingerprinted (from cache or generating)
-- Caching fingerprints and AST hashes
+- Caching fingerprints, AST hashes, and body signatures
 """
 
 import logging
@@ -11,6 +11,7 @@ from typing import Any
 
 from plagiarism_core.fingerprints import (
     compute_and_winnow,
+    extract_body_signatures_from_tree,
     parse_file_once,
     tokenize_and_hash_ast,
 )
@@ -64,9 +65,12 @@ class FingerprintService:
             return fps
 
         # Generate from file — single tree walk + single fingerprint pass
-        tree, _ = parse_file_once(file_path, language)
+        tree, source_bytes = parse_file_once(file_path, language)
         tokens, ast_hashes = tokenize_and_hash_ast(file_path, language, tree=tree)
         fps = compute_and_winnow(tokens)
+
+        # Extract body signatures for functions (for Stage 1 semantic matching)
+        body_signatures = extract_body_signatures_from_tree(tree, source_bytes, language)
 
         # Convert to expected format (preserve kgram_idx for fragment building)
         fps_for_storage = [
@@ -79,8 +83,10 @@ class FingerprintService:
             for fp in fps
         ]
 
-        # Cache for future use
-        self.cache.batch_cache([(file_hash, fps_for_storage, ast_hashes)])
+        # Cache for future use (fingerprints, ast_hashes, and body_signatures)
+        self.cache.batch_cache(
+            [(file_hash, fps_for_storage, ast_hashes, body_signatures)]
+        )
 
         logger.info(
             f"Generated and cached {len(fps)} fingerprints + {len(ast_hashes)} AST hashes for {file_hash[:16]}..."
