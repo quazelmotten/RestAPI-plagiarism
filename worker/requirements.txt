@@ -30,3 +30,9 @@ pytest-benchmark
 
 # Profiling
 py-spy==0.3.14
+
+# Embeddings/ML dependencies for F2LLM-v2-80M
+torch>=2.0.0
+transformers>=4.36.0
+numpy>=1.24.0
+sentencepiece>=0.1.99

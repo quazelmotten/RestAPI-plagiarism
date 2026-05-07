@@ -1,13 +1,15 @@
 """
 Main analyzer orchestrating plagiarism detection.
 
-Uses the multi-level plagiarism detector to classify matches by type
+Uses the multi-level detector to classify matches by type
 (Type 1-4) and produce enriched match data.
 """
 
 import logging
 from collections.abc import Callable
 from typing import Any
+
+import numpy as np
 
 from .ast_hash import ast_similarity as compute_ast_similarity
 from .ast_hash import extract_ast_hashes, hash_ast_subtrees
@@ -37,6 +39,8 @@ class Analyzer:
         language: str = "python",
         file1_path: str = "",
         file2_path: str = "",
+        embeddings1: dict | None = None,  # func_name -> embedding
+        embeddings2: dict | None = None,  # func_name -> embedding
     ) -> AnalysisResult:
         """
         Analyze plagiarism given source code strings.
@@ -53,6 +57,7 @@ class Analyzer:
             language: Programming language
             file1_path: Optional path for metadata (not read)
             file2_path: Optional path for metadata (not read)
+            embeddings1, embeddings2: Optional dicts mapping function names to embeddings
 
         Returns:
             AnalysisResult with similarity and typed matches
@@ -76,7 +81,12 @@ class Analyzer:
 
         # Multi-level matching using the full detector
         # Use min_match_lines=1 to catch single-line identical fragments
-        matches = detect_plagiarism(source1, source2, language, min_match_lines=1)
+        matches = detect_plagiarism(
+            source1, source2, language,
+            min_match_lines=1,
+            embeddings_a=embeddings1,
+            embeddings_b=embeddings2,
+        )
 
         # Compute metrics (count ALL lines to be consistent with line indices in matches)
         total_lines_a = len(lines1)
@@ -152,15 +162,20 @@ class Analyzer:
         language: str = "python",
         get_fingerprints: Callable[[str], list[dict[str, Any]] | None] | None = None,
         cache_fingerprints: Callable[[str, list[dict[str, Any]], list[int]], None] | None = None,
+        get_embeddings: Callable[[str], np.ndarray | None] | None = None,
+        embeddings1: dict | None = None,  # func_name -> embedding dict
+        embeddings2: dict | None = None,  # func_name -> embedding dict
     ) -> tuple[float, list[dict[str, Any]], dict[str, Any]]:
         """
-        Analyze with caching support (AST hashes only).
+        Analyze with caching support (AST hashes and embeddings).
 
         Args:
             file1_path, file2_path: File paths
             file1_hash, file2_hash: File content hashes
             get_ast_hashes: Function to get AST hashes from cache
             language: Programming language
+            get_embeddings: Optional function to get embeddings from cache (file-level, deprecated)
+            embeddings1, embeddings2: Optional dicts mapping function names to embeddings (function-level)
 
         Returns:
             Tuple of (ast_similarity, matches_data, metrics)
@@ -185,8 +200,23 @@ class Analyzer:
 
         ast_sim = compute_ast_similarity(ast1, ast2)
 
-        # Multi-level matching (use min_match_lines=1 to catch single-line fragments)
-        matches = detect_plagiarism(source1, source2, language, min_match_lines=1)
+        # Use function-level embeddings if provided, otherwise fall back to get_embeddings callback
+        if embeddings1 is None and get_embeddings:
+            try:
+                # Deprecated: get_embeddings returns file-level embedding
+                logger.warning("Using deprecated file-level embeddings. Use embeddings1/embeddings2 instead.")
+                embeddings1 = get_embeddings(file1_hash)
+                embeddings2 = get_embeddings(file2_hash)
+            except Exception as e:
+                logger.warning(f"Failed to get embeddings: {e}")
+
+        # Multi-level matching with embeddings (use min_match_lines=1 to catch single-line fragments)
+        matches = detect_plagiarism(
+            source1, source2, language,
+            min_match_lines=1,
+            embeddings_a=embeddings1,
+            embeddings_b=embeddings2,
+        )
 
         # Compute metrics (count ALL lines to be consistent with line indices in matches)
         total_lines_a = len(lines1)

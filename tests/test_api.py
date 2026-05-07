@@ -12,7 +12,6 @@ _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_project_root, "src"))
 
 from app import app  # noqa: E402
-import database as db_module
 
 
 @pytest.fixture(scope="session")
@@ -80,41 +79,64 @@ def set_env_vars(test_storage_dir):
 @pytest_asyncio.fixture
 async def client():
     """Async test client fixture."""
+    from unittest.mock import patch
+
+    from auth.dependencies import get_current_user
+    from auth.models import User
     from clients.redis_client import RedisClient
 
+    # Mock the async_session_maker to return a mock session
     mock_session = MagicMock()
     mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
     mock_session.commit = AsyncMock()
     mock_session.close = AsyncMock()
+    mock_session.get = AsyncMock(return_value=None)
+    mock_session.add = AsyncMock()
 
-    async def mock_get_session():
-        yield mock_session
+    # Create a mock that works as async context manager: async with async_session_maker() as session
+    mock_maker_instance = MagicMock()
+    mock_maker_instance.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_maker_instance.__aexit__ = AsyncMock(return_value=False)
+    mock_maker = MagicMock(return_value=mock_maker_instance)
 
-    app.dependency_overrides[db_module.get_async_session] = mock_get_session
+    # Patch async_session_maker in the database module
+    with patch("database.async_session_maker", mock_maker):
+        # Mock authentication
+        mock_user = User(id="12345678-1234-5678-1234-567812345678", email="test@example.com", is_global_admin=True)
+        app.dependency_overrides[get_current_user] = lambda: mock_user
 
-    if not hasattr(app.state, "redis_client"):
-        app.state.redis_client = RedisClient()
-    if not hasattr(app.state, "rabbitmq"):
-        class DummyRabbitMQ:
-            is_connected = False
-            publish_message = AsyncMock()
+        # Set up app state
+        if not hasattr(app.state, "redis_client"):
+            app.state.redis_client = RedisClient()
+        if not hasattr(app.state, "rabbitmq"):
+            class DummyRabbitMQ:
+                is_connected = False
+                publish_message = AsyncMock()
+            app.state.rabbitmq = DummyRabbitMQ()
+        if not hasattr(app.state, "ws_manager"):
+            class DummyWSManager:
+                async def start(self):
+                    pass
+                async def stop(self):
+                    pass
+            app.state.ws_manager = DummyWSManager()
+        if not hasattr(app.state, "s3_storage"):
+            class DummyS3Storage:
+                async def upload_file(self, *args, **kwargs):
+                    return {"path": "s3://test/file", "hash": "abc123"}
+                async def upload_file_async(self, *args, **kwargs):
+                    return {"path": "s3://test/file", "hash": "abc123"}
+                async def download_file(self, *args, **kwargs):
+                    return b"test content"
+                async def delete_file(self, *args, **kwargs):
+                    pass
+            app.state.s3_storage = DummyS3Storage()
 
-        app.state.rabbitmq = DummyRabbitMQ()
-    if not hasattr(app.state, "ws_manager"):
-        class DummyWSManager:
-            async def start(self):
-                pass
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
 
-            async def stop(self):
-                pass
-
-        app.state.ws_manager = DummyWSManager()
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
-
-    app.dependency_overrides.clear()
+        app.dependency_overrides.clear()
 
 
 class TestHealthEndpoint:

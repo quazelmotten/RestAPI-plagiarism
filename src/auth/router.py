@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from auth.blacklist_service import blacklist_service
 from auth.dependencies import get_current_user, require_global_admin
-from auth.models import ApiKey, User
+from auth.models import User
 from auth.rate_limit import forgot_password_rate_limit, login_rate_limit, register_rate_limit
 from auth.schemas import (
     AdminChangePasswordRequest,
@@ -26,13 +26,12 @@ from auth.schemas import (
     RegisterRequest,
     ResetPasswordRequest,
     TokenResponse,
-    UserResponse,
     UserProfileUpdate,
+    UserResponse,
     UsersListResponse,
 )
 from auth.service import AuthService, get_token_expiry, get_token_jti
 from config import settings
-from database import async_session_maker
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ security = HTTPBearer(auto_error=False)
 )
 async def register(request: RegisterRequest, response: Response) -> TokenResponse:
     """Register a new user and automatically sign them in.
-    
+
     Returns JWT tokens for immediate authentication.
     For security, if the email already exists, returns user info without tokens.
     """
@@ -68,10 +67,10 @@ async def register(request: RegisterRequest, response: Response) -> TokenRespons
         is_global_admin=False,
     )
     logger.info("User registered: %s", new_user.email)
-    
+
     # Automatically sign in the user by issuing tokens
     token_response = AuthService.create_token_response(new_user)
-    
+
     # Set refresh token in HttpOnly cookie
     # Only use secure=True in production (HTTPS)
     if token_response.refresh_token:
@@ -86,7 +85,7 @@ async def register(request: RegisterRequest, response: Response) -> TokenRespons
         )
         # Remove refresh token from JSON response
         token_response.refresh_token = None
-    
+
     return token_response
 
 
@@ -399,7 +398,7 @@ async def update_api_key(
     try:
         key_uuid = uuid.UUID(key_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid key ID")
+        raise HTTPException(status_code=400, detail="Invalid key ID") from None
     # Check ownership: user can update their own keys, or global admin can update any
     key = await AuthService.get_api_key(key_uuid)
     if not key:

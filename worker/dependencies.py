@@ -23,8 +23,11 @@ from worker.infrastructure.postgres_repository import PostgresRepository
 from worker.infrastructure.redis_cache import RedisFingerprintCache
 
 if TYPE_CHECKING:
+    from plagiarism_core.embeddings.cache import EmbeddingCache
+
     from worker.services.analysis_service import AnalysisService
     from worker.services.candidate_service import CandidateService
+    from worker.services.embedding_service import EmbeddingService
     from worker.services.fingerprint_service import FingerprintService
     from worker.services.indexing_service import IndexingService
     from worker.services.result_service import ResultService
@@ -60,6 +63,22 @@ def get_cache() -> FingerprintCache:
     cache = RedisFingerprintCache(client, ttl=worker_settings.redis_ttl)
     logger.info("Fingerprint cache initialized")
     return cache
+
+
+@lru_cache
+def get_embedding_cache() -> EmbeddingCache | None:
+    """Get or create singleton embedding cache (Redis + DB)."""
+    try:
+        from plagiarism_core.embeddings.cache import EmbeddingCache
+
+        client = get_redis_client()
+        # Note: DB session will be attached later by the service
+        cache = EmbeddingCache(redis_client=client, use_redis=True, use_db=True)
+        logger.info("Embedding cache initialized")
+        return cache
+    except Exception as e:
+        logger.warning(f"Failed to initialize embedding cache: {e}")
+        return None
 
 
 @lru_cache
@@ -120,7 +139,35 @@ def get_fingerprint_service() -> FingerprintService:
     from worker.services.fingerprint_service import FingerprintService
 
     cache = get_cache()
-    return FingerprintService(cache)
+    embedding_svc = get_embedding_service()
+    return FingerprintService(cache, embedding_service=embedding_svc)
+
+
+def get_embedding_service() -> EmbeddingService | None:
+    """Create embedding service with dependencies."""
+
+    from worker.services.embedding_service import EmbeddingService
+
+    # Check if embeddings are enabled
+    if not worker_settings.embedding_enabled:
+        logger.info("Embedding service disabled by configuration")
+        return None
+
+    try:
+        cache = get_embedding_cache()
+        if cache is None:
+            return None
+
+        embedding_svc = EmbeddingService(
+            embedding_cache=cache,
+            dimension=worker_settings.embedding_dimension,
+            use_quantization=worker_settings.embedding_use_quantization,
+        )
+        logger.info(f"Embedding service initialized (model: {worker_settings.embedding_model})")
+        return embedding_svc
+    except Exception as e:
+        logger.warning(f"Failed to initialize embedding service: {e}")
+        return None
 
 
 def get_indexing_service() -> IndexingService:
@@ -148,7 +195,8 @@ def get_analysis_service() -> AnalysisService:
 
     cache = get_cache()
     executor = get_analysis_executor()
-    return AnalysisService(cache, executor)
+    embedding_svc = get_embedding_service()
+    return AnalysisService(cache, executor, embedding_service=embedding_svc)
 
 
 def get_result_service() -> ResultService:
@@ -190,6 +238,15 @@ def get_task_service() -> TaskService:
 def shutdown_dependencies():
     """Shut down all cached singletons and release resources."""
     logger.info("Shutting down dependencies...")
+
+    # Unload embedding model if loaded
+    try:
+        from plagiarism_core.embeddings.embedder import _global_embedder
+        if _global_embedder is not None and hasattr(_global_embedder, 'unload_model'):
+            _global_embedder.unload_model()
+            logger.info("Embedding model unloaded")
+    except Exception as e:
+        logger.warning(f"Error unloading embedding model: {e}")
 
     # Shutdown executor first (finish in-flight work)
     if get_analysis_executor.cache_info().currsize > 0:

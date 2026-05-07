@@ -66,7 +66,18 @@ def _make_shadow_lines(
         normalized = _normalize_identifiers_from_tree(tree, source_bytes, source)
     else:
         normalized = normalize_identifiers(source, lang_code)
-    return normalized.split("\n")
+
+    # Strip comments and trailing whitespace so comment differences don't affect matching
+    import re
+    comment_pattern = re.compile(r'#.*$')  # Python-style comments
+    lines = []
+    for line in normalized.split("\n"):
+        # Remove comments
+        cleaned = comment_pattern.sub('', line)
+        # Strip trailing whitespace
+        cleaned = cleaned.rstrip()
+        lines.append(cleaned)
+    return lines
 
 
 def _make_exact_lines(source: str, lang_code: str = "python") -> list[str]:

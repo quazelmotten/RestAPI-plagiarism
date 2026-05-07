@@ -8,7 +8,6 @@ or used directly for tree comparison.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass(slots=True)
@@ -25,7 +24,7 @@ class IRNode:
             if self.value is not None:
                 return f"[{self.node_type}:{self.value}]"
             return f"[{self.node_type}]"
-        
+
         child_strs = [c.serialize() for c in self.children]
         return f"{self.node_type}({', '.join(child_strs)})"
 
@@ -60,7 +59,7 @@ class LoopIR(IRNode):
 
 class MapReduceIR(IRNode):
     """Map/Reduce: list comprehensions, map(), filter(), reduce(), etc.
-    
+
     This handles:
     - [x for x in y]
     - for x in y: append(z)

@@ -1,6 +1,6 @@
 """Phase 2: Line matching within matched function pairs."""
 
-from ...models import Match, PlagiarismType
+from ...models import PlagiarismType
 from ..line_matcher import _line_level_matches
 from ..semantic_line_matcher import _semantic_line_matches
 from .helpers import _mark_covered

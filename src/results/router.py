@@ -109,16 +109,16 @@ async def get_all_results(
 @router.get(
     "/file-pair",
     response_model=ResultItem,
-    summary="Get specific file comparison result",
-    description="Retrieve the similarity analysis result for a specific pair of files.",
+    summary="Get file pair plagiarism results",
+    description="Retrieve existing plagiarism results for a specific file pair.",
     responses={
         status.HTTP_200_OK: {
             "model": ResultItem,
-            "description": "Result found",
+            "description": "Results retrieved successfully",
         },
         status.HTTP_404_NOT_FOUND: {
             "model": None,
-            "description": "File pair result not found",
+            "description": "No results found for this file pair",
         },
     },
 )
@@ -128,37 +128,40 @@ async def get_file_pair(
     result_service: ResultService = Depends(get_result_service),
     current_user: User = Depends(get_current_user),
 ):
-    """Get a specific file comparison result."""
+    """Get existing plagiarism results for a file pair."""
     result = await result_service.get_file_pair(str(file_a), str(file_b))
     if not result:
-        raise NotFoundError("File pair result not found")
+        raise NotFoundError("No results found for this file pair")
     return result
 
 
 @router.post(
     "/file-pair/analyze",
     response_model=ResultItem,
-    summary="Analyze file pair on-demand",
-    description="Run a full plagiarism analysis on a specific pair of files.",
+    summary="Analyze a specific file pair for plagiarism",
+    description="Run full analysis on a specific file pair and return detailed results.",
     responses={
         status.HTTP_200_OK: {
             "model": ResultItem,
-            "description": "Analysis completed successfully",
+            "description": "Analysis complete, results updated in database",
         },
         status.HTTP_404_NOT_FOUND: {
             "model": None,
             "description": "One or both files not found",
         },
+        status.HTTP_501_NOT_IMPLEMENTED: {
+            "model": None,
+            "description": "On-demand analysis not available via API. Use task-based analysis.",
+        },
     },
 )
 async def analyze_file_pair(
-    file_a: uuid.UUID = Query(..., description="UUID of first file"),
-    file_b: uuid.UUID = Query(..., description="UUID of second file"),
+    file_a: uuid.UUID,
+    file_b: uuid.UUID,
     result_service: ResultService = Depends(get_result_service),
     cache=Depends(get_fingerprint_cache),
-    current_user: User = Depends(get_current_user),
 ):
-    """Run full plagiarism analysis on-demand for a file pair. Updates DB with matches."""
+    """Run full plagiarism analysis on a file pair and save results."""
     return await result_service.analyze_file_pair(str(file_a), str(file_b), cache)
 
 
@@ -498,8 +501,9 @@ async def export_single_pdf(
     import logging
     logger = logging.getLogger(__name__)
 
-    from fastapi.responses import StreamingResponse
     import io
+
+    from fastapi.responses import StreamingResponse
 
     try:
         payload = await result_service.build_report_payload(
@@ -541,9 +545,10 @@ async def export_all_pdfs_zip(
 ):
     """Export all confirmed plagiarism pairs for an assignment as a ZIP archive.
     Optionally filter by task_id to export only pairs from a specific task."""
-    import zipfile
     import io
     import logging
+    import zipfile
+
     from fastapi.responses import StreamingResponse
 
     logger = logging.getLogger(__name__)

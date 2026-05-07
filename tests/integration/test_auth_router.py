@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from app import app
 
+from app import app
 from auth.models import User
 from auth.service import create_access_token, get_password_hash
 
@@ -22,7 +22,7 @@ class TestAuthRouterIntegration:
     def mock_user(self):
         """Fixture for a test user."""
         user = User(
-            id="test-user-123",
+            id="12345678-1234-5678-1234-567812345678",
             email="test@example.com",
             hashed_password=get_password_hash("Password123!"),
             is_global_admin=False,
@@ -36,7 +36,7 @@ class TestAuthRouterIntegration:
     def mock_admin_user(self):
         """Fixture for an admin test user."""
         user = User(
-            id="admin-user-456",
+            id="9abcdef-1234-5678-1234-567812345678",
             email="admin@example.com",
             hashed_password=get_password_hash("AdminPass123!"),
             is_global_admin=True,
@@ -84,8 +84,8 @@ class TestAuthRouterIntegration:
             mock_result = MagicMock()
             query_str = str(query)
 
-            if "test-user-123" in query_str or "admin-user-456" in query_str:
-                if "admin-user-456" in query_str:
+            if "12345678-1234-5678-1234-567812345678" in query_str or "9abcdef-1234-5678-1234-567812345678" in query_str:
+                if "9abcdef-1234-5678-1234-567812345678" in query_str:
                     user = mock_admin_user
                 else:
                     user = mock_user
@@ -201,7 +201,7 @@ class TestAuthRouterIntegration:
         mock_token_response.token_type = "bearer"
         mock_token_response.expires_in = 3600
         mock_token_response.user = MagicMock(
-            id="test-user-123",
+            id="12345678-1234-5678-1234-567812345678",
             email="test@example.com",
             is_global_admin=False,
             role=None,
@@ -370,7 +370,7 @@ class TestAuthRouterIntegration:
         """Test admin can get user by ID."""
         mock_get_user.return_value = mock_user
 
-        response = client.get("/auth/users/test-user-123", headers=admin_auth_headers)
+        response = client.get("/auth/users/12345678-1234-5678-1234-567812345678", headers=admin_auth_headers)
 
         assert response.status_code == 200
         assert response.json()["email"] == "test@example.com"
@@ -399,7 +399,7 @@ class TestAuthRouterIntegration:
         mock_set_admin.return_value = mock_user
 
         response = client.put(
-            "/auth/users/test-user-123/global-role",
+            "/auth/users/12345678-1234-5678-1234-567812345678/global-role",
             json={"is_global_admin": True},
             headers=admin_auth_headers,
         )
@@ -413,7 +413,7 @@ class TestAuthRouterIntegration:
         mock_reset_password.return_value = True
 
         response = client.post(
-            "/auth/users/test-user-123/change-password",
+            "/auth/users/12345678-1234-5678-1234-567812345678/change-password",
             json={"new_password": "NewAdminPass123!"},
             headers=admin_auth_headers,
         )

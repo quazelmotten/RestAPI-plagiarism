@@ -171,7 +171,7 @@ def mock_database():
         from tasks.dependencies import get_task_repository, get_task_service
 
         mock_storage = MagicMock()
-        mock_user = User(id="test-user-id", email="test@example.com", is_global_admin=True)
+        mock_user = User(id="12345678-1234-5678-1234-567812345678", email="test@example.com", is_global_admin=True)
 
         app.dependency_overrides[get_async_session] = mock_get_async_session
         app.dependency_overrides[get_s3_storage] = lambda: mock_storage

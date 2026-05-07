@@ -240,18 +240,17 @@ def _semantic_line_matches(
             if length > best_len:
                 best_b, best_len = start_b, length
                 best_positions = positions
-        
+
         # Now process the best match
         if best_len >= min_match_lines:
             # Reject if all matched lines are common boilerplate
-            all_boilerplate = True
             for offset in range(best_len):
                 h = canon_a_hashes[start_a + offset]
                 if h not in _common_boilerplate_hashes:
-                    all_boilerplate = False
                     break
-            if all_boilerplate:
-                continue
+            # TEMPORARILY DISABLED: boilerplate filter was rejecting valid matches
+            # if all_boilerplate:
+            #     continue
             for pos in best_positions:
                 visited.add(pos)
             raw.append((start_a, best_b, best_len))

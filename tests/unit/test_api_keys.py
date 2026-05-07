@@ -7,8 +7,6 @@ import hashlib
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from auth.models import ApiKey, User
 from auth.service import AuthService
 

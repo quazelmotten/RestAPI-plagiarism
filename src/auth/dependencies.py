@@ -2,7 +2,7 @@
 Authentication dependencies for FastAPI.
 """
 
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from auth.blacklist_service import blacklist_service

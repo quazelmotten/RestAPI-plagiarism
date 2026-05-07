@@ -1,0 +1,14 @@
+# Simple Dockerfile for Alembic migrations
+FROM python:3.11-bullseye
+
+WORKDIR /app/
+
+# Copy database and shared directories
+COPY database ./database/
+COPY shared ./shared/
+
+# Install dependencies (including pydantic for env.py)
+RUN pip install --no-cache-dir sqlalchemy alembic psycopg2-binary asyncpg pydantic pydantic-settings
+
+# Run migrations
+CMD ["sh", "-c", "cd /app/database && alembic upgrade head"]

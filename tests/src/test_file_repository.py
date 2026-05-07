@@ -12,7 +12,6 @@ _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 sys.path.insert(0, os.path.join(_project_root, "src"))
 
 import pytest
-
 from shared.models import File, PlagiarismTask
 
 from files.repository import FileRepository

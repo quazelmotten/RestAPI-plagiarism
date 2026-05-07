@@ -36,7 +36,7 @@ services:
   migrations:
     build:
       context: .
-      dockerfile: api.Dockerfile
+      dockerfile: Dockerfile.migrations
     environment:
       # Database
       DB_HOST: postgres
@@ -45,8 +45,6 @@ services:
       DB_USER: ${DB_USER:-plagiarism_user}
       DB_PASS: ${DB_PASS}
     command: sh -c "cd /app/database && alembic upgrade head"
-    volumes:
-      - ./database:/app/database
     depends_on:
       postgres:
         condition: service_healthy
@@ -179,6 +177,12 @@ services:
       # Worker
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
       WORKER_PREFETCH_COUNT: ${WORKER_PREFETCH_COUNT:-1}
+
+      # Embedding service (F2LLM-v2-80M)
+      EMBEDDING_ENABLED: ${EMBEDDING_ENABLED:-true}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-codefuse-ai/F2LLM-v2-80M}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-256}
+      EMBEDDING_USE_QUANTIZATION: ${EMBEDDING_USE_QUANTIZATION:-true}
 
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

@@ -17,7 +17,7 @@ from config import settings
 from database import async_session_maker
 
 from .blacklist_service import blacklist_service
-from .models import User, UserRole, ApiKey
+from .models import ApiKey, User, UserRole
 from .password_validation import validate_password
 from .schemas import TokenResponse, UserResponse
 

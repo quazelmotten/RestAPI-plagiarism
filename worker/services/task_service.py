@@ -206,7 +206,7 @@ class TaskService:
                 f"in {ast_elapsed:.2f}s"
             )
 
-            # Phase 3: Store similarity percentages
+            # Phase 3: Store similarity results (matches generated on-demand via /file-pair/analyze)
             phase_start = time.perf_counter()
             self.repository.update_task(
                 task_id=task_id,

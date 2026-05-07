@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from app import app
 
+from app import app
 from auth.models import ApiKey, User
 from auth.service import create_access_token, get_password_hash
 
@@ -22,7 +22,7 @@ class TestApiKeyEndpoints:
     def mock_user(self):
         """Fixture for a test user."""
         user = User(
-            id="test-user-123",
+            id="12345678-1234-5678-1234-567812345678",
             email="test@example.com",
             hashed_password=get_password_hash("Password123!"),
             is_global_admin=False,
@@ -36,7 +36,7 @@ class TestApiKeyEndpoints:
     def mock_admin_user(self):
         """Fixture for an admin test user."""
         user = User(
-            id="admin-user-456",
+            id="9abcdef-1234-5678-1234-567812345678",
             email="admin@example.com",
             hashed_password=get_password_hash("AdminPass123!"),
             is_global_admin=True,
@@ -77,9 +77,9 @@ class TestApiKeyEndpoints:
                     mock_result.scalar_one_or_none.return_value = mock_user
                 elif "admin@example.com" in query_str:
                     mock_result.scalar_one_or_none.return_value = mock_admin_user
-                elif "test-user-123" in query_str:
+                elif "12345678-1234-5678-1234-567812345678" in query_str:
                     mock_result.scalar_one_or_none.return_value = mock_user
-                elif "admin-user-456" in query_str:
+                elif "9abcdef-1234-5678-1234-567812345678" in query_str:
                     mock_result.scalar_one_or_none.return_value = mock_admin_user
                 else:
                     mock_result.scalars.return_value.all.return_value = [mock_user, mock_admin_user]

@@ -36,7 +36,7 @@ class ResultService:
 
         Args:
             task_id: Task identifier
-            pairs: List of (file_a_dict, file_b_dict, similarity_score) tuples
+            pairs: List of (file_a_dict, file_b_dict, similarity_score, matches_list) tuples
             batch_size: Batch size for DB inserts (default 5000 for optimal throughput)
         """
         if not pairs:

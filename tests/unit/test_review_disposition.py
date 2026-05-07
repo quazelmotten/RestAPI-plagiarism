@@ -50,7 +50,7 @@ class TestResultServiceClearPair:
         mock_db.refresh = AsyncMock()
 
         mock_user = MagicMock()
-        mock_user.id = "test-user-id"
+        mock_user.id = "12345678-1234-5678-1234-567812345678"
 
         with patch(
             "results.service.ResultRepository._map_to_result_item", new_callable=AsyncMock
@@ -86,7 +86,7 @@ class TestResultServiceConfirmPlagiarism:
         mock_db.refresh = AsyncMock()
 
         mock_user = MagicMock()
-        mock_user.id = "test-user-id"
+        mock_user.id = "12345678-1234-5678-1234-567812345678"
 
         with patch(
             "results.service.ResultRepository._map_to_result_item", new_callable=AsyncMock
@@ -121,7 +121,7 @@ class TestResultServiceUndoReview:
         mock_db.refresh = AsyncMock()
 
         mock_user = MagicMock()
-        mock_user.id = "test-user-id"
+        mock_user.id = "12345678-1234-5678-1234-567812345678"
 
         with patch(
             "results.service.ResultRepository._map_to_result_item", new_callable=AsyncMock
@@ -154,7 +154,7 @@ class TestResultServiceUndoReview:
         mock_db.refresh = AsyncMock()
 
         mock_user = MagicMock()
-        mock_user.id = "test-user-id"
+        mock_user.id = "12345678-1234-5678-1234-567812345678"
 
         with patch(
             "results.service.ResultRepository._map_to_result_item", new_callable=AsyncMock

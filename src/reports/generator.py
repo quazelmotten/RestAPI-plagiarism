@@ -9,6 +9,12 @@ import aiofiles
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
+# Import constants from plagiarism_core
+from plagiarism_core.models import PLAGIARISM_TYPE_LABELS
+
+# Context lines constant
+CONTEXT_LINES = 5  # Number of context lines before/after match
+
 # Match colors for pair comparison (light, readable)
 MATCH_COLORS = [
     (255, 200, 200), (200, 255, 200), (200, 200, 255),
@@ -31,12 +37,12 @@ def generate_snippet_html(lines, start_line, end_line, start_col, end_col, conte
     end_idx = end_line - 1
     snippet_start = max(0, start_idx - context)
     snippet_end = min(len(lines), end_idx + context + 1)
-    
+
     for i in range(snippet_start, snippet_end):
         line_num = i + 1
         raw_line = lines[i].rstrip("\n")
         escaped = html_escape.escape(raw_line)
-        
+
         if start_line <= line_num <= end_line:
             if line_num == start_line and line_num == end_line:
                 before = escaped[:start_col - 1]
@@ -101,24 +107,24 @@ class ReportPDF(FPDF):
         # Footer line
         self.set_draw_color(226, 232, 240)
         self.line(10, self.h - 15, 200, self.h - 15)
-        
+
         # Logo (fixed spacing)
         logo_y = self.h - 13
         self.set_xy(10, logo_y)
         self.set_font('Courier', 'B', 8)
-        
+
         self.set_text_color(45, 55, 72)
         w1 = self.get_string_width('plagi')
         self.cell(w1, 5, 'plagi', 0, new_x=XPos.RIGHT, new_y=YPos.TOP)
-        
+
         self.set_text_color(72, 187, 120)
         w2 = self.get_string_width('type')
         self.cell(w2, 5, 'type', 0, new_x=XPos.RIGHT, new_y=YPos.TOP)
-        
+
         self.set_text_color(45, 55, 72)
         w3 = self.get_string_width('_')
         self.cell(w3, 5, '_', 0, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        
+
         # Generated date
         self.set_xy(150, logo_y)
         self.set_font('Helvetica', '', 7)
@@ -140,15 +146,15 @@ async def generate_pdf_fpdf2(context: dict) -> bytes:
     # Logo text (fixed spacing)
     pdf.set_xy(10, 8)
     pdf.set_font('Courier', 'B', 16)
-    
+
     pdf.set_text_color(255, 255, 255)
     w1 = pdf.get_string_width('plagi')
     pdf.cell(w1, 6, 'plagi', 0, new_x=XPos.RIGHT, new_y=YPos.TOP)
-    
+
     pdf.set_text_color(72, 187, 120)
     w2 = pdf.get_string_width('type')
     pdf.cell(w2, 6, 'type', 0, new_x=XPos.RIGHT, new_y=YPos.TOP)
-    
+
     pdf.set_text_color(255, 255, 255)
     w3 = pdf.get_string_width('_')
     pdf.cell(w3, 6, '_', 0, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -594,7 +600,7 @@ def highlight_match(
 
 async def read_file_content(file_path: str) -> list[str]:
     """Read file content as a list of lines."""
-    async with aiofiles.open(file_path, "r") as f:
+    async with aiofiles.open(file_path) as f:
         content = await f.read()
     return content.splitlines(keepends=False)
 
@@ -621,10 +627,10 @@ async def build_report_payload(
         file_a_lines: Optional pre-loaded file_a lines (to avoid re-reading)
         file_b_lines: Optional pre-loaded file_b lines (to avoid re-reading)
     """
-    import sys
-    import json
     import ast
+    import json
     import logging
+    import sys
     logger = logging.getLogger(__name__)
 
     if matches is None:
@@ -632,15 +638,15 @@ async def build_report_payload(
     elif isinstance(matches, str):
         try:
             matches = json.loads(matches)
-        except:
+        except (json.JSONDecodeError, TypeError):
             try:
                 matches = ast.literal_eval(matches)
-            except:
+            except (ValueError, SyntaxError):
                 matches = []
     elif not isinstance(matches, list):
         matches = []
 
-    print(f"DEBUG build_payload: Reading files...", flush=True, file=sys.stderr)
+    print("DEBUG build_payload: Reading files...", flush=True, file=sys.stderr)
 
     # Read files if not provided - handle errors gracefully
     if file_a_lines is None:
@@ -658,10 +664,10 @@ async def build_report_payload(
         except Exception as e:
             logger.warning(f"Could not read file_b {file_b_data['file_path']}: {e}")
             file_b_lines = []
-    
+
     # Extract lines to include (matched lines + context)
-    CONTEXT_LINES = 5  # Number of context lines before/after match
-    
+    # CONTEXT_LINES = 5  defined at module level
+
     def get_lines_to_include(lines, matches, file_key):
         """Get set of line numbers to include (matched lines + context)."""
         lines_to_include = set()
@@ -670,10 +676,10 @@ async def build_report_payload(
             if isinstance(match, str):
                 try:
                     match = json.loads(match)
-                except:
+                except (json.JSONDecodeError, TypeError):
                     try:
                         match = ast.literal_eval(match)
-                    except:
+                    except (ValueError, SyntaxError):
                         continue
 
             if not isinstance(match, dict):
@@ -691,17 +697,17 @@ async def build_report_payload(
                 lines_to_include.add(line_num)
 
         return lines_to_include
-    
+
     # Get lines to include for both files
     file_a_lines_to_include = get_lines_to_include(file_a_lines, matches, "file1")
     file_b_lines_to_include = get_lines_to_include(file_b_lines, matches, "file2")
-    
+
     # Build HTML with only relevant lines
     def build_file_html(lines, lines_to_include):
         """Build HTML with only the specified lines (with line numbers)."""
         if not lines or not lines_to_include:
             return "No content available"
-        
+
         result = []
         for i, line in enumerate(lines):
             line_num = i + 1
@@ -709,7 +715,7 @@ async def build_report_payload(
                 escaped = html_escape.escape(line.rstrip("\n"))
                 result.append(f"{line_num:4d}: {escaped}")
         return "\n".join(result)
-    
+
     file_a_html = build_file_html(file_a_lines, file_a_lines_to_include)
     file_b_html = build_file_html(file_b_lines, file_b_lines_to_include)
     print(f"DEBUG build_payload: file_a_html size={len(file_a_html)}, file_b_html size={len(file_b_html)}", flush=True, file=sys.stderr)
@@ -721,7 +727,7 @@ async def build_report_payload(
         except json.JSONDecodeError:
             import ast
             matches = ast.literal_eval(matches)
-    
+
     processed_matches = []
     for i, match in enumerate(matches):
         try:
@@ -733,10 +739,10 @@ async def build_report_payload(
                 except json.JSONDecodeError:
                     import ast
                     match = ast.literal_eval(match)
-            
+
             file1_loc = match.get("file1", {}) if isinstance(match, dict) else {}
             file2_loc = match.get("file2", {}) if isinstance(match, dict) else {}
-            
+
             # Handle case where file1_loc or file2_loc might be strings
             if isinstance(file1_loc, str):
                 try:
@@ -767,10 +773,22 @@ async def build_report_payload(
                 file2_loc.get("end_col", 1),
             )
 
+            # Get plagiarism type and confidence
+            plag_type = match.get("plagiarism_type", 0)
+            details = match.get("details") or {}
+            confidence = details.get("confidence", 0.5)
+            detection_method = details.get("detection_method", "ast")
+            embedding_sim = details.get("embedding_similarity")
+
             processed_matches.append({
                 "file1_html": file1_html,
                 "file2_html": file2_html,
                 "similarity": match.get("similarity"),
+                "plagiarism_type": plag_type,
+                "type_label": PLAGIARISM_TYPE_LABELS.get(plag_type, "Unknown"),
+                "confidence": confidence,
+                "detection_method": detection_method,
+                "embedding_similarity": embedding_sim,
                 "file1": file1_loc,
                 "file2": file2_loc,
             })
@@ -779,9 +797,9 @@ async def build_report_payload(
             continue
 
     print(f"DEBUG build_payload: file_a_html size={len(file_a_html)}, file_b_html size={len(file_b_html)}", flush=True, file=sys.stderr)
-    
+
     print(f"DEBUG build_payload: file_a_html size={len(file_a_html)}, file_b_html size={len(file_b_html)}", flush=True, file=sys.stderr)
-    
+
     return {
         "assignment": assignment_data,
         "file_a": {

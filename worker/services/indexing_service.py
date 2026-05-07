@@ -50,7 +50,8 @@ class IndexingService:
             return
 
         try:
-            fps = self.fingerprint_service.ensure_fingerprinted(file_info, language)
+            result = self.fingerprint_service.ensure_fingerprinted(file_info, language)
+            fps = result.get("fingerprints", [])
             self.index.add_file_fingerprints(file_hash, fps, language)
             logger.debug(f"Indexed {len(fps)} fingerprints for {file_hash[:16]}...")
         except Exception as e:
@@ -110,7 +111,8 @@ class IndexingService:
             fps = fingerprint_map.get(file_hash)
             if fps is None:
                 try:
-                    fps = self.fingerprint_service.ensure_fingerprinted(file_info, language)
+                    result = self.fingerprint_service.ensure_fingerprinted(file_info, language)
+                    fps = result.get("fingerprints", [])
                     fingerprint_map[file_hash] = fps
                 except Exception as e:
                     logger.error(f"Failed to index file {file_hash[:16]}...: {e}")

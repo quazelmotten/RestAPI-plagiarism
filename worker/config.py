@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
+    # Embedding service (F2LLM-v2-80M)
+    embedding_enabled: bool = Field(default=True, validation_alias="EMBEDDING_ENABLED")
+    embedding_model: str = Field(
+        default="codefuse-ai/F2LLM-v2-80M", validation_alias="EMBEDDING_MODEL"
+    )
+    embedding_dimension: int = Field(default=256, validation_alias="EMBEDDING_DIMENSION")
+    embedding_use_quantization: bool = Field(
+        default=True, validation_alias="EMBEDDING_USE_QUANTIZATION"
+    )
+
     @field_validator("default_plagiarism_threshold")
     @classmethod
     def validate_threshold(cls, v: float) -> float:

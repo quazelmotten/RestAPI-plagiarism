@@ -185,7 +185,7 @@ async def client(db_clean):
     from auth.models import User
 
     mock_user = User(
-        id="test-user-id",
+        id="12345678-1234-5678-1234-567812345678",
         email="test@example.com",
         hashed_password="test",
         is_global_admin=True,

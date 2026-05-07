@@ -2,6 +2,10 @@
 
 import logging
 
+from .ast_based_canonicalize import (
+    canonicalize_type4,
+    canonicalize_type4_light,
+)
 from .ast_canonical import (
     ast_canonicalize,
     ast_canonicalize_with_identifiers,
@@ -9,10 +13,6 @@ from .ast_canonical import (
 from .identifier_norm import (
     get_identifier_renames,
     normalize_identifiers,
-)
-from .ast_based_canonicalize import (
-    canonicalize_type4,
-    canonicalize_type4_light,
 )
 
 logger = logging.getLogger(__name__)

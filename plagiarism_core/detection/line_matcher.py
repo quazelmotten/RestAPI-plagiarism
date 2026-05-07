@@ -1,7 +1,21 @@
 """Exact + shadow line matching."""
 
+import re
+
 from ..models import Match, PlagiarismType
 from .line_helpers import _line_hash
+
+
+def _is_comment(line: str, lang_code: str = "python") -> bool:
+    """Check if a line is a comment (after stripping whitespace)."""
+    stripped = line.strip()
+    if not stripped:
+        return False
+    # Python/Ruby/Bash/Shell
+    if lang_code in ("python", "ruby", "perl", "bash", "shell"):
+        return stripped.startswith("#")
+    # C/C++/Java/JS/TS/Go/Rust
+    return stripped.startswith("//") or stripped.startswith("/*")
 
 
 def _line_level_matches(
@@ -10,6 +24,7 @@ def _line_level_matches(
     shadow_a: list[str],
     shadow_b: list[str],
     min_match_lines: int = 2,
+    lang_code: str = "python",
 ) -> list[Match]:
     """
     Match lines at two levels simultaneously.
@@ -21,17 +36,17 @@ def _line_level_matches(
     # Build hash → line-indices index for shadow B
     shadow_b_index: dict[int, list[int]] = {}
     for j, s in enumerate(shadow_b):
-        if s:
+        if s and not _is_comment(s, lang_code):
             shadow_b_index.setdefault(_line_hash(s), []).append(j)
 
     # Build hash of exact lines for A
     exact_a_hashes = [_line_hash(ln) for ln in lines_a]
     exact_b_hashes = [_line_hash(ln) for ln in lines_b]
 
-    # Find all A→B shadow-matching line pairs
+    # Find all A→B shadow-matching line pairs (excluding comments)
     pair_map: dict[int, list[int]] = {}
     for i, s in enumerate(shadow_a):
-        if not s:
+        if not s or _is_comment(s, lang_code):
             continue
         h = _line_hash(s)
         if h in shadow_b_index:
@@ -42,9 +57,6 @@ def _line_level_matches(
     shadow_b_hashes = [_line_hash(s) for s in shadow_b]
 
     # Extend matches to contiguous regions.
-    # When a line in A matches multiple lines in B, prefer the B candidate
-    # that produces the longest contiguous match (avoids greedy short-match
-    # selection that blocks longer downstream matches).
     raw: list[tuple[int, int, int]] = []  # (start_a, start_b, length)
     visited: set[int] = set()
 
@@ -59,10 +71,10 @@ def _line_level_matches(
             ia, ib = start_a, start_b
             while ia < len(shadow_a) and ib < len(shadow_b):
                 # Skip blank/comment lines in A
-                while ia < len(shadow_a) and not shadow_a_hashes[ia]:
+                while ia < len(shadow_a) and (not shadow_a_hashes[ia] or (ia < len(lines_a) and _is_comment(lines_a[ia], lang_code))):
                     ia += 1
                 # Skip blank/comment lines in B
-                while ib < len(shadow_b) and not shadow_b_hashes[ib]:
+                while ib < len(shadow_b) and (not shadow_b_hashes[ib] or (ib < len(lines_b) and _is_comment(lines_b[ib], lang_code))):
                     ib += 1
                 if ia >= len(shadow_a) or ib >= len(shadow_b):
                     break
@@ -121,14 +133,13 @@ def _line_level_matches(
             )
 
         # Minimum lines for a meaningful Type-2 detection (avoid false positives)
-        MIN_RENAMED_LINES = 3
-        
+        # min_renamed_lines = 3  # noqa: N806  # Removed - use hardcoded value
+
         if all_exact:
             ptype = PlagiarismType.EXACT
             desc = None
             renames = None
-        elif length < MIN_RENAMED_LINES:
-            # Too short to be a meaningful Type-2 match - skip
+        elif length < 3:  # Too short to be a meaningful Type-2 match - skip
             continue
         else:
             ptype = PlagiarismType.RENAMED
@@ -171,7 +182,6 @@ def _extract_line_renames(
     and pairs identifiers that map to the same VAR_N across files.
     This correctly handles cases where identifiers appear in different orders.
     """
-    import re
 
     vars_set = {f"VAR_{i}" for i in range(50)}
 

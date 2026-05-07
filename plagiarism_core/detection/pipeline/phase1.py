@@ -2,13 +2,15 @@
 
 import logging
 
+import numpy as np
+
+from ...ast_hash import ast_minhash
 from ...canonicalizer import ast_canonicalize
 from ...models import Match, PlagiarismType
-from ...ast_hash import ast_minhash
 from ..ast_helpers import _extract_functions
 from ..body_signatures import _extract_body_signature
 from ..function_matcher import _function_level_matches
-from ..line_helpers import _line_hash
+from ..line_helpers import _line_hash, _make_shadow_lines
 from ..line_matcher import _line_level_matches
 from ..semantic_function_matcher import _semantic_function_matches
 from ..semantic_line_matcher import _semantic_line_matches
@@ -24,6 +26,8 @@ _MIN_CANONICAL_LENGTH = 50
 _MINHASH_THRESHOLD = 0.75
 _MINHASH_MIN_SIZE = 10
 
+_EMBEDDING_SIMILARITY_THRESHOLD = 0.70  # Threshold for embedding-based matching
+
 
 def run_phase1(
     lines_a,
@@ -37,6 +41,8 @@ def run_phase1(
     bytes_a,
     tree_b,
     bytes_b,
+    embeddings_a: dict | None = None,  # func_name -> embedding
+    embeddings_b: dict | None = None,  # func_name -> embedding
 ):
     all_matches = []
     funcs_a = _extract_functions(tree_a.root_node, bytes_a, lang_code)
@@ -106,6 +112,17 @@ def run_phase1(
         tree_b,
         all_matches,
     )
+
+    # NEW: Embedding-based function matching (Type-4 enhancement)
+    if embeddings_a and embeddings_b:
+        emb_matches = _match_by_embedding_similarity(
+            funcs_a, funcs_b, embeddings_a, embeddings_b, covered_a, covered_b
+        )
+        for fm in emb_matches:
+            _mark_covered(covered_a, fm)
+            _mark_covered(covered_b, fm)
+        all_matches.extend(emb_matches)
+
     return all_matches
 
 
@@ -140,8 +157,11 @@ def _match_by_name(
                 continue
             fn_lines_a = lines_a[fa["start_line"] : fa["end_line"] + 1]
             fn_lines_b = lines_b[fb["start_line"] : fb["end_line"] + 1]
-            fn_shadow_a = shadow_a[fa["start_line"] : fa["end_line"] + 1]
-            fn_shadow_b = shadow_b[fb["start_line"] : fb["end_line"] + 1]
+            # Per-function normalization: do NOT pass tree/bytes so that
+            # normalize_identifiers() parses the function independently,
+            # resetting VAR_N counter for each function
+            fn_shadow_a = _make_shadow_lines("\n".join(fn_lines_a), lang_code)
+            fn_shadow_b = _make_shadow_lines("\n".join(fn_lines_b), lang_code)
 
             body_line_match = _line_level_matches(
                 fn_lines_a, fn_lines_b, fn_shadow_a, fn_shadow_b, 3
@@ -298,11 +318,11 @@ def _match_by_body_signature(
                 continue
             if min(size_a, size_b) / max(size_a, size_b) < 0.5:
                 continue
-            
+
             # Determine if this is Type-2 (renamed) or Type-4 (semantic)
             # If function names are different but body signature matches, it's Type-2
             is_renamed = fa["name"] != fb["name"]
-            
+
             prefix_len, suffix_len = _find_prefix_suffix(
                 fn_lines_a, fn_lines_b, fn_shadow_a, fn_shadow_b
             )
@@ -312,11 +332,11 @@ def _match_by_body_signature(
             trim_b_end = fb["end_line"] - suffix_len
             if trim_a_start > trim_a_end or trim_b_start > trim_b_end:
                 continue
-            
+
             # Use RENAMED for different names (Type-2), SEMANTIC only for same names
             ptype = PlagiarismType.RENAMED if is_renamed else PlagiarismType.SEMANTIC
             desc = f"Renamed function: {fa['name']} ↔ {fb['name']} (body signature)" if is_renamed else f"Semantic equivalent (cross-name): {fa['name']} ↔ {fb['name']}"
-            
+
             cross_match = Match(
                 file1={
                     "start_line": trim_a_start,
@@ -404,13 +424,13 @@ def _match_by_minhash(
 ):
     """
     Match functions using MinHash similarity for partial matches.
-    
+
     This catches functions that are structurally similar but not identical
     (e.g., a few lines added/removed or modified). It's the "fallback"
     layer after exact structural/semantic matching.
     """
     from ...fingerprinting.minhash import MinHash
-    
+
     minhash_sigs_a = {}
     for fa in funcs_a:
         func_lines = set(range(fa["start_line"], fa["end_line"] + 1))
@@ -424,7 +444,7 @@ def _match_by_minhash(
                 minhash_sigs_a[fa["name"]] = ast_minhash(func_node)
         except Exception:
             continue
-    
+
     minhash_sigs_b = {}
     for fb in funcs_b:
         func_lines = set(range(fb["start_line"], fb["end_line"] + 1))
@@ -438,7 +458,7 @@ def _match_by_minhash(
                 minhash_sigs_b[fb["name"]] = ast_minhash(func_node)
         except Exception:
             continue
-    
+
     matched_pairs = set()
     for name_a, sig_a in minhash_sigs_a.items():
         if name_a in matched_pairs:
@@ -450,13 +470,13 @@ def _match_by_minhash(
             if sim >= _MINHASH_THRESHOLD:
                 fa = next(f for f in funcs_a if f["name"] == name_a)
                 fb = next(f for f in funcs_b if f["name"] == name_b)
-                
+
                 # Determine if this is Type-2 (renamed) or Type-4 (semantic)
                 # If function names are different but struct_hash is the same, it's Type-2
                 is_renamed = fa["name"] != fb["name"]
                 ptype = PlagiarismType.RENAMED if is_renamed else PlagiarismType.SEMANTIC
                 desc = f"Renamed function (MinHash): {fa['name']} ↔ {fb['name']}" if is_renamed else f"Partial match (MinHash): {fa['name']} ↔ {fb['name']} (similarity: {sim:.2f})"
-                
+
                 partial_match = Match(
                     file1={
                         "start_line": fa["start_line"],
@@ -490,9 +510,131 @@ def _match_by_minhash(
                 break
 
 
+def _match_by_embedding_similarity(
+    funcs_a,
+    funcs_b,
+    embeddings_a: dict,  # (func_name, start_line) -> embedding
+    embeddings_b: dict,  # (func_name, start_line) -> embedding
+    covered_a: set,
+    covered_b: set,
+    threshold: float = _EMBEDDING_SIMILARITY_THRESHOLD,
+) -> list:
+    """
+    Match functions using embedding similarity (F2LLM-v2-80M).
+
+    Uses an improved matching algorithm that considers all pairwise similarities
+    and assigns matches from highest similarity down, avoiding the pitfalls
+    of greedily matching in the order of funcs_a.
+
+    Args:
+        funcs_a, funcs_b: Lists of function dicts
+        embeddings_a, embeddings_b: Dict mapping (func_name, start_line) to embedding
+        covered_a, covered_b: Sets of covered line numbers
+        threshold: Cosine similarity threshold (default 0.70)
+
+    Returns:
+        List of Match objects with plagiarism_type=SEMANTIC
+    """
+    if not embeddings_a or not embeddings_b:
+        return []
+
+    # Build candidate pairs with similarities
+    candidates = []
+
+    for fa in funcs_a:
+        fa_key = (fa["name"], fa["start_line"])
+        if fa_key not in embeddings_a:
+            continue
+        if set(range(fa["start_line"], fa["end_line"] + 1)) & covered_a:
+            continue
+
+        emb_a = embeddings_a[fa_key]
+        size_a = fa["end_line"] - fa["start_line"] + 1
+
+        if size_a < 3:
+            continue
+
+        for fb in funcs_b:
+            fb_key = (fb["name"], fb["start_line"])
+            if fb_key not in embeddings_b:
+                continue
+            if set(range(fb["start_line"], fb["end_line"] + 1)) & covered_b:
+                continue
+
+            size_b = fb["end_line"] - fb["start_line"] + 1
+            if size_b < 3:
+                continue
+
+            # Check if function sizes are reasonably similar
+            if min(size_a, size_b) / max(size_a, size_b) < 0.6:
+                continue
+
+            emb_b = embeddings_b[fb_key]
+
+            # Compute cosine similarity (embeddings are normalized)
+            sim = float(np.dot(emb_a, emb_b))
+
+            if sim >= threshold:
+                candidates.append((sim, fa, fb, fa_key, fb_key))
+
+    # Sort by similarity (descending) for greedy assignment from best matches
+    candidates.sort(key=lambda x: -x[0])
+
+    matches = []
+    matched_a = set()
+    matched_b = set()
+
+    for sim, fa, fb, fa_key, fb_key in candidates:
+        if fa_key in matched_a or fb_key in matched_b:
+            continue
+
+        # All embedding matches are Type-4 (SEMANTIC) by definition
+        ptype = PlagiarismType.SEMANTIC
+
+        desc = (
+            f"Semantic equivalent (embedding): {fa['name']} ↔ {fb['name']} "
+            f"(similarity: {sim:.2f})"
+        )
+
+        match = Match(
+            file1={
+                "start_line": fa["start_line"],
+                "start_col": 0,
+                "end_line": fa["end_line"],
+                "end_col": 0,
+            },
+            file2={
+                "start_line": fb["start_line"],
+                "start_col": 0,
+                "end_line": fb["end_line"],
+                "end_col": 0,
+            },
+            kgram_count=fa["end_line"] - fa["start_line"] + 1,
+            plagiarism_type=ptype,
+            similarity=sim,
+            details={
+                "original_function": fa["name"],
+                "matched_function": fb["name"],
+                "method": "embedding",
+                "embedding_similarity": sim,
+            },
+            description=desc,
+        )
+        matches.append(match)
+        matched_a.add(fa_key)
+        matched_b.add(fb_key)
+
+        for line in range(fa["start_line"], fa["end_line"] + 1):
+            covered_a.add(line)
+        for line in range(fb["start_line"], fb["end_line"] + 1):
+            covered_b.add(line)
+
+    return matches
+
+
 def _find_function_node(root, start_line, end_line):
     """Find function node within the given line range."""
-    
+
     def visit(node):
         if node.type in ("function_definition", "method_definition", "function_declaration"):
             if node.start_point[0] <= start_line <= node.end_point[0]:
@@ -502,7 +644,7 @@ def _find_function_node(root, start_line, end_line):
             if result:
                 return result
         return None
-    
+
     return visit(root)
 
 

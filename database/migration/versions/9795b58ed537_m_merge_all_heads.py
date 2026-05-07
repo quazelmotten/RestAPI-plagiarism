@@ -5,8 +5,6 @@ Revises: add_bulk_operation_indexes
 Create Date: 2026-05-01 03:44:19.278167
 
 """
-from alembic import op
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.

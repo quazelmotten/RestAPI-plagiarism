@@ -28,44 +28,62 @@ from tasks.schemas import TaskCreateResponse  # noqa: E402
 @pytest_asyncio.fixture
 async def client():
     """Async test client fixture."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from auth.dependencies import get_current_user
+    from auth.models import User
     from clients.redis_client import RedisClient
 
-    if not hasattr(app.state, "redis_client"):
-        app.state.redis_client = RedisClient()
-    if not hasattr(app.state, "rabbitmq"):
+    # Mock the async_session_maker to return a mock session
+    mock_session = MagicMock()
+    mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+    mock_session.commit = AsyncMock()
+    mock_session.close = AsyncMock()
+    mock_session.get = AsyncMock(return_value=None)
+    mock_session.add = AsyncMock()
 
-        class DummyRabbitMQ:
-            is_connected = False
-            publish_message = AsyncMock()
+    # Create a mock that works as async context manager: async with async_session_maker() as session
+    mock_maker_instance = MagicMock()
+    mock_maker_instance.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_maker_instance.__aexit__ = AsyncMock(return_value=False)
+    mock_maker = MagicMock(return_value=mock_maker_instance)
 
-        app.state.rabbitmq = DummyRabbitMQ()
-    if not hasattr(app.state, "ws_manager"):
+    with patch("database.async_session_maker", mock_maker):
+        if not hasattr(app.state, "redis_client"):
+            app.state.redis_client = RedisClient()
+        if not hasattr(app.state, "rabbitmq"):
+            class DummyRabbitMQ:
+                is_connected = False
+                publish_message = AsyncMock()
+            app.state.rabbitmq = DummyRabbitMQ()
+        if not hasattr(app.state, "ws_manager"):
+            class DummyWSManager:
+                async def start(self):
+                    pass
+                async def stop(self):
+                    pass
+            app.state.ws_manager = DummyWSManager()
+        if not hasattr(app.state, "s3_storage"):
+            class DummyS3Storage:
+                async def upload_file(self, *args, **kwargs):
+                    return {"path": "s3://test/file", "hash": "abc123"}
+                async def upload_file_async(self, *args, **kwargs):
+                    return {"path": "s3://test/file", "hash": "abc123"}
+                async def download_file(self, *args, **kwargs):
+                    return b"test content"
+                async def delete_file(self, *args, **kwargs):
+                    pass
+            app.state.s3_storage = DummyS3Storage()
 
-        class DummyWSManager:
-            async def start(self):
-                pass
+        # Mock authentication
+        mock_user = User(id="12345678-1234-5678-1234-567812345678", email="test@example.com", is_global_admin=True)
+        app.dependency_overrides[get_current_user] = lambda: mock_user
 
-            async def stop(self):
-                pass
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
 
-        app.state.ws_manager = DummyWSManager()
-    if not hasattr(app.state, "s3_storage"):
-
-        class DummyS3Storage:
-            async def upload_file(self, *args, **kwargs):
-                return {"path": "s3://test/file", "hash": "abc123"}
-            async def upload_file_async(self, *args, **kwargs):
-                return {"path": "s3://test/file", "hash": "abc123"}
-            async def download_file(self, *args, **kwargs):
-                return b"test content"
-            async def delete_file(self, *args, **kwargs):
-                pass
-
-        app.state.s3_storage = DummyS3Storage()
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+        app.dependency_overrides.clear()
 
 
 class TestAssignmentEndpoints:

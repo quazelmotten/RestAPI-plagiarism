@@ -114,9 +114,12 @@ def test_rabbitmq_config_url():
     assert config.user in config.url
 
 
-def test_rate_limit_validation():
+def test_rate_limit_validation(monkeypatch):
     """Test rate limit config defaults and validation behavior."""
     from src.config import RateLimitConfig
+
+    # Ensure RATE_LIMIT_ENABLED is not set or set to true
+    monkeypatch.delenv("RATE_LIMIT_ENABLED", raising=False)
 
     config = RateLimitConfig()
     assert config.enabled is True

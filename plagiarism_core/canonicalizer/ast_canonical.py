@@ -9,8 +9,8 @@ from .ir import (
     BinaryOpIR,
     CallIR,
     ConditionIR,
-    IRNode,
     IdentifierIR,
+    IRNode,
     LiteralIR,
     LoopIR,
     MapReduceIR,
@@ -39,7 +39,7 @@ def _get_builtin_names():
 def _ir_emit(node: Node, source_bytes: bytes, depth: int = 0) -> IRNode:
     """
     Build an IR tree from an AST node.
-    
+
     This converts tree-sitter AST nodes into our IR representation,
     enabling both canonical string serialization and tree comparison.
     """
@@ -47,7 +47,7 @@ def _ir_emit(node: Node, source_bytes: bytes, depth: int = 0) -> IRNode:
         return ir_node("RECURSION_LIMIT")
 
     sem_type = _semantic_node_type(node)
-    
+
     if sem_type == "LOOP":
         return _ir_emit_loop(node, source_bytes, depth)
     elif sem_type == "COLLECTION":
@@ -98,23 +98,23 @@ def _ir_emit_loop(node: Node, source_bytes: bytes, depth: int) -> IRNode:
     """Build IR for loop nodes."""
     iterable: IRNode | None = None
     body: IRNode | None = None
-    
+
     iter_node = _get_child_by_type(node, "iterable")
     if iter_node:
         iterable = _ir_emit(iter_node, source_bytes, depth + 1)
-    
+
     for_clause = _get_child_by_type(node, "for_clause")
     if for_clause:
         iterable = _ir_emit(for_clause, source_bytes, depth + 1)
-    
+
     range_clause = _get_child_by_type(node, "range_clause")
     if range_clause:
         iterable = _ir_emit(range_clause, source_bytes, depth + 1)
-    
+
     block = _get_child_by_type(node, "block")
     if block:
         body = _ir_emit(block, source_bytes, depth + 1)
-    
+
     if iterable and body:
         return LoopIR(iterable, body)
     elif body:
@@ -127,7 +127,7 @@ def _ir_emit_collection(node: Node, source_bytes: bytes, depth: int) -> IRNode:
     element: IRNode | None = None
     iter_src: IRNode | None = None
     cond_expr: IRNode | None = None
-    
+
     if node.type == "list_comprehension":
         for child in node.children:
             if child.type in ("[", "]"):
@@ -141,7 +141,7 @@ def _ir_emit_collection(node: Node, source_bytes: bytes, depth: int) -> IRNode:
                 for sub in child.children:
                     if sub.type == "identifier":
                         iter_src = _ir_emit(sub, source_bytes, depth + 1)
-    
+
     if element and iter_src:
         return MapReduceIR(element, iter_src, cond_expr)
     return ir_node("COLLECTION")
@@ -152,24 +152,24 @@ def _ir_emit_condition(node: Node, source_bytes: bytes, depth: int) -> IRNode:
     condition: IRNode | None = None
     then_expr: IRNode | None = None
     else_expr: IRNode | None = None
-    
+
     cond_node = _get_child_by_type(node, "condition")
     if cond_node:
         condition = _ir_emit(cond_node, source_bytes, depth + 1)
-    
+
     consequence = _get_child_by_type(node, "consequence")
     if consequence:
         then_expr = _ir_emit(consequence, source_bytes, depth + 1)
-    
+
     if node.type == "if_statement":
         block = _get_child_by_type(node, "block")
         if block and not then_expr:
             then_expr = _ir_emit(block, source_bytes, depth + 1)
-    
+
     alternative = _get_child_by_type(node, "alternative")
     if alternative:
         else_expr = _ir_emit(alternative, source_bytes, depth + 1)
-    
+
     if condition and then_expr:
         return ConditionIR(condition, then_expr, else_expr)
     return ir_node("CONDITION")
@@ -180,10 +180,10 @@ def _ir_emit_assignment(node: Node, source_bytes: bytes, depth: int) -> IRNode:
     op = "="
     target: IRNode | None = None
     value: IRNode | None = None
-    
+
     children_list = [c for c in node.children if not _is_ignorable(c.type)]
-    
-    for i, child in enumerate(children_list):
+
+    for _i, child in enumerate(children_list):
         text = _get_source_text(child, source_bytes).strip()
         if text in ("+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "|=", "^="):
             op = text
@@ -193,7 +193,7 @@ def _ir_emit_assignment(node: Node, source_bytes: bytes, depth: int) -> IRNode:
             target = _ir_emit(child, source_bytes, depth + 1)
         elif child.type != "binary_operator" and not value:
             value = _ir_emit(child, source_bytes, depth + 1)
-    
+
     if node.type == "assignment_expression":
         for child in node.children:
             text = _get_source_text(child, source_bytes).strip()
@@ -206,7 +206,7 @@ def _ir_emit_assignment(node: Node, source_bytes: bytes, depth: int) -> IRNode:
                     target = _ir_emit(child, source_bytes, depth + 1)
                 elif not value:
                     value = _ir_emit(child, source_bytes, depth + 1)
-    
+
     if target and value:
         return AssignIR(target, op, value)
     return ir_node("ASSIGN")
@@ -216,7 +216,7 @@ def _ir_emit_call(node: Node, source_bytes: bytes, depth: int) -> IRNode:
     """Build IR for function calls."""
     func_node = _get_child_by_type(node, "function")
     func_name = _get_source_text(func_node, source_bytes) if func_node else "call"
-    
+
     args_node = _get_child_by_type(node, "arguments")
     args: tuple[IRNode, ...] = ()
     if args_node:
@@ -225,7 +225,7 @@ def _ir_emit_call(node: Node, source_bytes: bytes, depth: int) -> IRNode:
             for c in args_node.children
             if c.type not in ("(", ")", ",")
         )
-    
+
     return CallIR(func_name, args)
 
 
@@ -234,7 +234,7 @@ def _ir_emit_binary(node: Node, source_bytes: bytes, depth: int) -> IRNode:
     op = ""
     left: IRNode | None = None
     right: IRNode | None = None
-    
+
     for child in node.children:
         text = _get_source_text(child, source_bytes).strip()
         if text in _COMPARISON_OPS or text in _ARITHMETIC_OPS or text in _LOGICAL_OPS:
@@ -244,7 +244,7 @@ def _ir_emit_binary(node: Node, source_bytes: bytes, depth: int) -> IRNode:
                 left = _ir_emit(child, source_bytes, depth + 1)
             elif not right:
                 right = _ir_emit(child, source_bytes, depth + 1)
-    
+
     if op and left and right:
         return BinaryOpIR(left, op, right)
     elif left and right:

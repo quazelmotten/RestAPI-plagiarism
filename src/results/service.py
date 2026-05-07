@@ -3,13 +3,13 @@ Results domain service - business logic for similarity results.
 """
 
 import html
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
-from typing import AsyncGenerator
 from uuid import UUID
 
 from shared.models import Assignment, PlagiarismTask, ReviewNote, SimilarityResult
 from shared.models import File as FileModel
-from sqlalchemy import and_, case, func, or_, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from exceptions.exceptions import NotFoundError
@@ -63,11 +63,15 @@ class ResultService:
 
     async def analyze_file_pair(self, file_a_id: str, file_b_id: str, cache) -> ResultItem:
         """Run full plagiarism analysis on-demand for a file pair. Updates DB with matches."""
+        import logging
         from uuid import uuid4
 
         from fastapi.concurrency import run_in_threadpool
 
         from clients.analysis_client import AnalysisClient
+
+        logger = logging.getLogger(__name__)
+        logger.info(f"Starting analyze_file_pair: file_a={file_a_id}, file_b={file_b_id}")
 
         analysis_client = AnalysisClient(cache)
 
@@ -102,11 +106,56 @@ class ResultService:
                 )
             )
         )
+        # Extract embedding similarity and type confidence from matches
+        embedding_sim = None
+        type_conf = {}
+
+        if legacy_matches:
+            # Get embedding similarity (use the highest one found)
+            emb_sims = []
+            type_conf = {
+                "avg_confidence": 0.0,
+                "type_counts": {},
+                "detection_methods": {},
+            }
+
+            total_conf = 0.0
+            count = 0
+
+            for m in legacy_matches:
+                # Extract embedding similarity
+                details = m.get("details", {}) or {}
+                if "embedding_similarity" in details:
+                    emb_sims.append(details["embedding_similarity"])
+
+                # Extract confidence
+                conf = details.get("confidence", 0.5)
+                total_conf += conf
+                count += 1
+
+                # Count types
+                ptype = m.get("plagiarism_type", 0)
+                type_conf["type_counts"][str(ptype)] = type_conf["type_counts"].get(str(ptype), 0) + 1
+
+                # Count detection methods
+                method = details.get("detection_method", "ast")
+                type_conf["detection_methods"][method] = type_conf["detection_methods"].get(method, 0) + 1
+
+            if emb_sims:
+                embedding_sim = sum(emb_sims) / len(emb_sims)
+
+            if count > 0:
+                type_conf["avg_confidence"] = total_conf / count
+
         sr = existing.scalar_one_or_none()
 
         if sr:
             sr.matches = legacy_matches
             sr.ast_similarity = result["similarity_ratio"]
+            if embedding_sim is not None:
+                sr.embedding_similarity = embedding_sim
+            if type_conf:
+                sr.type_confidence = type_conf
         else:
             sr = SimilarityResult(
                 id=uuid4(),
@@ -114,6 +163,8 @@ class ResultService:
                 file_a_id=file_a_id,
                 file_b_id=file_b_id,
                 ast_similarity=result["similarity_ratio"],
+                embedding_similarity=embedding_sim,
+                type_confidence=type_conf if type_conf else None,
                 matches=legacy_matches,
             )
             self.db.add(sr)
@@ -128,6 +179,8 @@ class ResultService:
             file_a={"id": str(file_a_model.id), "filename": file_a_model.filename},
             file_b={"id": str(file_b_model.id), "filename": file_b_model.filename},
             ast_similarity=sr.ast_similarity,
+            embedding_similarity=sr.embedding_similarity,
+            type_confidence=sr.type_confidence,
             matches=legacy_matches,
             created_at=now,
         )
@@ -946,21 +999,22 @@ class ResultService:
         }
 
         # Read file contents to pass to payload builder (avoids re-reading in generator)
-        from reports.generator import build_report_payload as generate_payload
         import aiofiles
+
+        from reports.generator import build_report_payload as generate_payload
 
         file_a_lines = None
         file_b_lines = None
 
         try:
-            async with aiofiles.open(file_a.file_path, "r") as f:
+            async with aiofiles.open(file_a.file_path) as f:
                 content = await f.read()
             file_a_lines = content.splitlines(keepends=False)
         except Exception as e:
             logger.warning(f"Could not read file_a {file_a.file_path}: {e}")
 
         try:
-            async with aiofiles.open(file_b.file_path, "r") as f:
+            async with aiofiles.open(file_b.file_path) as f:
                 content = await f.read()
             file_b_lines = content.splitlines(keepends=False)
         except Exception as e:

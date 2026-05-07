@@ -51,7 +51,11 @@ class TestIndexingService:
         file_info = {"file_hash": "h1", "file_path": "/path/f.py"}
         language = "python"
         mock_fps = [{"hash": 1, "start": (0, 0), "end": (1, 0)}]
-        mock_fingerprint_svc.ensure_fingerprinted.return_value = mock_fps
+        mock_fingerprint_svc.ensure_fingerprinted.return_value = {
+            "fingerprints": mock_fps,
+            "ast_hashes": [],
+            "embedding": None,
+        }
 
         service.index_file(file_info, language)
 
@@ -84,7 +88,10 @@ class TestIndexingService:
         language = "python"
         mock_fps1 = [{"hash": 1}]
         mock_fps2 = [{"hash": 2}]
-        mock_fingerprint_svc.ensure_fingerprinted.side_effect = [mock_fps1, mock_fps2]
+        mock_fingerprint_svc.ensure_fingerprinted.side_effect = [
+            {"fingerprints": mock_fps1, "ast_hashes": [], "embedding": None},
+            {"fingerprints": mock_fps2, "ast_hashes": [], "embedding": None},
+        ]
 
         fingerprint_map = service.ensure_files_indexed(files, language)
 
@@ -96,7 +103,11 @@ class TestIndexingService:
     def test_ensure_files_indexed_returns_fingerprint_map(self, service, mock_fingerprint_svc):
         """Test that fingerprint_map maps file_hash to fingerprints."""
         files = [{"file_hash": "h1", "file_path": "/f1.py"}]
-        mock_fingerprint_svc.ensure_fingerprinted.return_value = [{"hash": 42}]
+        mock_fingerprint_svc.ensure_fingerprinted.return_value = {
+            "fingerprints": [{"hash": 42}],
+            "ast_hashes": [],
+            "embedding": None,
+        }
 
         result = service.ensure_files_indexed(files, "python")
 
@@ -109,7 +120,11 @@ class TestIndexingService:
             {"file_path": "/f2.py"},  # missing hash
             {"file_hash": "h3", "file_path": "/f3.py"},
         ]
-        mock_fingerprint_svc.ensure_fingerprinted.return_value = [{"hash": 1}]
+        mock_fingerprint_svc.ensure_fingerprinted.return_value = {
+            "fingerprints": [{"hash": 1}],
+            "ast_hashes": [],
+            "embedding": None,
+        }
 
         result = service.ensure_files_indexed(files, "python")
 
@@ -131,12 +146,17 @@ class TestIndexingService:
         def side_effect(file_info, lang):
             if file_info["file_hash"] == "h2":
                 raise Exception("fail")
-            return [{"hash": 1}]
+            return {
+                "fingerprints": [{"hash": 1}],
+                "ast_hashes": [],
+                "embedding": None,
+            }
 
         mock_fingerprint_svc.ensure_fingerprinted.side_effect = side_effect
 
         result = service.ensure_files_indexed(files, "python")
 
-        assert len(result) == 2  # h1 and h3 succeed
-        assert "h2" not in result
+        assert len(result) == 2
+        assert "h1" in result and "h3" in result
+        assert mock_fingerprint_svc.ensure_fingerprinted.call_count == 3
         assert "Failed to index file" in caplog.text

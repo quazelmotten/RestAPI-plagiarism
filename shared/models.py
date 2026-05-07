@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     MetaData,
     String,
     Text,
@@ -154,7 +155,9 @@ class SimilarityResult(SharedBase):
         UUID(as_uuid=True), ForeignKey("files.id"), nullable=False, index=True
     )
     ast_similarity: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
+    embedding_similarity: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
     matches: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    type_confidence: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     review_disposition: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by: Mapped[str | None] = mapped_column(UUID(as_uuid=True), nullable=True)
@@ -184,7 +187,9 @@ class ReviewNote(SharedBase):
     __tablename__ = "review_notes"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    file_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("files.id"), nullable=False)
+    file_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("files.id"), nullable=False
+    )
     assignment_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True), ForeignKey("assignments.id"), nullable=False
     )
@@ -193,6 +198,20 @@ class ReviewNote(SharedBase):
 
     # Relationship to file
     file: Mapped["File"] = relationship("File", back_populates="review_notes")
+
+
+class FileEmbedding(SharedBase):
+    """Stores pre-computed embeddings for files using F2LLM-v2-80M."""
+
+    __tablename__ = "file_embeddings"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    file_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    embedding: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    embedding_dim: Mapped[int] = mapped_column(Integer, default=256)
+    model_version: Mapped[str] = mapped_column(String(50), default="F2LLM-v2-80M")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SubjectAccess(SharedBase):

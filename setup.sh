@@ -118,10 +118,27 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
 # =============================================================================
 DEFAULT_PLAGIARISM_THRESHOLD=0.75
 INVERTED_INDEX_MIN_OVERLAP_THRESHOLD=0.15
-SUPPORTED_LANGUAGES=python,java,cpp,c,javascript,typescript,go,rust
+SUPPORTED_LANGUAGES=python,java,cpp,javascript,typescript,go,rust
 MAX_FILE_SIZE=1048576
 MAX_UPLOAD_REQUEST_SIZE=52428800
 MAX_FILES_PER_BATCH=100
+
+# =============================================================================
+# EMBEDDING MODEL CONFIGURATION
+# =============================================================================
+EMBEDDING_MODEL=codefuse-ai/F2LLM-v2-80M
+EMBEDDING_DEVICE=cpu
+EMBEDDING_BATCH_SIZE=32
+EMBEDDING_MAX_LENGTH=512
+EMBEDDING_QUANTIZATION=float16
+
+# =============================================================================
+# API AUTHENTICATION
+# =============================================================================
+# API Keys for programmatic access (auto-generated)
+API_KEY_1=$(openssl rand -hex 24)
+API_KEY_2=$(openssl rand -hex 24)
+API_KEY_3=$(openssl rand -hex 24)
 
 # =============================================================================
 # STORAGE CONFIGURATION

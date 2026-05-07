@@ -3,7 +3,6 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from config import settings
 from exceptions.exceptions import (
     ForbiddenError,
     NoAccessError,
@@ -20,13 +19,10 @@ def add_exception_handler(app: FastAPI) -> None:
         logger.error(
             "Unhandled exception on %s %s: %s", request.method, request.url.path, err, exc_info=True
         )
-        if settings.is_development:
-            detail = f"{type(err).__name__}: {err}"
-        else:
-            detail = "Internal server error"
+        # Never expose internal error details to client
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "error_details": detail},
+            content={"status": "error", "error_details": "Internal server error"},
         )
 
     @app.exception_handler(NotFoundError)
