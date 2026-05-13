@@ -14,9 +14,6 @@ from .fingerprinting import (
     Winnower,
     compute_and_winnow,
     compute_fingerprints,
-    compute_kgram_hashes,
-    extract_body_signatures_from_tree,
-    get_language,
     index_fingerprints,
     parse_file_once,
     parse_string_once,
@@ -26,6 +23,7 @@ from .fingerprinting import (
     tokenize_with_tree_sitter,
     winnow_fingerprints,
 )
+from .fingerprinting.languages import get_language
 
 __all__ = [
     "BUILTIN_NAMES",
@@ -36,7 +34,7 @@ __all__ = [
     "compute_and_winnow",
     "compute_fingerprints",
     "compute_kgram_hashes",
-    "extract_body_signatures_from_tree",
+
     "get_language",
     "index_fingerprints",
     "parse_file_once",

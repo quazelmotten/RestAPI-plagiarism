@@ -1,7 +1,7 @@
-"""Parser module: unified interface for tree-sitter parsing and language support."""
+"""Backward-compatibility shim — re-exports from fingerprinting.parser."""
 
-from .parser import CodeParser, parse_file, parse_string, get_language, detect_language
-from .languages import (
+from ..fingerprinting.parser import parse_string_once as parse_string
+from ..fingerprinting.languages import (
     get_language_profile,
     get_supported_languages,
     register_language_profile,
@@ -16,13 +16,12 @@ from .languages import (
     GoProfile,
     RustProfile,
 )
+from ..fingerprinting.languages import get_language, detect_language_from_extension
 
 __all__ = [
-    "CodeParser",
-    "parse_file",
     "parse_string",
     "get_language",
-    "detect_language",
+    "detect_language_from_extension",
     "get_language_profile",
     "get_supported_languages",
     "register_language_profile",

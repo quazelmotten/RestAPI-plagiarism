@@ -7,10 +7,29 @@ from .semantic_matcher import SemanticMatcher
 from .merger import Merger
 from .models import AnalysisResult, SimilarityMetrics, Match, PlagiarismType
 from .detection.line_helpers import _make_shadow_lines, _line_hash, _make_exact_lines
-from .canonicalizer import canonicalize_type4
+from .canonicalizer import canonicalize_type4 as _canonicalize_type4_base
+from .normalizer import canonicalize_type4_v2
 from .fingerprint_matcher import FingerprintMatcher
 from collections import Counter
-import itertools
+
+
+def _lcs_len(seq1, seq2):
+    n, m = len(seq1), len(seq2)
+    if n == 0 or m == 0:
+        return 0
+    if n > m:
+        seq1, seq2 = seq2, seq1
+        n, m = m, n
+    prev = [0] * (n + 1)
+    for item in seq2:
+        curr = [0] * (n + 1)
+        for i in range(n):
+            if item == seq1[i]:
+                curr[i + 1] = prev[i] + 1
+            else:
+                curr[i + 1] = max(prev[i + 1], curr[i])
+        prev = curr
+    return prev[n]
 
 
 class PlagiarismDetector:
@@ -24,12 +43,18 @@ class PlagiarismDetector:
         min_function_lines: int = 3,
         merge_gap: int = 1,
         semantic_line_min_match: int = 1,
+        jaccard_t3: float = 0.55,
+        lcs_t3: float = 0.95,
+        shadow_jaccard_gate: float = 0.85,
     ):
         self.structural = StructuralMatcher(min_match_lines=min_match_lines)
         self.semantic = SemanticMatcher(min_function_lines=min_function_lines)
         self.merger = Merger(merge_gap=merge_gap)
         self.semantic_line_min_match = semantic_line_min_match
         self.fingerprint_matcher = FingerprintMatcher()
+        self.jaccard_t3 = jaccard_t3
+        self.lcs_t3 = lcs_t3
+        self.shadow_jaccard_gate = shadow_jaccard_gate
 
     def detect(
         self,
@@ -68,103 +93,99 @@ class PlagiarismDetector:
         # 4. Merge results
         all_matches = self.merger.merge(struct_matches, sem_matches)
 
+        # Precompute shared data once (exact lines, shadow lines) to avoid
+        # repeated tree-sitter parses across multiple detection steps.
+        exact_a = _make_exact_lines(source_a, lang)
+        exact_b = _make_exact_lines(source_b, lang)
+        nonempty_exact_a = [ln for ln in exact_a if ln.strip()]
+        nonempty_exact_b = [ln for ln in exact_b if ln.strip()]
+        shadow_a = _make_shadow_lines(source_a, lang)
+        shadow_b = _make_shadow_lines(source_b, lang)
+        nonempty_shadow_a = [ln for ln in shadow_a if ln != 0]
+        nonempty_shadow_b = [ln for ln in shadow_b if ln != 0]
+        normalized_equal = nonempty_exact_a == nonempty_exact_b
+
         # 5. Add Type 4 detection via semantic line matching (fallback from baseline)
-        type4_matches = self._semantic_line_match(source_a, source_b, lang, all_matches)
+        type4_matches = self._semantic_line_match(source_a, source_b, lang, all_matches, shadow_a, shadow_b)
         all_matches.extend(type4_matches)
 
-        # Precompute normalized equality for later steps
-        exact_norm_a = [ln for ln in _make_exact_lines(source_a, lang) if ln.strip()]
-        exact_norm_b = [ln for ln in _make_exact_lines(source_b, lang) if ln.strip()]
-        normalized_equal = exact_norm_a == exact_norm_b
-
-        # 6. Full-file semantic equivalence fallback (if files not exact)
-        if not normalized_equal:  # skip if already exact
-                # Skip empty sources
-                if not source_a.strip() or not source_b.strip():
-                    pass
-                else:
-                    try:
-                        can_a = canonicalize_type4(source_a, lang_code=lang)
-                        can_b = canonicalize_type4(source_b, lang_code=lang)
-                        if can_a.strip() == can_b.strip():
-                            total_lines_a = len(source_a.splitlines())
-                            total_lines_b = len(source_b.splitlines())
-                            if total_lines_a == 0:
-                                total_lines_a = 1
-                            if total_lines_b == 0:
-                                total_lines_b = 1
-                            full_match = Match(
-                                file1={"start_line": 0, "start_col": 0, "end_line": total_lines_a - 1, "end_col": 0},
-                                file2={"start_line": 0, "start_col": 0, "end_line": total_lines_b - 1, "end_col": 0},
-                                kgram_count=total_lines_a,
-                                plagiarism_type=PlagiarismType.SEMANTIC,
-                                similarity=1.0,
-                                details=None,
-                                description="Full-file semantic equivalence",
-                            )
-                            all_matches.append(full_match)
-                    except Exception:
-                        pass  # If canonicalization fails, skip fallback
-
-        # 7. Whole-file reordering detection (Type 3) if no REORDERED match yet
-        if not any(m.plagiarism_type == PlagiarismType.REORDERED for m in all_matches):
-            # Compute raw line multiset Jaccard
-            lines_a_list = source_a.splitlines()
-            lines_b_list = source_b.splitlines()
-            cnt_a = Counter(lines_a_list)
-            cnt_b = Counter(lines_b_list)
+        # 6. Full-file semantic equivalence check (always compute canonical forms,
+        # used both here for match creation and in step 9 for signal-based classification).
+        def _shadow_jaccard():
+            cnt_a = Counter(nonempty_shadow_a)
+            cnt_b = Counter(nonempty_shadow_b)
             inter = sum(min(cnt_a.get(l, 0), cnt_b.get(l, 0)) for l in cnt_a)
             union = sum(max(cnt_a.get(l, 0), cnt_b.get(l, 0)) for l in set(cnt_a) | set(cnt_b))
-            raw_jaccard = inter / union if union else 0.0
+            return inter / union if union else 0.0
 
-            # Compute LCS ratio
-            def _lcs_len(seq1, seq2):
-                n, m = len(seq1), len(seq2)
-                if n == 0 or m == 0:
-                    return 0
-                if n > m:
-                    seq1, seq2 = seq2, seq1
-                    n, m = m, n
-                prev = [0] * (n + 1)
-                for item in seq2:
-                    curr = [0] * (n + 1)
-                    for i in range(n):
-                        if item == seq1[i]:
-                            curr[i + 1] = prev[i] + 1
-                        else:
-                            curr[i + 1] = max(prev[i + 1], curr[i])
-                    prev = curr
-                return prev[n]
+        _canonical_equiv = False
+        _canonical_a = _canonical_b = None
+        if source_a.strip() and source_b.strip():
+            try:
+                _canonical_a = canonicalize_type4_v2(source_a, lang_code=lang)
+                _canonical_b = canonicalize_type4_v2(source_b, lang_code=lang)
+                _canonical_equiv = _canonical_a.strip() == _canonical_b.strip() and bool(_canonical_a.strip())
+            except Exception:
+                pass
 
-            lcs = _lcs_len(lines_a_list, lines_b_list)
-            min_len = min(len(lines_a_list), len(lines_b_list))
-            lcs_ratio = lcs / min_len if min_len > 0 else 0.0
+        shadow_jaccard_val = _shadow_jaccard() if nonempty_shadow_a and nonempty_shadow_b else 0.0
+        shadow_similar = shadow_jaccard_val >= self.shadow_jaccard_gate
+        if _canonical_equiv and not normalized_equal and not shadow_similar:
+            total_lines_a = len(source_a.splitlines())
+            total_lines_b = len(source_b.splitlines())
+            if total_lines_a == 0:
+                total_lines_a = 1
+            if total_lines_b == 0:
+                total_lines_b = 1
+            full_match = Match(
+                file1={"start_line": 0, "start_col": 0, "end_line": total_lines_a - 1, "end_col": 0},
+                file2={"start_line": 0, "start_col": 0, "end_line": total_lines_b - 1, "end_col": 0},
+                kgram_count=total_lines_a,
+                plagiarism_type=PlagiarismType.SEMANTIC,
+                similarity=1.0,
+                details=None,
+                description="Full-file semantic equivalence",
+            )
+            all_matches.append(full_match)
 
-            if raw_jaccard >= 0.75 and lcs_ratio < 0.98:
-                total_lines_a = len(lines_a_list)
-                total_lines_b = len(lines_b_list)
+        # 7. Whole-file reordering detection (Type 3) — always run
+        # Uses precomputed exact lines for Jaccard and shadow lines for LCS.
+        norm_jaccard = 0.0
+        if nonempty_exact_a and nonempty_exact_b:
+            cnt_a = Counter(nonempty_exact_a)
+            cnt_b = Counter(nonempty_exact_b)
+            inter = sum(min(cnt_a.get(l, 0), cnt_b.get(l, 0)) for l in cnt_a)
+            union = sum(max(cnt_a.get(l, 0), cnt_b.get(l, 0)) for l in set(cnt_a) | set(cnt_b))
+            norm_jaccard = inter / union if union else 0.0
+
+        lcs_ratio = 1.0
+        if norm_jaccard >= self.jaccard_t3:  # only compute LCS if content is plausibly similar
+            nonempty_sa = nonempty_shadow_a
+            nonempty_sb = nonempty_shadow_b
+            # Sample to keep LCS fast (max 200 lines each)
+            step = max(1, len(nonempty_sa) // 200, len(nonempty_sb) // 200)
+            if step > 1:
+                nonempty_sa = nonempty_sa[::step]
+                nonempty_sb = nonempty_sb[::step]
+            lcs = _lcs_len(nonempty_sa, nonempty_sb)
+            min_len = min(len(nonempty_sa), len(nonempty_sb))
+            lcs_ratio = lcs / min_len if min_len > 0 else 1.0
+
+            if norm_jaccard >= self.jaccard_t3 and lcs_ratio < self.lcs_t3:
+                total_lines_a = len(source_a.splitlines())
+                total_lines_b = len(source_b.splitlines())
                 if total_lines_a == 0:
                     total_lines_a = 1
                 if total_lines_b == 0:
                     total_lines_b = 1
                 reorder_match = Match(
-                    file1={
-                        "start_line": 0,
-                        "start_col": 0,
-                        "end_line": total_lines_a - 1,
-                        "end_col": 0,
-                    },
-                    file2={
-                        "start_line": 0,
-                        "start_col": 0,
-                        "end_line": total_lines_b - 1,
-                        "end_col": 0,
-                    },
+                    file1={"start_line": 0, "start_col": 0, "end_line": total_lines_a - 1, "end_col": 0},
+                    file2={"start_line": 0, "start_col": 0, "end_line": total_lines_b - 1, "end_col": 0},
                     kgram_count=total_lines_a,
                     plagiarism_type=PlagiarismType.REORDERED,
                     similarity=1.0,
                     details=None,
-                    description="Whole-file reordering detected",
+                    description="Whole-file reordering detected (normalized lines)",
                 )
                 all_matches.append(reorder_match)
 
@@ -174,9 +195,8 @@ class PlagiarismDetector:
             all_matches.extend(fp_matches)
 
         # 8. Ensure EXACT match for files identical after normalizing comments/whitespace (handles Type 1)
-        exact_norm_a = [ln for ln in _make_exact_lines(source_a, lang) if ln.strip()]
-        exact_norm_b = [ln for ln in _make_exact_lines(source_b, lang) if ln.strip()]
-        normalized_equal = exact_norm_a == exact_norm_b
+        # Uses precomputed exact lines from step 4
+        normalized_equal = nonempty_exact_a == nonempty_exact_b
         if normalized_equal:
             total_lines_a = len(source_a.splitlines())
             total_lines_b = len(source_b.splitlines())
@@ -242,7 +262,7 @@ class PlagiarismDetector:
             merged = []
             cur_start, cur_end = intervals[0]
             for s, e in intervals[1:]:
-                if s <= cur_end + 1:  # overlapping or adjacent
+                if s <= cur_end + 1:
                     cur_end = max(cur_end, e)
                 else:
                     merged.append((cur_start, cur_end))
@@ -260,7 +280,7 @@ class PlagiarismDetector:
         type_coverage = {}
         for t in set(m.plagiarism_type for m in all_matches):
             if t == PlagiarismType.EXACT and not whole_exact:
-                continue  # ignore partial EXACT matches
+                continue
             matches_t = [m for m in all_matches if m.plagiarism_type == t]
             type_coverage[t] = _union_coverage(matches_t)
 
@@ -272,6 +292,16 @@ class PlagiarismDetector:
                 PlagiarismType.RENAMED: 1,
             }
             best_type = max(type_coverage.keys(), key=lambda t: (type_coverage[t], priority[t]))
+
+            # Signal-based guard: demote SEMANTIC when files are Type-2-level similar
+            # (line-level semantic matches can produce false positive Type 4 for
+            #  pairs that are actually Type 2 but happen to have canonical equivalence).
+            if best_type == PlagiarismType.SEMANTIC and not raw_equal and shadow_jaccard_val >= self.shadow_jaccard_gate:
+                for t in (PlagiarismType.RENAMED, PlagiarismType.REORDERED):
+                    if t in type_coverage:
+                        best_type = t
+                        break
+
             all_matches = [m for m in all_matches if m.plagiarism_type == best_type]
 
         # Compute overall similarity and coverage metrics
@@ -323,7 +353,8 @@ class PlagiarismDetector:
         return self.detect(source_a, source_b, lang, file_a_path=path_a, file_b_path=path_b)
 
     def _semantic_line_match(
-        self, source_a: str, source_b: str, lang: str, existing_matches: List[Match]
+        self, source_a: str, source_b: str, lang: str, existing_matches: List[Match],
+        shadow_a: Optional[List[int]] = None, shadow_b: Optional[List[int]] = None,
     ) -> List[Match]:
         """Detect Type 4 (semantic) matches at line level using baseline's implementation."""
         from .detection.semantic_line_matcher import _semantic_line_matches
@@ -331,8 +362,10 @@ class PlagiarismDetector:
 
         lines_a = source_a.splitlines()
         lines_b = source_b.splitlines()
-        shadow_a = _make_shadow_lines(source_a, lang)
-        shadow_b = _make_shadow_lines(source_b, lang)
+        if shadow_a is None:
+            shadow_a = _make_shadow_lines(source_a, lang)
+        if shadow_b is None:
+            shadow_b = _make_shadow_lines(source_b, lang)
 
         # Compute covered lines from existing matches
         covered_a = set()

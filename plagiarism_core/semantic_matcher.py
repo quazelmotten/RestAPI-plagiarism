@@ -5,7 +5,7 @@ from collections import Counter
 from typing import List
 
 from .models import Match, PlagiarismType
-from .parser import parse_string
+from .fingerprinting.parser import parse_string_once as parse_string
 from .detection.ast_helpers import _extract_functions
 from .detection.line_helpers import _make_shadow_lines, _line_hash
 

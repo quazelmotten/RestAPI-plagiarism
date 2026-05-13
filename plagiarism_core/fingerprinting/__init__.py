@@ -3,7 +3,6 @@
 from .core import (
     compute_and_winnow,
     compute_fingerprints,
-    extract_body_signatures_from_tree,
     index_fingerprints,
     tokenize_and_hash_ast,
     tokenize_with_tree_sitter,
@@ -60,5 +59,5 @@ __all__ = [
     "Fingerprint",
     "Winnower",
     "compute_kgram_hashes",
-    "extract_body_signatures_from_tree",
+
 ]
