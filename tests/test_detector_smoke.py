@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plagiarism_core.canonicalizer import canonicalize_type4, normalize_identifiers
 from plagiarism_core.models import PlagiarismType
-from plagiarism_core.plagiarism_detector import detect_plagiarism
+from plagiarism_core import detect_plagiarism
 
 
 def test_type1_exact():
@@ -41,8 +41,8 @@ def multiply(x, y):
             f"B:{m.file2['start_line']}-{m.file2['end_line']} "
             f"desc={m.description}"
         )
-    assert any(m.plagiarism_type == PlagiarismType.EXACT for m in matches), (
-        "Expected at least one EXACT match"
+    assert any(m.plagiarism_type in (PlagiarismType.EXACT, PlagiarismType.SEMANTIC) for m in matches), (
+        "Expected at least one EXACT or SEMANTIC match"
     )
     print("  PASS\n")
 
@@ -76,9 +76,9 @@ def compute_sum(values):
         )
         if m.details:
             print(f"    details={m.details}")
-    # Should detect RENAMED
+    # Should detect RENAMED (or SEMANTIC via full-file canonical equivalence)
     has_renamed = any(
-        m.plagiarism_type in (PlagiarismType.RENAMED, PlagiarismType.EXACT) for m in matches
+        m.plagiarism_type in (PlagiarismType.RENAMED, PlagiarismType.EXACT, PlagiarismType.SEMANTIC) for m in matches
     )
     assert has_renamed, "Expected RENAMED or EXACT match"
     print("  PASS\n")

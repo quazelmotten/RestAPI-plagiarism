@@ -3,7 +3,6 @@
 __all__ = [
     "AnalysisService",
     "CandidateService",
-    "EmbeddingService",
     "FingerprintService",
     "IndexingService",
     "ResultService",

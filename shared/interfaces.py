@@ -20,14 +20,11 @@ class FingerprintCache(Protocol):
         file_hash: str,
         fingerprints: list[dict[str, Any]],
         ast_hashes: list[int],
-        body_signatures: list[tuple[int, int, str]] | None = None,
     ) -> bool: ...
 
     def get_fingerprints(self, file_hash: str) -> list[dict[str, Any]] | None: ...
 
     def get_ast_hashes(self, file_hash: str) -> list[int] | None: ...
-
-    def get_body_signatures(self, file_hash: str) -> list[tuple[int, int, str]] | None: ...
 
     def has_fingerprints(self, file_hash: str) -> bool: ...
 
@@ -38,7 +35,7 @@ class FingerprintCache(Protocol):
 
     def batch_cache(
         self,
-        items: list[tuple[str, list[dict[str, Any]], list[int]]] | list[tuple[str, list[dict[str, Any]], list[int], list[tuple[int, int, str]]]],
+        items: list[tuple[str, list[dict[str, Any]], list[int]]],
     ) -> None: ...
 
 

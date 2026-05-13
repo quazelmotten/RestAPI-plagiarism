@@ -1,4 +1,5 @@
 import argparse
+import keyword
 import random
 import re
 from pathlib import Path
@@ -172,12 +173,19 @@ class CloneGenerator:
 
     def _extract_identifiers(self, node, source_code: str) -> list[tuple[str, tuple[int, int]]]:
         identifiers = []
+        # Python keywords and builtin functions/types that should never be renamed
+        import builtins
+        SKIP_NAMES = set(dir(builtins)) | set(keyword.kwlist)
 
         def visit(n):
             if n.type == "identifier":
                 text = source_code[n.start_byte : n.end_byte]
-                if not text.startswith("__") and not text.endswith("__"):
-                    identifiers.append((text, (n.start_byte, n.end_byte)))
+                # Skip dunder names, keywords, and builtins
+                if text.startswith("__") and text.endswith("__"):
+                    return
+                if text in SKIP_NAMES:
+                    return
+                identifiers.append((text, (n.start_byte, n.end_byte)))
             for child in n.children:
                 visit(child)
 

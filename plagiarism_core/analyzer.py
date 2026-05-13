@@ -9,8 +9,6 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-import numpy as np
-
 from .ast_hash import ast_similarity as compute_ast_similarity
 from .ast_hash import extract_ast_hashes, hash_ast_subtrees
 from .fingerprinting.parser import parse_string_once
@@ -18,7 +16,7 @@ from .models import (
     AnalysisResult,
     SimilarityMetrics,
 )
-from .plagiarism_detector import detect_plagiarism
+from .detector import PlagiarismDetector
 
 logger = logging.getLogger(__name__)
 
@@ -79,14 +77,11 @@ class Analyzer:
 
         ast_sim = compute_ast_similarity(ast1, ast2)
 
-        # Multi-level matching using the full detector
-        # Use min_match_lines=1 to catch single-line identical fragments
-        matches = detect_plagiarism(
-            source1, source2, language,
-            min_match_lines=1,
-            embeddings_a=embeddings1,
-            embeddings_b=embeddings2,
-        )
+        # Multi-level matching using the new detector
+        # Use min_match_lines=2 to catch identical fragments (default was 1 but we use 2 for performance)
+        detector = PlagiarismDetector(min_match_lines=2, min_function_lines=2)
+        result = detector.detect(source1, source2, lang=language)
+        matches = result.matches
 
         # Compute metrics (count ALL lines to be consistent with line indices in matches)
         total_lines_a = len(lines1)
@@ -160,22 +155,15 @@ class Analyzer:
         file2_hash: str,
         get_ast_hashes: Callable[[str], list[int] | None],
         language: str = "python",
-        get_fingerprints: Callable[[str], list[dict[str, Any]] | None] | None = None,
-        cache_fingerprints: Callable[[str, list[dict[str, Any]], list[int]], None] | None = None,
-        get_embeddings: Callable[[str], np.ndarray | None] | None = None,
-        embeddings1: dict | None = None,  # func_name -> embedding dict
-        embeddings2: dict | None = None,  # func_name -> embedding dict
     ) -> tuple[float, list[dict[str, Any]], dict[str, Any]]:
         """
-        Analyze with caching support (AST hashes and embeddings).
+        Analyze with caching support (AST hashes).
 
         Args:
             file1_path, file2_path: File paths
             file1_hash, file2_hash: File content hashes
             get_ast_hashes: Function to get AST hashes from cache
             language: Programming language
-            get_embeddings: Optional function to get embeddings from cache (file-level, deprecated)
-            embeddings1, embeddings2: Optional dicts mapping function names to embeddings (function-level)
 
         Returns:
             Tuple of (ast_similarity, matches_data, metrics)
@@ -200,23 +188,10 @@ class Analyzer:
 
         ast_sim = compute_ast_similarity(ast1, ast2)
 
-        # Use function-level embeddings if provided, otherwise fall back to get_embeddings callback
-        if embeddings1 is None and get_embeddings:
-            try:
-                # Deprecated: get_embeddings returns file-level embedding
-                logger.warning("Using deprecated file-level embeddings. Use embeddings1/embeddings2 instead.")
-                embeddings1 = get_embeddings(file1_hash)
-                embeddings2 = get_embeddings(file2_hash)
-            except Exception as e:
-                logger.warning(f"Failed to get embeddings: {e}")
-
-        # Multi-level matching with embeddings (use min_match_lines=1 to catch single-line fragments)
-        matches = detect_plagiarism(
-            source1, source2, language,
-            min_match_lines=1,
-            embeddings_a=embeddings1,
-            embeddings_b=embeddings2,
-        )
+        # Multi-level matching with new detector
+        detector = PlagiarismDetector(min_match_lines=2, min_function_lines=2)
+        result = detector.detect(source1, source2, lang=language)
+        matches = result.matches
 
         # Compute metrics (count ALL lines to be consistent with line indices in matches)
         total_lines_a = len(lines1)

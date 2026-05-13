@@ -10,7 +10,7 @@ Each scenario has:
 """
 
 from plagiarism_core.models import PlagiarismType
-from plagiarism_core.plagiarism_detector import detect_plagiarism
+from plagiarism_core import detect_plagiarism
 
 # ─── TYPE 1: EXACT COPY ────────────────────────────────────────────────
 

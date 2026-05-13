@@ -55,9 +55,7 @@ class TestAnalysisService:
             call_kwargs = analyzer.analyze_cached.call_args[1]
             assert call_kwargs["file1_path"] == "/f1.py"
             assert call_kwargs["file2_path"] == "/f2.py"
-            assert call_kwargs["get_fingerprints"] == service._get_fingerprints
             assert call_kwargs["get_ast_hashes"] == service._get_ast_hashes
-            assert call_kwargs["cache_fingerprints"] == service._cache_fingerprints
             assert call_kwargs["language"] == "python"
 
     def test_analyze_pair_with_executor_uses_timeout(self, service_async):
@@ -124,18 +122,11 @@ class TestAnalysisService:
             assert result["fingerprint_count"] == 1
 
     def test_cache_helpers_get_and_cache(self, service_sync, mock_cache):
-        """Test cache helper methods use batch_get/batch_cache."""
-        mock_cache.batch_get.return_value = {"k1": {"fingerprints": [{"hash": 1}]}}
-        fps = service_sync._get_fingerprints("k1")
-        assert fps == [{"hash": 1}]
-        mock_cache.batch_get.assert_called_with(["k1"])
-
+        """Test cache helper methods use batch_get."""
         mock_cache.batch_get.return_value = {"k1": {"ast_hashes": [100]}}
         ast = service_sync._get_ast_hashes("k1")
         assert ast == [100]
-
-        service_sync._cache_fingerprints("k1", [{"hash": 1}], [100])
-        mock_cache.batch_cache.assert_called_with([("k1", [{"hash": 1}], [100])])
+        mock_cache.batch_get.assert_called_with(["k1"])
 
     def test_shutdown_does_not_shut_down_shared_executor(self):
         """Test shutdown is a no-op since executor is managed externally."""

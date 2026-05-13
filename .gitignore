@@ -81,3 +81,11 @@ tests/tmp_synthetic
 test*.json
 scripts/profiles
 .benchmarks/
+
+# accuracy measurements may 13th 2026
+dolos_subset/
+test_small/
+type_combined/
+benchmarks/
+tests/plagiarism/test_*
+*.bak

@@ -43,7 +43,6 @@ class TestFingerprintService:
 
         assert result["fingerprints"] == cached_fps
         assert result["ast_hashes"] == cached_ast_hashes
-        assert result["embedding"] is None
         mock_cache.batch_get.assert_called_once_with([file_hash])
 
     def test_ensure_fingerprinted_generates_when_missing(self, service, mock_cache):
@@ -67,13 +66,10 @@ class TestFingerprintService:
             file_info = {"file_hash": file_hash, "file_path": file_path}
             result = service.ensure_fingerprinted(file_info, "python")
 
-            # The result should be a dict with fingerprints, ast_hashes, and embedding
+            # The result should be a dict with fingerprints and ast_hashes
             assert "fingerprints" in result
             assert "ast_hashes" in result
-            assert "embedding" in result
             assert result["fingerprints"] == fps
-            assert result["ast_hashes"] == ast_hashes
-            assert result["embedding"] is None
             mock_parse.assert_called_once_with(file_path, "python")
             mock_tokenize.assert_called_once_with(
                 file_path, "python", tree=mock_parse.return_value[0]
@@ -105,7 +101,6 @@ class TestFingerprintService:
         result = service.ensure_fingerprinted(file_info, "python")
         assert result["fingerprints"] == []
         assert result["ast_hashes"] == []
-        assert result["embedding"] is None
 
         mock_cache.batch_get.assert_called_with([file_hash])
 

@@ -10,8 +10,6 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from plagiarism_core.analyzer import Analyzer as CoreAnalyzer
 from shared.interfaces import FingerprintCache
 
-from .embedding_service import EmbeddingService
-
 logger = logging.getLogger(__name__)
 
 
@@ -19,15 +17,13 @@ class AnalysisService:
     """
     Service for plagiarism analysis using the core library.
 
-    Provides both cached and full analysis with optional timeout.
-    Integrates embedding-based similarity (F2LLM-v2-80M) when available.
+    Provides cached and full analysis with optional timeout.
     """
 
     def __init__(
         self,
         cache: FingerprintCache,
         analysis_executor: ThreadPoolExecutor | None = None,
-        embedding_service: EmbeddingService | None = None,
     ):
         """
         Initialize analysis service.
@@ -35,11 +31,9 @@ class AnalysisService:
         Args:
             cache: Fingerprint cache implementation
             analysis_executor: Optional thread pool for timeouts (None = sync)
-            embedding_service: Optional service for generating/retrieving embeddings
         """
         self.cache = cache
         self.analysis_executor = analysis_executor
-        self.embedding_svc = embedding_service
         self.analyzer = CoreAnalyzer()
 
     def analyze_pair(
@@ -66,27 +60,13 @@ class AnalysisService:
 
         # Define the analysis function
         def do_analyze():
-            # Get function embeddings if embedding service is available
-            embeddings1 = None
-            embeddings2 = None
-            if self.embedding_svc:
-                try:
-                    embeddings1 = self.embedding_svc.generate_function_embeddings(file1_path, language)
-                    embeddings2 = self.embedding_svc.generate_function_embeddings(file2_path, language)
-                except Exception as e:
-                    logger.warning(f"Failed to generate function embeddings: {e}")
-
             return self.analyzer.analyze_cached(
                 file1_path=file1_path,
                 file2_path=file2_path,
                 file1_hash=file1_hash,
                 file2_hash=file2_hash,
-                get_fingerprints=self._get_fingerprints,
                 get_ast_hashes=self._get_ast_hashes,
-                cache_fingerprints=self._cache_fingerprints,
                 language=language,
-                embeddings1=embeddings1,
-                embeddings2=embeddings2,
             )
 
         # Run with or without executor
@@ -188,22 +168,10 @@ class AnalysisService:
         except Exception:
             raise
 
-    # Cache helper methods
-    def _get_fingerprints(self, file_hash: str):
-        """Get fingerprints from cache."""
-        data = self.cache.batch_get([file_hash])
-        return data.get(file_hash, {}).get("fingerprints")
-
     def _get_ast_hashes(self, file_hash: str):
         """Get AST hashes from cache."""
         data = self.cache.batch_get([file_hash])
         return data.get(file_hash, {}).get("ast_hashes")
-
-    def _cache_fingerprints(
-        self, file_hash: str, fingerprints: list[dict], ast_hashes: list[int]
-    ) -> None:
-        """Cache fingerprints and AST hashes."""
-        self.cache.batch_cache([(file_hash, fingerprints, ast_hashes)])
 
     def shutdown(self):
         """No-op: executor is managed externally by shutdown_dependencies()."""

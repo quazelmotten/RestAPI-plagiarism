@@ -79,12 +79,14 @@ class TestServiceIntegration:
         # First call generates
         fps1 = fpsvc.ensure_fingerprinted(file_info, "python")
         assert fps1 is not None
-        assert len(fps1) > 0
+        assert "fingerprints" in fps1
+        assert "ast_hashes" in fps1
+        assert len(fps1["fingerprints"]) > 0
 
         # Verify cache contains fingerprints
         cached = cache.get_fingerprints("test_hash_123")
         assert cached is not None
-        assert len(cached) == len(fps1)
+        assert len(cached) == len(fps1["fingerprints"])
 
         # Second call from cache returns same
         fps2 = fpsvc.ensure_fingerprinted(file_info, "python")

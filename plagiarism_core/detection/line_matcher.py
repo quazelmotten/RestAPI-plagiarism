@@ -3,7 +3,7 @@
 import re
 
 from ..models import Match, PlagiarismType
-from .line_helpers import _line_hash
+from .line_helpers import _line_hash, _strip_comments
 
 
 def _is_comment(line: str, lang_code: str = "python") -> bool:
@@ -39,9 +39,15 @@ def _line_level_matches(
         if s and not _is_comment(s, lang_code):
             shadow_b_index.setdefault(_line_hash(s), []).append(j)
 
-    # Build hash of exact lines for A
-    exact_a_hashes = [_line_hash(ln) for ln in lines_a]
-    exact_b_hashes = [_line_hash(ln) for ln in lines_b]
+    # Build hash of exact lines for A and B after comment/whitespace normalization
+    exact_a_hashes = [
+        _line_hash(re.sub(r"\s+", " ", _strip_comments(ln, lang_code)).strip())
+        for ln in lines_a
+    ]
+    exact_b_hashes = [
+        _line_hash(re.sub(r"\s+", " ", _strip_comments(ln, lang_code)).strip())
+        for ln in lines_b
+    ]
 
     # Find all A→B shadow-matching line pairs (excluding comments)
     pair_map: dict[int, list[int]] = {}

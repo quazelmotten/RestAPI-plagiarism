@@ -29,10 +29,3 @@ pytest-benchmark
 
 # Profiling
 py-spy==0.3.14
-scipy
-
-# DEPRECATED: Embeddings dependencies - no longer needed for v2.0 detector
-# Keeping for backward compatibility with old API (plagiarism_detector.py)
-# torch>=2.0.0
-# transformers>=4.36.0
-# sentencepiece>=0.1.99
