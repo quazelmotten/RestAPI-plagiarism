@@ -7,6 +7,7 @@ from .semantic_matcher import SemanticMatcher
 from .merger import Merger
 from .models import AnalysisResult, SimilarityMetrics, Match, PlagiarismType
 from .detection.line_helpers import _make_shadow_lines, _line_hash, _make_exact_lines
+from .detection.ast_reordering import detect_ast_reordering
 from .canonicalizer import canonicalize_type4 as _canonicalize_type4_base
 from .normalizer import canonicalize_type4_v2
 from .fingerprint_matcher import FingerprintMatcher
@@ -43,9 +44,9 @@ class PlagiarismDetector:
         min_function_lines: int = 3,
         merge_gap: int = 1,
         semantic_line_min_match: int = 1,
-        jaccard_t3: float = 0.55,
-        lcs_t3: float = 0.95,
-        shadow_jaccard_gate: float = 0.85,
+        jaccard_t3: float = 0.50,
+        lcs_t3: float = 0.98,
+        shadow_jaccard_gate: float = 0.80,
     ):
         self.structural = StructuralMatcher(min_match_lines=min_match_lines)
         self.semantic = SemanticMatcher(min_function_lines=min_function_lines)
@@ -118,9 +119,11 @@ class PlagiarismDetector:
             union = sum(max(cnt_a.get(l, 0), cnt_b.get(l, 0)) for l in set(cnt_a) | set(cnt_b))
             return inter / union if union else 0.0
 
+        shadow_jaccard_val = _shadow_jaccard() if nonempty_shadow_a and nonempty_shadow_b else 0.0
+        shadow_similar = shadow_jaccard_val >= self.shadow_jaccard_gate
+
         _canonical_equiv = False
-        _canonical_a = _canonical_b = None
-        if source_a.strip() and source_b.strip():
+        if not normalized_equal and not shadow_similar and source_a.strip() and source_b.strip():
             try:
                 _canonical_a = canonicalize_type4_v2(source_a, lang_code=lang)
                 _canonical_b = canonicalize_type4_v2(source_b, lang_code=lang)
@@ -128,9 +131,7 @@ class PlagiarismDetector:
             except Exception:
                 pass
 
-        shadow_jaccard_val = _shadow_jaccard() if nonempty_shadow_a and nonempty_shadow_b else 0.0
-        shadow_similar = shadow_jaccard_val >= self.shadow_jaccard_gate
-        if _canonical_equiv and not normalized_equal and not shadow_similar:
+        if _canonical_equiv and not normalized_equal:
             total_lines_a = len(source_a.splitlines())
             total_lines_b = len(source_b.splitlines())
             if total_lines_a == 0:
@@ -193,6 +194,11 @@ class PlagiarismDetector:
         if not any(m.plagiarism_type == PlagiarismType.REORDERED for m in all_matches):
             fp_matches = self.fingerprint_matcher.match(source_a, source_b, lang)
             all_matches.extend(fp_matches)
+
+        # 7c. AST-based reordering detection (function/class definition reordering)
+        if not any(m.plagiarism_type == PlagiarismType.REORDERED for m in all_matches):
+            ast_matches = detect_ast_reordering(source_a, source_b, lang)
+            all_matches.extend(ast_matches)
 
         # 8. Ensure EXACT match for files identical after normalizing comments/whitespace (handles Type 1)
         # Uses precomputed exact lines from step 4
@@ -294,8 +300,6 @@ class PlagiarismDetector:
             best_type = max(type_coverage.keys(), key=lambda t: (type_coverage[t], priority[t]))
 
             # Signal-based guard: demote SEMANTIC when files are Type-2-level similar
-            # (line-level semantic matches can produce false positive Type 4 for
-            #  pairs that are actually Type 2 but happen to have canonical equivalence).
             if best_type == PlagiarismType.SEMANTIC and not raw_equal and shadow_jaccard_val >= self.shadow_jaccard_gate:
                 for t in (PlagiarismType.RENAMED, PlagiarismType.REORDERED):
                     if t in type_coverage:

@@ -92,19 +92,20 @@ class SemanticMatcher:
                 if func_lines_b & covered_b:
                     continue
 
-                # Classify based on name and position change (matching baseline behavior)
-                is_renamed = fa["name"] != fb["name"]
+                # Classify based on position change (matching baseline behavior)
+                # and name change, with reordering checked first
                 position_shift = abs(fa["start_line"] - fb["start_line"])
                 # Baseline uses >2 lines shift as threshold for REORDERED
                 is_reordered = position_shift > 2
-                if is_renamed:
-                    ptype = PlagiarismType.RENAMED
-                    details = {"original_name": fa["name"], "renamed_name": fb["name"]}
-                    desc = f"Function renamed: {fa['name']} → {fb['name']}"
-                elif is_reordered:
+                is_renamed = fa["name"] != fb["name"]
+                if is_reordered:
                     ptype = PlagiarismType.REORDERED
                     details = None
                     desc = f"Function reordered: {fa['name']}"
+                elif is_renamed:
+                    ptype = PlagiarismType.RENAMED
+                    details = {"original_name": fa["name"], "renamed_name": fb["name"]}
+                    desc = f"Function renamed: {fa['name']} → {fb['name']}"
                 else:
                     ptype = PlagiarismType.EXACT
                     details = None
