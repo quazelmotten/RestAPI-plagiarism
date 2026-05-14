@@ -10,13 +10,19 @@ from collections.abc import Callable
 from typing import Any
 
 from .ast_hash import ast_similarity as compute_ast_similarity
-from .ast_hash import extract_ast_hashes, hash_ast_subtrees
+from .ast_hash import extract_ast_hashes, hash_ast_subtrees, hash_ast_subtrees_normalized
 from .fingerprinting.parser import parse_string_once
 from .models import (
     AnalysisResult,
     SimilarityMetrics,
 )
 from .detector import PlagiarismDetector
+from .token_similarity import token_similarity as compute_token_similarity
+
+# How much weight to give token similarity when it exceeds structural similarity.
+# 0.0 = pure AST, 1.0 = full token boost (capped at token sim itself).
+# Tunable via grid search.
+TOKEN_BOOST = 0.7
 
 logger = logging.getLogger(__name__)
 
@@ -63,19 +69,39 @@ class Analyzer:
         lines1 = source1.split("\n")
         lines2 = source2.split("\n")
 
-        # Compute AST hashes directly from source strings
+        # Compute AST hashes and token-level similarity
         try:
             tree1, bytes1 = parse_string_once(source1, language)
             tree2, bytes2 = parse_string_once(source2, language)
             ast1 = hash_ast_subtrees(tree1.root_node)
             ast2 = hash_ast_subtrees(tree2.root_node)
+            norm1 = hash_ast_subtrees_normalized(tree1.root_node)
+            norm2 = hash_ast_subtrees_normalized(tree2.root_node)
+            tok_sim = compute_token_similarity(
+                source1, source2, language,
+                tree1=tree1, tree2=tree2,
+                bytes1=bytes1, bytes2=bytes2,
+            )
         except Exception:
             logger.warning(
-                "Failed to parse sources for AST similarity, defaulting to 0", exc_info=True
+                "Failed to parse sources for similarity, defaulting to 0", exc_info=True
             )
-            ast1, ast2 = [], []
+            ast1, ast2, norm1, norm2 = [], [], [], []
+            tok_sim = 0.0
 
-        ast_sim = compute_ast_similarity(ast1, ast2)
+        # Exact structural similarity (order-sensitive)
+        ast_sim_exact = compute_ast_similarity(ast1, ast2)
+        # Order-invariant structural similarity (handles reordering)
+        ast_sim_norm = compute_ast_similarity(norm1, norm2)
+        structural_sim = max(ast_sim_exact, ast_sim_norm)
+
+        # Blend: token similarity provides a gentle boost when it exceeds
+        # the structural estimate. This avoids inflating scores for code
+        # with coincidental token overlap but different structure.
+        if tok_sim > structural_sim:
+            ast_sim = structural_sim + TOKEN_BOOST * (tok_sim - structural_sim)
+        else:
+            ast_sim = structural_sim
 
         # Multi-level matching using the new detector
         # Use min_match_lines=2 to catch identical fragments (default was 1 but we use 2 for performance)
@@ -186,7 +212,16 @@ class Analyzer:
         if ast2 is None:
             ast2 = extract_ast_hashes(file2_path, language)
 
-        ast_sim = compute_ast_similarity(ast1, ast2)
+        ast_sim_exact = compute_ast_similarity(ast1, ast2)
+
+        # Token-level similarity
+        tok_sim = compute_token_similarity(source1, source2, language)
+
+        # Blend: gentle token boost
+        if tok_sim > ast_sim_exact:
+            ast_sim = ast_sim_exact + TOKEN_BOOST * (tok_sim - ast_sim_exact)
+        else:
+            ast_sim = ast_sim_exact
 
         # Multi-level matching with new detector
         detector = PlagiarismDetector(min_match_lines=2, min_function_lines=2)

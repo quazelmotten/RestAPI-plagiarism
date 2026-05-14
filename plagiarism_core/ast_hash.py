@@ -53,6 +53,46 @@ def hash_ast_subtrees(root, min_depth: int = 3) -> list[int]:
     return hashes
 
 
+def hash_ast_subtrees_normalized(root, min_depth: int = 3) -> list[int]:
+    """
+    Hash AST subtrees with children sorted by (depth, hash) for
+    order-invariant comparison.
+
+    Unlike hash_ast_subtrees(), subtrees with the same structure but different
+    child ordering produce identical hash values. This is useful for detecting
+    reordered code (Type 3) without over-matching.
+    """
+
+    hashes = []
+
+    def visit(node):
+        if node.type == "comment":
+            return 0, ""
+
+        if not node.children:
+            return 1, ""
+
+        child_results = [visit(c) for c in node.children]
+        child_results.sort(key=lambda x: (x[0], x[1]))
+        child_depths = [d for d, _ in child_results if d > 0]
+        child_hashes = [h for _, h in child_results if h]
+
+        if not child_depths:
+            return 1, ""
+
+        depth = 1 + max(child_depths)
+        rep = node.type + "(" + ",".join(child_hashes) + ")"
+
+        h = stable_hash(rep)
+        if depth >= min_depth:
+            hashes.append(h)
+
+        return depth, str(h)
+
+    visit(root)
+    return hashes
+
+
 def extract_ast_hashes(file_path: str, lang_code: str, min_depth: int = 3, tree=None) -> list[int]:
     """
     Extract AST subtree hashes from a file.
