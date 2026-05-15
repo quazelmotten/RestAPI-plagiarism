@@ -42,6 +42,7 @@ class ResultItem(CustomBaseModel):
     ast_similarity: float | None = None
     embedding_similarity: float | None = None
     type_confidence: dict | None = None
+    type_coverage: dict[int, float] | None = None
     matches: list[MatchDetail] | None = None
     created_at: str | None = None
 

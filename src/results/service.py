@@ -95,6 +95,7 @@ class ResultService:
         )
 
         legacy_matches = result["matches"]
+        type_coverage = result.get("type_coverage")
 
         existing = await self.db.execute(
             select(SimilarityResult).where(
@@ -181,6 +182,7 @@ class ResultService:
             ast_similarity=sr.ast_similarity,
             embedding_similarity=sr.embedding_similarity,
             type_confidence=sr.type_confidence,
+            type_coverage=type_coverage,
             matches=legacy_matches,
             created_at=now,
         )

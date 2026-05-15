@@ -22,7 +22,12 @@ from .token_similarity import token_similarity as compute_token_similarity
 # How much weight to give token similarity when it exceeds structural similarity.
 # 0.0 = pure AST, 1.0 = full token boost (capped at token sim itself).
 # Tunable via grid search.
-TOKEN_BOOST = 0.7
+TOKEN_BOOST = 0.8
+
+# Per-type TOKEN_BOOST values, applied after the match type is known.
+# Key = PlagiarismType value, Value = boost weight.
+# Grid-searched on 252 annotated pairs: (0.0, 0.0, 1.0, 0.8) → μ gap 0.0038
+TYPE_BOOSTS: dict[int, float] = {1: 0.0, 2: 0.0, 3: 1.0, 4: 0.8}
 
 logger = logging.getLogger(__name__)
 
@@ -95,14 +100,6 @@ class Analyzer:
         ast_sim_norm = compute_ast_similarity(norm1, norm2)
         structural_sim = max(ast_sim_exact, ast_sim_norm)
 
-        # Blend: token similarity provides a gentle boost when it exceeds
-        # the structural estimate. This avoids inflating scores for code
-        # with coincidental token overlap but different structure.
-        if tok_sim > structural_sim:
-            ast_sim = structural_sim + TOKEN_BOOST * (tok_sim - structural_sim)
-        else:
-            ast_sim = structural_sim
-
         # Multi-level matching using the new detector
         # Use min_match_lines=2 to catch identical fragments (default was 1 but we use 2 for performance)
         detector = PlagiarismDetector(min_match_lines=2, min_function_lines=2)
@@ -124,6 +121,29 @@ class Analyzer:
         matched_lines_a = len(covered_a)
         matched_lines_b = len(covered_b)
 
+        type_coverage = getattr(result.metrics, 'type_coverage', None)
+
+        # Per-type blended similarity: use type_coverage from detector to
+        # weight type-specific TOKEN_BOOST values for each detected match type.
+        if type_coverage and sum(type_coverage.values()) > 0:
+            weighted = 0.0
+            total_weight = 0.0
+            for t, cov in type_coverage.items():
+                boost = TYPE_BOOSTS.get(t, TOKEN_BOOST)
+                if tok_sim > structural_sim:
+                    per_type = structural_sim + boost * (tok_sim - structural_sim)
+                else:
+                    per_type = structural_sim
+                weighted += per_type * cov
+                total_weight += cov
+            ast_sim = weighted / total_weight if total_weight > 0 else structural_sim
+        else:
+            # Fallback: global boost when no type info
+            if tok_sim > structural_sim:
+                ast_sim = structural_sim + TOKEN_BOOST * (tok_sim - structural_sim)
+            else:
+                ast_sim = structural_sim
+
         metrics = SimilarityMetrics(
             left_covered=matched_lines_a,
             right_covered=matched_lines_b,
@@ -135,6 +155,7 @@ class Analyzer:
             longest_fragment=max(
                 (m.file1["end_line"] - m.file1["start_line"] + 1 for m in matches), default=0
             ),
+            type_coverage=type_coverage,
         )
 
         return AnalysisResult(
@@ -268,6 +289,8 @@ class Analyzer:
                 }
             )
 
+        type_coverage = getattr(result.metrics, 'type_coverage', None)
+
         return (
             ast_sim,
             matches_data,
@@ -283,5 +306,6 @@ class Analyzer:
                     (m["file1"]["end_line"] - m["file1"]["start_line"] + 1 for m in matches_data),
                     default=0,
                 ),
+                "type_coverage": type_coverage,
             },
         )

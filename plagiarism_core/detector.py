@@ -12,6 +12,7 @@ from .canonicalizer import canonicalize_type4 as _canonicalize_type4_base
 from .normalizer import canonicalize_type4_v2
 from .fingerprint_matcher import FingerprintMatcher
 from collections import Counter
+from functools import cmp_to_key
 
 
 def _lcs_len(seq1, seq2):
@@ -31,6 +32,35 @@ def _lcs_len(seq1, seq2):
                 curr[i + 1] = max(prev[i + 1], curr[i])
         prev = curr
     return prev[n]
+
+
+def _match_priority(t: int) -> int:
+    """Higher number = harder type (wins on overlap)."""
+    return {PlagiarismType.SEMANTIC: 4, PlagiarismType.REORDERED: 3, PlagiarismType.RENAMED: 2, PlagiarismType.EXACT: 1}.get(t, 0)
+
+
+def _resolve_type_coverage(matches, total_lines_a, total_lines_b):
+    """For each line, the hardest overlapping type wins. Returns {type: fraction_of_total_lines}."""
+    line_type_a = [0] * total_lines_a
+    line_type_b = [0] * total_lines_b
+
+    for m in sorted(matches, key=lambda m: _match_priority(m.plagiarism_type)):
+        t = m.plagiarism_type
+        for i in range(m.file1["start_line"], m.file1["end_line"] + 1):
+            if 0 <= i < total_lines_a:
+                line_type_a[i] = t
+        for j in range(m.file2["start_line"], m.file2["end_line"] + 1):
+            if 0 <= j < total_lines_b:
+                line_type_b[j] = t
+
+    total = total_lines_a + total_lines_b
+    coverage = {}
+    for t in set(line_type_a) | set(line_type_b):
+        if t == 0:
+            continue
+        cnt = sum(1 for lt in line_type_a if lt == t) + sum(1 for lt in line_type_b if lt == t)
+        coverage[int(t)] = cnt / total if total else 0.0
+    return coverage
 
 
 class PlagiarismDetector:
@@ -259,54 +289,14 @@ class PlagiarismDetector:
                 )
                 all_matches.append(whole_match)
 
-        # 9. Hierarchical type selection – pick hardest type by coverage, ignoring partial EXACT
-        def _union_coverage(matches):
-            if not matches:
-                return 0
-            intervals = [(m.file1["start_line"], m.file1["end_line"]) for m in matches]
-            intervals.sort()
-            merged = []
-            cur_start, cur_end = intervals[0]
-            for s, e in intervals[1:]:
-                if s <= cur_end + 1:
-                    cur_end = max(cur_end, e)
-                else:
-                    merged.append((cur_start, cur_end))
-                    cur_start, cur_end = s, e
-            merged.append((cur_start, cur_end))
-            return sum(e - s + 1 for s, e in merged)
-
+        # 9. Compute per-type coverage with overlap resolution (harder type wins per line)
         total_lines_a = len(source_a.splitlines())
-        exact_matches = [m for m in all_matches if m.plagiarism_type == PlagiarismType.EXACT]
-        whole_exact = any(
-            m.file1["start_line"] == 0 and m.file1["end_line"] == total_lines_a - 1
-            for m in exact_matches
-        )
+        total_lines_b = len(source_b.splitlines())
+        type_coverage = _resolve_type_coverage(all_matches, total_lines_a, total_lines_b)
 
-        type_coverage = {}
-        for t in set(m.plagiarism_type for m in all_matches):
-            if t == PlagiarismType.EXACT and not whole_exact:
-                continue
-            matches_t = [m for m in all_matches if m.plagiarism_type == t]
-            type_coverage[t] = _union_coverage(matches_t)
-
-        if type_coverage:
-            priority = {
-                PlagiarismType.EXACT: 4,
-                PlagiarismType.SEMANTIC: 3,
-                PlagiarismType.REORDERED: 2,
-                PlagiarismType.RENAMED: 1,
-            }
-            best_type = max(type_coverage.keys(), key=lambda t: (type_coverage[t], priority[t]))
-
-            # Signal-based guard: demote SEMANTIC when files are Type-2-level similar
-            if best_type == PlagiarismType.SEMANTIC and not raw_equal and shadow_jaccard_val >= self.shadow_jaccard_gate:
-                for t in (PlagiarismType.RENAMED, PlagiarismType.REORDERED):
-                    if t in type_coverage:
-                        best_type = t
-                        break
-
-            all_matches = [m for m in all_matches if m.plagiarism_type == best_type]
+        # Sort matches with harder types first, so frontend's first-write-wins
+        # line-to-match mapping shows the correct (hardest) type on overlapping lines.
+        all_matches.sort(key=lambda m: _match_priority(m.plagiarism_type), reverse=True)
 
         # Compute overall similarity and coverage metrics
         lines_a = source_a.splitlines()
@@ -337,6 +327,7 @@ class PlagiarismDetector:
             right_total=total_b,
             similarity=similarity,
             longest_fragment=longest,
+            type_coverage=type_coverage,
         )
 
         return AnalysisResult(

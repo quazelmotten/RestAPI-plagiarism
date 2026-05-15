@@ -55,7 +55,7 @@ class AnalysisService:
             timeout: Timeout in seconds (only used if executor provided)
 
         Returns:
-            Dict with 'similarity_ratio' and 'matches' list
+            Dict with 'similarity_ratio', 'matches', and 'type_coverage'
         """
 
         # Define the analysis function
@@ -71,18 +71,22 @@ class AnalysisService:
 
         # Run with or without executor
         if self.analysis_executor is None:
-            ast_sim, matches, _ = do_analyze()
+            ast_sim, matches, metrics = do_analyze()
         else:
             future = self.analysis_executor.submit(do_analyze)
             try:
-                ast_sim, matches, _ = future.result(timeout=timeout)
+                ast_sim, matches, metrics = future.result(timeout=timeout)
             except TimeoutError:
                 future.cancel()
                 raise TimeoutError(f"Analysis timed out after {timeout}s") from None
             except Exception:
                 raise
 
-        return {"similarity_ratio": ast_sim, "matches": matches}
+        return {
+            "similarity_ratio": ast_sim,
+            "matches": matches,
+            "type_coverage": metrics.get("type_coverage") if metrics else None,
+        }
 
     def analyze_pair_full(
         self, file1_path: str, file2_path: str, language: str, timeout: int = 600

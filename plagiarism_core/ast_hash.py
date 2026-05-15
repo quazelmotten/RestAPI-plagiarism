@@ -17,7 +17,7 @@ from .fingerprints import get_language, stable_hash
 logger = logging.getLogger(__name__)
 
 
-def hash_ast_subtrees(root, min_depth: int = 3) -> list[int]:
+def hash_ast_subtrees(root, min_depth: int = 4) -> list[int]:
     """
     Hash AST subtrees with depth >= min_depth, ignoring comment nodes.
     Depth is measured as max distance to a leaf.
@@ -53,7 +53,7 @@ def hash_ast_subtrees(root, min_depth: int = 3) -> list[int]:
     return hashes
 
 
-def hash_ast_subtrees_normalized(root, min_depth: int = 3) -> list[int]:
+def hash_ast_subtrees_normalized(root, min_depth: int = 4) -> list[int]:
     """
     Hash AST subtrees with children sorted by (depth, hash) for
     order-invariant comparison.
@@ -93,7 +93,7 @@ def hash_ast_subtrees_normalized(root, min_depth: int = 3) -> list[int]:
     return hashes
 
 
-def extract_ast_hashes(file_path: str, lang_code: str, min_depth: int = 3, tree=None) -> list[int]:
+def extract_ast_hashes(file_path: str, lang_code: str, min_depth: int = 4, tree=None) -> list[int]:
     """
     Extract AST subtree hashes from a file.
     """
@@ -158,7 +158,7 @@ def ast_minhash_similarity(root_a, root_b) -> float:
 
 
 def hash_ast_subtrees_with_positions(
-    root, min_depth: int = 3
+    root, min_depth: int = 4
 ) -> list[tuple[int, tuple[int, int], tuple[int, int]]]:
     """
     Hash AST subtrees with their source positions.
@@ -199,7 +199,7 @@ def find_ast_matches(
     file1_path: str,
     file2_path: str,
     lang_code: str,
-    min_depth: int = 3,
+    min_depth: int = 4,
 ) -> list[dict]:
     """
     Find matching AST subtrees between two files.

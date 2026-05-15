@@ -260,42 +260,49 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
     const effectiveB = contentB ? computeEffectiveLines(contentB, langB) : new Set<number>();
     const totalEffectiveB = effectiveB.size;
 
-    const stats: Record<number, { count: number; linesA: number; linesB: number }> = {};
     const coveredA = new Set<number>();
     const coveredB = new Set<number>();
+    const lineTypeA = new Map<number, number>();
+    const lineTypeB = new Map<number, number>();
 
     for (const m of matches) {
       const type = m.plagiarism_type ?? 1;
-      if (!stats[type]) stats[type] = { count: 0, linesA: 0, linesB: 0 };
-      stats[type].count++;
-
-      // Count effective lines in the range for A
-      let countA = 0;
       for (let i = m.file_a_start_line - 1; i <= m.file_a_end_line - 1; i++) {
         if (effectiveA.has(i)) {
-          countA++;
           coveredA.add(i);
+          const current = lineTypeA.get(i) ?? 0;
+          if (type > current) lineTypeA.set(i, type);
         }
       }
-      // For B
-      let countB = 0;
       for (let i = m.file_b_start_line - 1; i <= m.file_b_end_line - 1; i++) {
         if (effectiveB.has(i)) {
-          countB++;
           coveredB.add(i);
+          const current = lineTypeB.get(i) ?? 0;
+          if (type > current) lineTypeB.set(i, type);
         }
       }
-
-      stats[type].linesA += countA;
-      stats[type].linesB += countB;
     }
 
-    // Use unique covered lines for total (deduplication)
+    const typeCountA = new Map<number, number>();
+    const typeCountB = new Map<number, number>();
+    for (const t of lineTypeA.values()) {
+      typeCountA.set(t, (typeCountA.get(t) ?? 0) + 1);
+    }
+    for (const t of lineTypeB.values()) {
+      typeCountB.set(t, (typeCountB.get(t) ?? 0) + 1);
+    }
+
+    const allTypes = new Set([...typeCountA.keys(), ...typeCountB.keys()]);
+    const byType: Record<number, { count: number; linesA: number; linesB: number }> = {};
+    for (const t of allTypes) {
+      byType[t] = { count: 0, linesA: typeCountA.get(t) ?? 0, linesB: typeCountB.get(t) ?? 0 };
+    }
+
     const uniqueA = coveredA.size;
     const uniqueB = coveredB.size;
 
     return {
-      byType: stats,
+      byType,
       totalMatches: matches.length,
       totalLinesA: uniqueA,
       totalLinesB: uniqueB,
@@ -858,9 +865,7 @@ toast({
                 }>
                   T{type}
                 </Badge>
-                <Text fontSize="sm">
-                  {t('pairComparison:page.stats.matchLineInfo', { count: s.count, linesA: s.linesA, linesB: s.linesB })}
-                </Text>
+                <Text fontSize="sm">{s.linesA}A / {s.linesB}B</Text>
               </HStack>
             ))}
           </HStack>

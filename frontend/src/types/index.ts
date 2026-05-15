@@ -63,6 +63,7 @@ export interface PlagiarismResult {
     is_confirmed?: boolean;
   };
   ast_similarity: number;
+  type_coverage?: Record<string, number>; // per-type fraction of total lines
   matches: PlagiarismMatch[];
   created_at: string;
   review_disposition?: string; // 'plagiarism', 'clear', 'bulk_confirmed', or null

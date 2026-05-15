@@ -104,6 +104,7 @@ class SimilarityMetrics:
     right_total: int
     similarity: float
     longest_fragment: int
+    type_coverage: dict[int, float] | None = None
 
 
 @dataclass
