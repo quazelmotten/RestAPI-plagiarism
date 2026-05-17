@@ -98,8 +98,12 @@ def extract_node_types(root) -> list[str]:
 
     def visit(node):
         node_types.append(node.type)
-        for child in node.children:
-            visit(child)
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                visit(cursor.node)
+                if not cursor.goto_next_sibling():
+                    break
 
     visit(root)
     return node_types

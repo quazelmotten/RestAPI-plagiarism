@@ -19,12 +19,16 @@ def _collect_identifiers(root_node: Node, source_bytes: bytes) -> list[tuple[int
     builtins = _get_builtin_names()
 
     def visit(node: Node):
-        if node.type == "identifier" and not node.children:
+        if node.type == "identifier" and node.child_count == 0:
             name = source_bytes[node.start_byte : node.end_byte].decode("utf-8", errors="ignore")
             if not (name.startswith("__") and name.endswith("__")) and name not in builtins:
                 identifiers.append((node.start_byte, node.end_byte, name))
-        for child in node.children:
-            visit(child)
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                visit(cursor.node)
+                if not cursor.goto_next_sibling():
+                    break
 
     visit(root_node)
     return identifiers
@@ -70,30 +74,48 @@ def _normalize_identifiers_from_tree(tree, source_bytes: bytes, fallback: str) -
     return _replace_identifiers(source_bytes, identifiers, placeholders)
 
 
-def normalize_identifiers(source: str, lang_code: str = "python") -> str:
-    try:
-        tree, source_bytes = _parse_string_once(source, lang_code)
-    except Exception:
-        logger.warning(
-            "Failed to parse source for identifier normalization (lang=%s), returning original",
-            lang_code,
-            exc_info=True,
-        )
-        return source
+def normalize_identifiers(
+    source: str, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> str:
+    if tree is None or source_bytes is None:
+        try:
+            tree, source_bytes = _parse_string_once(source, lang_code)
+        except Exception:
+            logger.warning(
+                "Failed to parse source for identifier normalization (lang=%s), returning original",
+                lang_code,
+                exc_info=True,
+            )
+            return source
     return _normalize_identifiers_from_tree(tree, source_bytes, source)
 
 
-def get_identifier_renames(source_a: str, source_b: str, lang_code: str = "python") -> list[dict]:
-    try:
-        tree_a, bytes_a = _parse_string_once(source_a, lang_code)
-        tree_b, bytes_b = _parse_string_once(source_b, lang_code)
-    except Exception:
-        logger.warning(
-            "Failed to parse sources for rename detection (lang=%s), returning empty",
-            lang_code,
-            exc_info=True,
-        )
-        return []
+def get_identifier_renames(
+    source_a: str, source_b: str, lang_code: str = "python",
+    tree_a=None, bytes_a: bytes = None,
+    tree_b=None, bytes_b: bytes = None,
+) -> list[dict]:
+    if tree_a is None or bytes_a is None:
+        try:
+            tree_a, bytes_a = _parse_string_once(source_a, lang_code)
+        except Exception:
+            logger.warning(
+                "Failed to parse source_a for rename detection (lang=%s), returning empty",
+                lang_code,
+                exc_info=True,
+            )
+            return []
+    if tree_b is None or bytes_b is None:
+        try:
+            tree_b, bytes_b = _parse_string_once(source_b, lang_code)
+        except Exception:
+            logger.warning(
+                "Failed to parse source_b for rename detection (lang=%s), returning empty",
+                lang_code,
+                exc_info=True,
+            )
+            return []
     ids_a = _collect_identifiers(tree_a.root_node, bytes_a)
     ids_b = _collect_identifiers(tree_b.root_node, bytes_b)
     order_a = []

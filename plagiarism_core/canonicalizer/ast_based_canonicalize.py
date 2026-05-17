@@ -7,7 +7,10 @@ from .ast_canonical import ast_canonicalize
 logger = logging.getLogger(__name__)
 
 
-def canonicalize_type4(code: str, use_ast: bool = True, lang_code: str = "python") -> str:
+def canonicalize_type4(
+    code: str, use_ast: bool = True, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> str:
     """
     Canonicalize code for Type 4 (semantic) plagiarism detection.
 
@@ -19,17 +22,20 @@ def canonicalize_type4(code: str, use_ast: bool = True, lang_code: str = "python
         return "[empty]"
 
     try:
-        return ast_canonicalize(code, lang_code)
+        return ast_canonicalize(code, lang_code, tree=tree, source_bytes=source_bytes)
     except Exception as e:
         logger.warning("AST canonicalization failed: %s", e)
         return code
 
 
-def canonicalize_type4_light(code: str, lang_code: str = "python") -> str:
+def canonicalize_type4_light(
+    code: str, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> str:
     """
     Lightweight canonicalization for single-line snippets.
 
     Attempts AST-based canonicalization. Falls back to the original code
     if parsing fails.
     """
-    return canonicalize_type4(code, use_ast=True, lang_code=lang_code)
+    return canonicalize_type4(code, use_ast=True, lang_code=lang_code, tree=tree, source_bytes=source_bytes)

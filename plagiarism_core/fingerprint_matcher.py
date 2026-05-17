@@ -12,10 +12,14 @@ def _tokens_from_tree(tree, source_bytes):
     tokens = []
 
     def visit(node):
-        if not node.children and node.type not in ("comment",):
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                visit(cursor.node)
+                if not cursor.goto_next_sibling():
+                    break
+        elif node.type not in ("comment",):
             tokens.append((node.type, node.start_point, node.end_point))
-        for child in node.children:
-            visit(child)
 
     visit(tree.root_node)
     return tokens
@@ -47,13 +51,27 @@ class FingerprintMatcher:
         self.k = k
         self.window = window
 
-    def match(self, source_a: str, source_b: str, lang: str = "python") -> List[Match]:
+    def match(
+        self,
+        source_a: str,
+        source_b: str,
+        lang: str = "python",
+        tree_a=None,
+        bytes_a: bytes = None,
+        tree_b=None,
+        bytes_b: bytes = None,
+    ) -> List[Match]:
         """Return a whole‑file REORDERED match if fingerprint similarity is high."""
-        try:
-            tree_a, bytes_a = parse_string_once(source_a, lang)
-            tree_b, bytes_b = parse_string_once(source_b, lang)
-        except Exception:
-            return []
+        if tree_a is None or bytes_a is None:
+            try:
+                tree_a, bytes_a = parse_string_once(source_a, lang)
+            except Exception:
+                return []
+        if tree_b is None or bytes_b is None:
+            try:
+                tree_b, bytes_b = parse_string_once(source_b, lang)
+            except Exception:
+                return []
 
         tokens_a = _tokens_from_tree(tree_a, bytes_a)
         tokens_b = _tokens_from_tree(tree_b, bytes_b)

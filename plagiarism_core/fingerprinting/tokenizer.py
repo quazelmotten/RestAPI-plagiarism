@@ -226,8 +226,12 @@ class Tokenizer:
                 .strip()
             )
             tokens.append(Token(type=token_type, value=value, line=line, col=col))
-        for child in node.children:
-            self._visit_node(child, tokens)
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                self._visit_node(cursor.node, tokens)
+                if not cursor.goto_next_sibling():
+                    break
 
     def _get_token_type(self, node: Node) -> str | None:
         node_type = node.type

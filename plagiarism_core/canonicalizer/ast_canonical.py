@@ -252,13 +252,17 @@ def _ir_emit_binary(node: Node, source_bytes: bytes, depth: int) -> IRNode:
     return ir_node("BINARY_OP")
 
 
-def build_ir_tree(source: str, lang_code: str = "python") -> IRNode:
+def build_ir_tree(
+    source: str, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> IRNode:
     """Parse source and build IR tree."""
-    try:
-        tree, source_bytes = _parse_string_once(source, lang_code)
-    except Exception:
-        logger.warning("Failed to parse source for IR building (lang=%s)", lang_code, exc_info=True)
-        return ir_node("PARSE_ERROR")
+    if tree is None or source_bytes is None:
+        try:
+            tree, source_bytes = _parse_string_once(source, lang_code)
+        except Exception:
+            logger.warning("Failed to parse source for IR building (lang=%s)", lang_code, exc_info=True)
+            return ir_node("PARSE_ERROR")
     return _ir_emit(tree.root_node, source_bytes)
 
 
@@ -822,19 +826,26 @@ def _emit_canonical(node: Node, source_bytes: bytes, depth: int = 0) -> str:
     return "".join(parts)
 
 
-def ast_canonicalize(source: str, lang_code: str = "python") -> str:
-    try:
-        tree, source_bytes = _parse_string_once(source, lang_code)
-    except Exception:
-        logger.warning(
-            "Failed to parse source for AST canonicalization (lang=%s)", lang_code, exc_info=True
-        )
-        return source
+def ast_canonicalize(
+    source: str, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> str:
+    if tree is None or source_bytes is None:
+        try:
+            tree, source_bytes = _parse_string_once(source, lang_code)
+        except Exception:
+            logger.warning(
+                "Failed to parse source for AST canonicalization (lang=%s)", lang_code, exc_info=True
+            )
+            return source
     return _emit_canonical(tree.root_node, source_bytes)
 
 
-def ast_canonicalize_with_identifiers(source: str, lang_code: str = "python") -> str:
-    semantic_result = ast_canonicalize(source, lang_code)
+def ast_canonicalize_with_identifiers(
+    source: str, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> str:
+    semantic_result = ast_canonicalize(source, lang_code, tree=tree, source_bytes=source_bytes)
     normalized = normalize_identifiers(semantic_result, lang_code)
     return normalized
 

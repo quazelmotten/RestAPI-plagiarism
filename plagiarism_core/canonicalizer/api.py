@@ -18,10 +18,14 @@ from .identifier_norm import (
 logger = logging.getLogger(__name__)
 
 
-def canonicalize_full(source: str, lang_code: str = "python", use_ast: bool = True) -> str:
+def canonicalize_full(
+    source: str, lang_code: str = "python", use_ast: bool = True,
+    tree=None, source_bytes: bytes = None,
+) -> str:
     result = source
     if lang_code == "python":
-        result = canonicalize_type4(result, use_ast=use_ast, lang_code=lang_code)
+        result = canonicalize_type4(result, use_ast=use_ast, lang_code=lang_code,
+                                     tree=tree, source_bytes=source_bytes)
     from ..fingerprinting.identifiers import _normalize_identifiers_in_scope
 
     result = _normalize_identifiers_in_scope(result, lang_code)

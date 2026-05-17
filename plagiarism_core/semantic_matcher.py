@@ -24,6 +24,10 @@ class SemanticMatcher:
         source_b: str,
         lang: str = "python",
         structural_matches: List[Match] = None,
+        tree_a=None,
+        bytes_a: bytes = None,
+        tree_b=None,
+        bytes_b: bytes = None,
     ) -> List[Match]:
         """
         Detect function-level matches.
@@ -32,13 +36,16 @@ class SemanticMatcher:
             source_a, source_b: source code strings
             lang: language code
             structural_matches: optional matches from structural matcher to exclude
+            tree_a, bytes_a, tree_b, bytes_b: optional pre-parsed trees
 
         Returns:
             List of Match objects (EXACT, RENAMED, REORDERED, SEMANTIC).
         """
-        # Parse
-        tree_a, bytes_a = parse_string(source_a, lang)
-        tree_b, bytes_b = parse_string(source_b, lang)
+        # Parse if needed
+        if tree_a is None or bytes_a is None:
+            tree_a, bytes_a = parse_string(source_a, lang)
+        if tree_b is None or bytes_b is None:
+            tree_b, bytes_b = parse_string(source_b, lang)
 
         # Extract functions
         funcs_a = _extract_functions(tree_a.root_node, bytes_a, lang)
@@ -174,8 +181,8 @@ class SemanticMatcher:
                         used_a.add(i)
         # Phase 2: Reordering detection via shadow line multiset matching for unmatched functions
         # Compute full shadow lines (identifier-normalized, comment-stripped)
-        shadow_a_all = _make_shadow_lines(source_a, lang)
-        shadow_b_all = _make_shadow_lines(source_b, lang)
+        shadow_a_all = _make_shadow_lines(source_a, lang, tree=tree_a, source_bytes=bytes_a)
+        shadow_b_all = _make_shadow_lines(source_b, lang, tree=tree_b, source_bytes=bytes_b)
 
         # Helper: multiset Jaccard similarity
         def _jaccard_similarity(c1: Counter, c2: Counter) -> float:

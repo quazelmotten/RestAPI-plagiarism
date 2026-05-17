@@ -13,7 +13,15 @@ from ..canonicalizer import normalize_identifiers
 from ..models import Match, PlagiarismType
 
 
-def detect_ast_reordering(source_a: str, source_b: str, lang: str = "python") -> list[Match]:
+def detect_ast_reordering(
+    source_a: str,
+    source_b: str,
+    lang: str = "python",
+    tree_a=None,
+    bytes_a: bytes = None,
+    tree_b=None,
+    bytes_b: bytes = None,
+) -> list[Match]:
     """Detect function/class reordering between two files.
 
     Extracts top-level function and class definitions from both files,
@@ -26,8 +34,10 @@ def detect_ast_reordering(source_a: str, source_b: str, lang: str = "python") ->
     if not source_a.strip() or not source_b.strip():
         return []
 
-    tree_a, bytes_a = parse_string_once(source_a, lang)
-    tree_b, bytes_b = parse_string_once(source_b, lang)
+    if tree_a is None or bytes_a is None:
+        tree_a, bytes_a = parse_string_once(source_a, lang)
+    if tree_b is None or bytes_b is None:
+        tree_b, bytes_b = parse_string_once(source_b, lang)
 
     profile = get_language_profile(lang)
     func_types = set(profile.function_node_types)
@@ -37,28 +47,43 @@ def detect_ast_reordering(source_a: str, source_b: str, lang: str = "python") ->
     def _extract(root, src_bytes, src_text):
         """Extract top-level function/class definitions."""
         decls = []
-        for child in root.children:
-            node = child
-            if child.type == "decorated_definition":
-                for sub in child.children:
-                    if sub.type in func_types:
-                        node = sub
+        cursor = root.walk()
+        if cursor.goto_first_child():
+            while True:
+                child = cursor.node
+                node = child
+                if child.type == "decorated_definition":
+                    dc = child.walk()
+                    found = False
+                    if dc.goto_first_child():
+                        while True:
+                            if dc.node.type in func_types:
+                                node = dc.node
+                                found = True
+                                break
+                            if not dc.goto_next_sibling():
+                                break
+                    if not found:
+                        if not cursor.goto_next_sibling():
+                            break
+                        continue
+                elif child.type not in all_types:
+                    if not cursor.goto_next_sibling():
                         break
-                else:
                     continue
-            elif child.type not in all_types:
-                continue
 
-            start_line = node.start_point[0]
-            end_line = node.end_point[0]
-            raw_text = src_bytes[node.start_byte:node.end_byte].decode("utf-8", errors="ignore")
-            normalized = normalize_identifiers(raw_text, lang)
-            h = hashlib.md5(normalized.encode()).hexdigest()
-            decls.append({
-                "start_line": start_line,
-                "end_line": end_line,
-                "hash": h,
-            })
+                start_line = node.start_point[0]
+                end_line = node.end_point[0]
+                raw_text = src_bytes[node.start_byte:node.end_byte].decode("utf-8", errors="ignore")
+                normalized = normalize_identifiers(raw_text, lang)
+                h = hashlib.md5(normalized.encode()).hexdigest()
+                decls.append({
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "hash": h,
+                })
+                if not cursor.goto_next_sibling():
+                    break
         return decls
 
     decls_a = _extract(tree_a.root_node, bytes_a, source_a)

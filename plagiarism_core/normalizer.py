@@ -13,7 +13,10 @@ import re
 logger = logging.getLogger(__name__)
 
 
-def _find_iterator_while_patterns(source: str, lang: str = "python") -> list[dict]:
+def _find_iterator_while_patterns(
+    source: str, lang: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> list[dict]:
     """Find while-True-try-next-except-StopIteration patterns using tree-sitter.
 
     Returns list of dicts with:
@@ -22,12 +25,12 @@ def _find_iterator_while_patterns(source: str, lang: str = "python") -> list[dic
       iter_name: the iterator being iterated over
       pattern_source: the source inside the while body (excluding the try)
     """
-    from .fingerprinting.parser import parse_string_once
-
-    try:
-        tree, source_bytes = parse_string_once(source, lang)
-    except Exception:
-        return []
+    if tree is None or source_bytes is None:
+        from .fingerprinting.parser import parse_string_once
+        try:
+            tree, source_bytes = parse_string_once(source, lang)
+        except Exception:
+            return []
 
     results = []
     root = tree.root_node
@@ -53,8 +56,12 @@ def _find_iterator_while_patterns(source: str, lang: str = "python") -> list[dic
                         body_node = _find_child_by_type(node, "block")
                     if body_node:
                         _analyze_while_body(node, body_node, source_bytes, results)
-        for child in node.children:
-            visit(child)
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                visit(cursor.node)
+                if not cursor.goto_next_sibling():
+                    break
 
     visit(root)
     return results
@@ -169,9 +176,12 @@ def _analyze_while_body(while_node, body_node, source_bytes, results):
             return  # only one such pattern per while
 
 
-def _apply_iterator_while_rewrite(source: str, lang: str = "python") -> str:
+def _apply_iterator_while_rewrite(
+    source: str, lang: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> str:
     """Replace while-True-try-next-except-StopIteration with equivalent for-loop strings."""
-    patterns = _find_iterator_while_patterns(source, lang)
+    patterns = _find_iterator_while_patterns(source, lang, tree=tree, source_bytes=source_bytes)
     if not patterns:
         return source
 
@@ -258,14 +268,17 @@ def _apply_iterator_while_rewrite(source: str, lang: str = "python") -> str:
     return "\n".join(lines)
 
 
-def _find_map_lambda_patterns(source: str, lang: str = "python") -> list[dict]:
+def _find_map_lambda_patterns(
+    source: str, lang: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> list[dict]:
     """Find list(map(lambda ...)) or list(filter(lambda ...)) patterns."""
-    from .fingerprinting.parser import parse_string_once
-
-    try:
-        tree, source_bytes = parse_string_once(source, lang)
-    except Exception:
-        return []
+    if tree is None or source_bytes is None:
+        from .fingerprinting.parser import parse_string_once
+        try:
+            tree, source_bytes = parse_string_once(source, lang)
+        except Exception:
+            return []
 
     results = []
 
@@ -322,16 +335,23 @@ def _find_map_lambda_patterns(source: str, lang: str = "python") -> list[dict]:
                                             "iter": iter_text.strip(),
                                             "is_map": inner_name == "map",
                                         })
-        for child in node.children:
-            visit(child)
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                visit(cursor.node)
+                if not cursor.goto_next_sibling():
+                    break
 
     visit(tree.root_node)
     return results
 
 
-def _apply_map_lambda_rewrite(source: str, lang: str = "python") -> str:
+def _apply_map_lambda_rewrite(
+    source: str, lang: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> str:
     """Replace list(map(lambda x: expr, iter)) with [expr for x in iter]."""
-    patterns = _find_map_lambda_patterns(source, lang)
+    patterns = _find_map_lambda_patterns(source, lang, tree=tree, source_bytes=source_bytes)
     if not patterns:
         return source
 
@@ -362,7 +382,10 @@ def _normalize_identity_comparisons(source: str, lang: str = "python") -> str:
     return "\n".join(result)
 
 
-def canonicalize_type4_v2(source: str, lang_code: str = "python") -> str:
+def canonicalize_type4_v2(
+    source: str, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> str:
     """Improved Type 4 canonicalization with rewrite rules.
 
     Applies three critical rewrite rules before the base canonicalizer:
@@ -375,12 +398,14 @@ def canonicalize_type4_v2(source: str, lang_code: str = "python") -> str:
     if not source or not source.strip():
         return "[empty]"
 
-    # Apply rewrite rules in sequence
+    # Apply rewrite rules in sequence.
+    # Each rule may modify the source string, making the original tree stale,
+    # so only pass tree to the first rule (which runs on the unmodified source).
     if lang_code == "python":
-        source = _apply_iterator_while_rewrite(source, lang_code)
+        source = _apply_iterator_while_rewrite(source, lang_code, tree=tree, source_bytes=source_bytes)
         source = _apply_map_lambda_rewrite(source, lang_code)
         source = _normalize_identity_comparisons(source, lang_code)
 
-    # Delegate to base canonicalizer
+    # Delegate to base canonicalizer (parses the modified source)
     from .canonicalizer import canonicalize_type4 as _base_canonicalize
     return _base_canonicalize(source, lang_code=lang_code)

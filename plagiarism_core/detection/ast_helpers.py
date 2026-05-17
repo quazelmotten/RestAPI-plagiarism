@@ -135,7 +135,7 @@ def _hash_ast_subtree(node: Node, use_semantic: bool = False) -> int:
     else:
         hash_type = node.type
 
-    if not node.children:
+    if node.child_count == 0:
         if hash_type == "identifier":
             return 0  # ignore names entirely
         # Include operator and keyword leaf values in the hash
@@ -165,10 +165,20 @@ def _hash_ast_subtree(node: Node, use_semantic: bool = False) -> int:
         return stable_hash(leaf_value)
 
     child_hashes = []
-    for child in node.children:
-        ch = _hash_ast_subtree(child, use_semantic)
-        if ch:
-            child_hashes.append(ch)
+    if hasattr(node, 'walk'):
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                ch = _hash_ast_subtree(cursor.node, use_semantic)
+                if ch:
+                    child_hashes.append(ch)
+                if not cursor.goto_next_sibling():
+                    break
+    else:
+        for child in node.children:
+            ch = _hash_ast_subtree(child, use_semantic)
+            if ch:
+                child_hashes.append(ch)
 
     if not child_hashes:
         return 0
@@ -230,19 +240,23 @@ _CLASS_NODE_TYPES = {
 
 def _extract_name(node: Node, source_bytes: bytes) -> str | None:
     """Extract the name identifier from a function/class node."""
-    for sub in node.children:
-        if sub.type == "identifier":
-            return source_bytes[sub.start_byte : sub.end_byte].decode("utf-8", errors="ignore")
-        # For decorated definitions (Python), descend into the actual function
-        if sub.type == "function_definition":
-            return _extract_name(sub, source_bytes)
-        # For C/C++: name is inside function_declarator
-        if sub.type == "function_declarator":
-            return _extract_name(sub, source_bytes)
-        # For Java: method_declaration has identifier directly
-        if sub.type == "formal_parameters":
-            # Already past the name, look at siblings
-            pass
+    cursor = node.walk()
+    if cursor.goto_first_child():
+        while True:
+            sub = cursor.node
+            if sub.type == "identifier":
+                return source_bytes[sub.start_byte : sub.end_byte].decode("utf-8", errors="ignore")
+            # For decorated definitions (Python), descend into the actual function
+            if sub.type == "function_definition":
+                return _extract_name(sub, source_bytes)
+            # For C/C++: name is inside function_declarator
+            if sub.type == "function_declarator":
+                return _extract_name(sub, source_bytes)
+            # For Java: method_declaration has identifier directly
+            if sub.type == "formal_parameters":
+                pass
+            if not cursor.goto_next_sibling():
+                break
     return None
 
 
@@ -260,82 +274,90 @@ def _extract_functions(
 
     def _collect(node: Node, parent_name: str = "") -> list[dict]:
         results = []
-        for child in node.children:
-            # Detect top-level lambda assignments as functions (for scenarios like 8b)
-            if parent_name == "" and child.type == "expression_statement":
-                assign = _get_child_by_type(child, "assignment")
-                if assign:
-                    after_eq = False
-                    value_node = None
-                    for c in assign.children:
-                        if c.type == "=":
-                            after_eq = True
-                        elif after_eq and c.type not in ("comment",):
-                            value_node = c
-                            break
-                    if value_node and value_node.type == "lambda":
-                        # Extract the target identifier name
-                        target_node = None
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                child = cursor.node
+                is_lambda = False
+
+                # Detect top-level lambda assignments as functions (for scenarios like 8b)
+                if parent_name == "" and child.type == "expression_statement":
+                    assign = _get_child_by_type(child, "assignment")
+                    if assign:
+                        after_eq = False
+                        value_node = None
                         for c in assign.children:
-                            if c.type == "identifier":
-                                target_node = c
+                            if c.type == "=":
+                                after_eq = True
+                            elif after_eq and c.type not in ("comment",):
+                                value_node = c
                                 break
-                        if target_node:
-                            name = (
-                                source_bytes[target_node.start_byte : target_node.end_byte]
-                                .decode("utf-8", errors="ignore")
-                                .strip()
-                            )
-                            # Compute hashes on the lambda node
-                            struct_hash = _hash_ast_subtree(value_node)
-                            semantic_hash = _hash_ast_subtree_semantic(value_node)
-                            results.append(
-                                {
-                                    "name": name,
-                                    "start_line": child.start_point[0],
-                                    "end_line": child.end_point[0],
-                                    "struct_hash": struct_hash,
-                                    "semantic_hash": semantic_hash,
-                                    "node": value_node,
-                                }
-                            )
-                            # Skip further processing of this child
-                            continue
-            if child.type in all_types:
-                name = _extract_name(child, source_bytes)
-                if parent_name:
-                    qualified = f"{parent_name}.{name}" if name else f"{parent_name}.<anonymous>"
-                else:
-                    qualified = name or "<anonymous>"
+                        if value_node and value_node.type == "lambda":
+                            # Extract the target identifier name
+                            target_node = None
+                            for c in assign.children:
+                                if c.type == "identifier":
+                                    target_node = c
+                                    break
+                            if target_node:
+                                name = (
+                                    source_bytes[target_node.start_byte : target_node.end_byte]
+                                    .decode("utf-8", errors="ignore")
+                                    .strip()
+                                )
+                                # Compute hashes on the lambda node
+                                struct_hash = _hash_ast_subtree(value_node)
+                                semantic_hash = _hash_ast_subtree_semantic(value_node)
+                                results.append(
+                                    {
+                                        "name": name,
+                                        "start_line": child.start_point[0],
+                                        "end_line": child.end_point[0],
+                                        "struct_hash": struct_hash,
+                                        "semantic_hash": semantic_hash,
+                                        "node": value_node,
+                                    }
+                                )
+                                is_lambda = True
 
-                # Strip self/this from parameters for structural hash
-                # so standalone functions and methods with same body match
-                if child.type in func_types:
-                    hash_node = _strip_self_from_params(child, source_bytes, lang_code)
-                else:
-                    hash_node = child
-                struct_hash = _hash_ast_subtree(hash_node)
-                semantic_hash = _hash_ast_subtree_semantic(hash_node)
-                results.append(
-                    {
-                        "name": qualified,
-                        "start_line": child.start_point[0],
-                        "end_line": child.end_point[0],
-                        "struct_hash": struct_hash,
-                        "semantic_hash": semantic_hash,
-                        "node": child,
-                    }
-                )
+                if not is_lambda:
+                    if child.type in all_types:
+                        name = _extract_name(child, source_bytes)
+                        if parent_name:
+                            qualified = f"{parent_name}.{name}" if name else f"{parent_name}.<anonymous>"
+                        else:
+                            qualified = name or "<anonymous>"
 
-                # Recurse into child to find nested functions/methods
-                results.extend(
-                    _collect(child, qualified if child.type in class_types else parent_name)
-                )
-            else:
-                # Traverse intermediate nodes (block, declaration_list, etc.)
-                # to find nested function/class definitions
-                results.extend(_collect(child, parent_name))
+                        # Strip self/this from parameters for structural hash
+                        # so standalone functions and methods with same body match
+                        if child.type in func_types:
+                            hash_node = _strip_self_from_params(child, source_bytes, lang_code)
+                        else:
+                            hash_node = child
+                        struct_hash = _hash_ast_subtree(hash_node)
+                        semantic_hash = _hash_ast_subtree_semantic(hash_node)
+                        results.append(
+                            {
+                                "name": qualified,
+                                "start_line": child.start_point[0],
+                                "end_line": child.end_point[0],
+                                "struct_hash": struct_hash,
+                                "semantic_hash": semantic_hash,
+                                "node": child,
+                            }
+                        )
 
+                        # Recurse into child to find nested functions/methods
+                        results.extend(
+                            _collect(child, qualified if child.type in class_types else parent_name)
+                        )
+                    else:
+                        # Traverse intermediate nodes (block, declaration_list, etc.)
+                        # to find nested function/class definitions
+                        results.extend(_collect(child, parent_name))
+
+                if not cursor.goto_next_sibling():
+                    break
         return results
 
     return _collect(root_node)

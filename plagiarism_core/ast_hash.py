@@ -30,50 +30,16 @@ def hash_ast_subtrees(root, min_depth: int = 4) -> list[int]:
         if node.type == "comment":
             return 0, ""
 
-        if not node.children:
+        if node.child_count == 0:
             return 1, ""
 
-        child_results = [visit(c) for c in node.children]
-        child_depths = [d for d, _ in child_results if d > 0]
-        child_hashes = [h for _, h in child_results if h]
-
-        if not child_depths:
-            return 1, ""
-
-        depth = 1 + max(child_depths)
-        rep = node.type + "(" + ",".join(child_hashes) + ")"
-
-        h = stable_hash(rep)
-        if depth >= min_depth:
-            hashes.append(h)
-
-        return depth, str(h)
-
-    visit(root)
-    return hashes
-
-
-def hash_ast_subtrees_normalized(root, min_depth: int = 4) -> list[int]:
-    """
-    Hash AST subtrees with children sorted by (depth, hash) for
-    order-invariant comparison.
-
-    Unlike hash_ast_subtrees(), subtrees with the same structure but different
-    child ordering produce identical hash values. This is useful for detecting
-    reordered code (Type 3) without over-matching.
-    """
-
-    hashes = []
-
-    def visit(node):
-        if node.type == "comment":
-            return 0, ""
-
-        if not node.children:
-            return 1, ""
-
-        child_results = [visit(c) for c in node.children]
-        child_results.sort(key=lambda x: (x[0], x[1]))
+        child_results = []
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                child_results.append(visit(cursor.node))
+                if not cursor.goto_next_sibling():
+                    break
         child_depths = [d for d, _ in child_results if d > 0]
         child_hashes = [h for _, h in child_results if h]
 
@@ -172,10 +138,16 @@ def hash_ast_subtrees_with_positions(
         if node.type == "comment":
             return 0, ""
 
-        if not node.children:
+        if node.child_count == 0:
             return 1, ""
 
-        child_results = [visit(c) for c in node.children]
+        child_results = []
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                child_results.append(visit(cursor.node))
+                if not cursor.goto_next_sibling():
+                    break
         child_depths = [d for d, _ in child_results if d > 0]
         child_hashes = [h for _, h in child_results if h]
 

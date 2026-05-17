@@ -121,12 +121,16 @@ BUILTIN_NAMES = {
 }
 
 
-def _find_function_scopes(source: str, lang_code: str = "python") -> list[dict]:
+def _find_function_scopes(
+    source: str, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> list[dict]:
     """Extract function scopes (top-level and nested, NOT inside classes)."""
-    try:
-        tree, source_bytes = parse_string_once(source, lang_code)
-    except Exception:
-        return []
+    if tree is None or source_bytes is None:
+        try:
+            tree, source_bytes = parse_string_once(source, lang_code)
+        except Exception:
+            return []
 
     fn_types = {
         "python": ("function_definition", "decorated_definition"),
@@ -157,25 +161,33 @@ def _find_function_scopes(source: str, lang_code: str = "python") -> list[dict]:
 
     def _extract_from(parent, depth=0):
         results = []
-        for child in parent.children:
-            if child.type in skip_types:
-                continue
-            if child.type in fn_type_set:
-                results.append(
-                    {
-                        "start_byte": child.start_byte,
-                        "end_byte": child.end_byte,
-                        "start_line": child.start_point[0],
-                        "end_line": child.end_point[0],
-                    }
-                )
-                results.extend(_extract_from(child, depth + 1))
+        cursor = parent.walk()
+        if cursor.goto_first_child():
+            while True:
+                child = cursor.node
+                if child.type in skip_types:
+                    pass
+                elif child.type in fn_type_set:
+                    results.append(
+                        {
+                            "start_byte": child.start_byte,
+                            "end_byte": child.end_byte,
+                            "start_line": child.start_point[0],
+                            "end_line": child.end_point[0],
+                        }
+                    )
+                    results.extend(_extract_from(child, depth + 1))
+                if not cursor.goto_next_sibling():
+                    break
         return results
 
     return _extract_from(tree.root_node)
 
 
-def _normalize_in_scope(code: str, lang_code: str = "python") -> str:
+def _normalize_in_scope(
+    code: str, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> str:
     """Normalize identifiers in a single scope (function or module block).
 
     Each unique non-builtin identifier gets VAR_0, VAR_1, etc. assigned
@@ -184,10 +196,11 @@ def _normalize_in_scope(code: str, lang_code: str = "python") -> str:
     if not code.strip():
         return code
 
-    try:
-        tree, source_bytes = parse_string_once(code, lang_code)
-    except Exception:
-        return code
+    if tree is None or source_bytes is None:
+        try:
+            tree, source_bytes = parse_string_once(code, lang_code)
+        except Exception:
+            return code
 
     identifiers = []
     for node in _walk(tree.root_node):
@@ -228,11 +241,18 @@ def _normalize_in_scope(code: str, lang_code: str = "python") -> str:
 def _walk(node):
     """Yield all nodes in an AST (depth-first)."""
     yield node
-    for child in node.children:
-        yield from _walk(child)
+    cursor = node.walk()
+    if cursor.goto_first_child():
+        while True:
+            yield from _walk(cursor.node)
+            if not cursor.goto_next_sibling():
+                break
 
 
-def _normalize_identifiers_in_scope(source: str, lang_code: str = "python") -> str:
+def _normalize_identifiers_in_scope(
+    source: str, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> str:
     """
     Per-function identifier normalization (Step 1).
 
@@ -240,13 +260,14 @@ def _normalize_identifiers_in_scope(source: str, lang_code: str = "python") -> s
     Builtins (len, range, print, etc.) are preserved as-is (Step 2).
     Module-level code (outside any function) also gets its own scope.
     """
-    try:
-        tree, source_bytes = parse_string_once(source, lang_code)
-    except Exception:
-        logger.warning(
-            "Failed to parse for per-function normalization, falling back", exc_info=True
-        )
-        return _normalize_in_scope(source, lang_code)
+    if tree is None or source_bytes is None:
+        try:
+            tree, source_bytes = parse_string_once(source, lang_code)
+        except Exception:
+            logger.warning(
+                "Failed to parse for per-function normalization, falling back", exc_info=True
+            )
+            return _normalize_in_scope(source, lang_code)
 
     fn_type_set = {
         "python": ("function_definition", "decorated_definition"),
@@ -278,12 +299,15 @@ def _normalize_identifiers_in_scope(source: str, lang_code: str = "python") -> s
     all_scopes = []
 
     def _collect_fns(parent, depth=0):
-        for child in parent.children:
-            if child.type in skip_cls:
-                continue
-            if child.type in fn_types:
-                all_scopes.append((child.start_byte, child.end_byte))
-                _collect_fns(child, depth + 1)
+        cursor = parent.walk()
+        if cursor.goto_first_child():
+            while True:
+                child = cursor.node
+                if child.type not in skip_cls and child.type in fn_types:
+                    all_scopes.append((child.start_byte, child.end_byte))
+                    _collect_fns(child, depth + 1)
+                if not cursor.goto_next_sibling():
+                    break
 
     _collect_fns(tree.root_node)
 
@@ -314,15 +338,21 @@ def _normalize_identifiers_in_scope(source: str, lang_code: str = "python") -> s
     return result_bytes.decode("utf-8", errors="ignore")
 
 
-def _make_shadow_lines_scope(source: str, lang_code: str = "python") -> list[str]:
+def _make_shadow_lines_scope(
+    source: str, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> list[str]:
     """Produce per-function shadow lines (Step 1 + 4)."""
-    normalized = _normalize_identifiers_in_scope(source, lang_code)
+    normalized = _normalize_identifiers_in_scope(source, lang_code, tree=tree, source_bytes=source_bytes)
     return normalized.split("\n")
 
 
-def _scope_shadow_hashes(source: str, lang_code: str = "python") -> set[int]:
+def _scope_shadow_hashes(
+    source: str, lang_code: str = "python",
+    tree=None, source_bytes: bytes = None,
+) -> set[int]:
     """Compute shadow hashes for a scope (used in semantic line matching)."""
-    lines = _make_shadow_lines_scope(source, lang_code)
+    lines = _make_shadow_lines_scope(source, lang_code, tree=tree, source_bytes=source_bytes)
     hashes = set()
     for line in lines:
         h = stable_hash(line.strip()) if line.strip() else 0

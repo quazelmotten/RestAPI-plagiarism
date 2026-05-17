@@ -17,7 +17,16 @@ class StructuralMatcher:
     def __init__(self, min_match_lines: int = 3):
         self.min_match_lines = min_match_lines
 
-    def match(self, source_a: str, source_b: str, lang: str = "python") -> List[Match]:
+    def match(
+        self,
+        source_a: str,
+        source_b: str,
+        lang: str = "python",
+        tree_a=None,
+        bytes_a: bytes = None,
+        tree_b=None,
+        bytes_b: bytes = None,
+    ) -> List[Match]:
         """
         Detect structural matches between two source files.
 
@@ -26,8 +35,8 @@ class StructuralMatcher:
         # Prepare raw lines and shadow (identifier-normalized) lines
         lines_a = source_a.splitlines()
         lines_b = source_b.splitlines()
-        shadow_a = _make_shadow_lines(source_a, lang)
-        shadow_b = _make_shadow_lines(source_b, lang)
+        shadow_a = _make_shadow_lines(source_a, lang, tree=tree_a, source_bytes=bytes_a)
+        shadow_b = _make_shadow_lines(source_b, lang, tree=tree_b, source_bytes=bytes_b)
 
         # Use the existing line-level matching algorithm
         matches = _line_level_matches(

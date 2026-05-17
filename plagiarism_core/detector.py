@@ -94,15 +94,32 @@ class PlagiarismDetector:
         lang: str = "python",
         file_a_path: str = None,
         file_b_path: str = None,
+        tree_a=None,
+        bytes_a: bytes = None,
+        tree_b=None,
+        bytes_b: bytes = None,
     ) -> AnalysisResult:
-        """Detect plagiarism between two source code strings."""
+        """Detect plagiarism between two source code strings.
+
+        If pre-parsed trees (tree_a, bytes_a, tree_b, bytes_b) are provided,
+        they will be reused across all sub-detectors, avoiding redundant parsing.
+        """
         # Early exit for empty sources
         if not source_a.strip() and not source_b.strip():
             metrics = SimilarityMetrics(left_covered=0, right_covered=0, left_total=0, right_total=0, similarity=0.0, longest_fragment=0)
             return AnalysisResult(similarity_ratio=0.0, matches=[], metrics=metrics, file1_path=file_a_path or "", file2_path=file_b_path or "", language=lang)
 
+        # Parse once up front if trees not already provided
+        from .fingerprinting.parser import parse_string_once
+        if tree_a is None or bytes_a is None:
+            tree_a, bytes_a = parse_string_once(source_a, lang)
+        if tree_b is None or bytes_b is None:
+            tree_b, bytes_b = parse_string_once(source_b, lang)
+
         # 1. Semantic matcher first (function-level: EXACT, RENAMED, REORDERED, SEMANTIC)
-        sem_matches = self.semantic.match(source_a, source_b, lang)
+        sem_matches = self.semantic.match(source_a, source_b, lang,
+                                           tree_a=tree_a, bytes_a=bytes_a,
+                                           tree_b=tree_b, bytes_b=bytes_b)
 
         # 2. Compute lines covered by semantic matches
         covered_a = set()
@@ -112,7 +129,9 @@ class PlagiarismDetector:
             covered_b.update(range(m.file2["start_line"], m.file2["end_line"] + 1))
 
         # 3. Structural matcher second (line-level), skipping covered lines
-        struct_all = self.structural.match(source_a, source_b, lang)
+        struct_all = self.structural.match(source_a, source_b, lang,
+                                            tree_a=tree_a, bytes_a=bytes_a,
+                                            tree_b=tree_b, bytes_b=bytes_b)
         struct_matches = []
         for m in struct_all:
             sa_range = range(m.file1["start_line"], m.file1["end_line"] + 1)
@@ -130,8 +149,8 @@ class PlagiarismDetector:
         exact_b = _make_exact_lines(source_b, lang)
         nonempty_exact_a = [ln for ln in exact_a if ln.strip()]
         nonempty_exact_b = [ln for ln in exact_b if ln.strip()]
-        shadow_a = _make_shadow_lines(source_a, lang)
-        shadow_b = _make_shadow_lines(source_b, lang)
+        shadow_a = _make_shadow_lines(source_a, lang, tree=tree_a, source_bytes=bytes_a)
+        shadow_b = _make_shadow_lines(source_b, lang, tree=tree_b, source_bytes=bytes_b)
         nonempty_shadow_a = [ln for ln in shadow_a if ln != 0]
         nonempty_shadow_b = [ln for ln in shadow_b if ln != 0]
         normalized_equal = nonempty_exact_a == nonempty_exact_b
@@ -155,8 +174,8 @@ class PlagiarismDetector:
         _canonical_equiv = False
         if not normalized_equal and not shadow_similar and source_a.strip() and source_b.strip():
             try:
-                _canonical_a = canonicalize_type4_v2(source_a, lang_code=lang)
-                _canonical_b = canonicalize_type4_v2(source_b, lang_code=lang)
+                _canonical_a = canonicalize_type4_v2(source_a, lang_code=lang, tree=tree_a, source_bytes=bytes_a)
+                _canonical_b = canonicalize_type4_v2(source_b, lang_code=lang, tree=tree_b, source_bytes=bytes_b)
                 _canonical_equiv = _canonical_a.strip() == _canonical_b.strip() and bool(_canonical_a.strip())
             except Exception:
                 pass
@@ -222,12 +241,16 @@ class PlagiarismDetector:
 
         # 7b. Fingerprint-based reordering detection (token-level winnowing)
         if not any(m.plagiarism_type == PlagiarismType.REORDERED for m in all_matches):
-            fp_matches = self.fingerprint_matcher.match(source_a, source_b, lang)
+            fp_matches = self.fingerprint_matcher.match(source_a, source_b, lang,
+                                                         tree_a=tree_a, bytes_a=bytes_a,
+                                                         tree_b=tree_b, bytes_b=bytes_b)
             all_matches.extend(fp_matches)
 
         # 7c. AST-based reordering detection (function/class definition reordering)
         if not any(m.plagiarism_type == PlagiarismType.REORDERED for m in all_matches):
-            ast_matches = detect_ast_reordering(source_a, source_b, lang)
+            ast_matches = detect_ast_reordering(source_a, source_b, lang,
+                                                 tree_a=tree_a, bytes_a=bytes_a,
+                                                 tree_b=tree_b, bytes_b=bytes_b)
             all_matches.extend(ast_matches)
 
         # 8. Ensure EXACT match for files identical after normalizing comments/whitespace (handles Type 1)
@@ -339,13 +362,30 @@ class PlagiarismDetector:
             language=lang,
         )
 
-    def detect_files(self, path_a: str, path_b: str, lang: str = "python") -> AnalysisResult:
-        """Convenience: detect from file paths."""
+    def detect_files(
+        self,
+        path_a: str,
+        path_b: str,
+        lang: str = "python",
+        tree_a=None,
+        bytes_a: bytes = None,
+        tree_b=None,
+        bytes_b: bytes = None,
+    ) -> AnalysisResult:
+        """Convenience: detect from file paths.
+
+        If pre-parsed trees (tree_a, bytes_a, tree_b, bytes_b) are provided,
+        they will be reused across all sub-detectors. When not provided,
+        the method parses after reading the files.
+        """
         with open(path_a, encoding="utf-8", errors="ignore") as f:
             source_a = f.read()
         with open(path_b, encoding="utf-8", errors="ignore") as f:
             source_b = f.read()
-        return self.detect(source_a, source_b, lang, file_a_path=path_a, file_b_path=path_b)
+        return self.detect(source_a, source_b, lang,
+                           file_a_path=path_a, file_b_path=path_b,
+                           tree_a=tree_a, bytes_a=bytes_a,
+                           tree_b=tree_b, bytes_b=bytes_b)
 
     def _semantic_line_match(
         self, source_a: str, source_b: str, lang: str, existing_matches: List[Match],

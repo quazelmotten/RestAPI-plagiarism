@@ -26,12 +26,14 @@ def tokenize_with_tree_sitter(
     tokens = []
 
     def visit(node):
-        if not node.children:
-            if node.type != "comment":
-                tokens.append((node.type, node.start_point, node.end_point))
-        else:
-            for child in node.children:
-                visit(child)
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                visit(cursor.node)
+                if not cursor.goto_next_sibling():
+                    break
+        elif node.type != "comment":
+            tokens.append((node.type, node.start_point, node.end_point))
 
     visit(tree.root_node)
     return tokens
@@ -58,11 +60,17 @@ def tokenize_and_hash_ast(
         if node.type == "comment":
             return 0, ""
 
-        if not node.children:
+        if node.child_count == 0:
             tokens.append((node.type, node.start_point, node.end_point))
             return 1, ""
 
-        child_results = [visit(c) for c in node.children]
+        child_results = []
+        cursor = node.walk()
+        if cursor.goto_first_child():
+            while True:
+                child_results.append(visit(cursor.node))
+                if not cursor.goto_next_sibling():
+                    break
         child_depths = [d for d, _ in child_results if d > 0]
         child_hashes = [h for _, h in child_results if h]
 

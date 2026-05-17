@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .ast_hash import ast_similarity as compute_ast_similarity
-from .ast_hash import extract_ast_hashes, hash_ast_subtrees, hash_ast_subtrees_normalized
+from .ast_hash import extract_ast_hashes, hash_ast_subtrees
 from .fingerprinting.parser import parse_string_once
 from .models import (
     AnalysisResult,
@@ -18,16 +18,6 @@ from .models import (
 )
 from .detector import PlagiarismDetector
 from .token_similarity import token_similarity as compute_token_similarity
-
-# How much weight to give token similarity when it exceeds structural similarity.
-# 0.0 = pure AST, 1.0 = full token boost (capped at token sim itself).
-# Tunable via grid search.
-TOKEN_BOOST = 0.8
-
-# Per-type TOKEN_BOOST values, applied after the match type is known.
-# Key = PlagiarismType value, Value = boost weight.
-# Grid-searched on 252 annotated pairs: (0.0, 0.0, 1.0, 0.8) → μ gap 0.0038
-TYPE_BOOSTS: dict[int, float] = {1: 0.0, 2: 0.0, 3: 1.0, 4: 0.8}
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +40,10 @@ class Analyzer:
         file2_path: str = "",
         embeddings1: dict | None = None,  # func_name -> embedding
         embeddings2: dict | None = None,  # func_name -> embedding
+        tree1=None,
+        bytes1: bytes = None,
+        tree2=None,
+        bytes2: bytes = None,
     ) -> AnalysisResult:
         """
         Analyze plagiarism given source code strings.
@@ -60,6 +54,11 @@ class Analyzer:
         - Analysis of code already in memory (from caches, databases, etc.)
         - Separation of concerns (I/O is handled by caller)
 
+        If pre-parsed trees (tree1, bytes1, tree2, bytes2) are provided,
+        they will be reused across all sub-detectors, avoiding redundant
+        parsing. This is useful when the caller has already parsed the
+        sources (e.g., from cache or pre-processing).
+
         Args:
             source1: First source code string
             source2: Second source code string
@@ -67,6 +66,8 @@ class Analyzer:
             file1_path: Optional path for metadata (not read)
             file2_path: Optional path for metadata (not read)
             embeddings1, embeddings2: Optional dicts mapping function names to embeddings
+            tree1, bytes1: Pre-parsed tree and bytes for source1 (skip internal parse)
+            tree2, bytes2: Pre-parsed tree and bytes for source2 (skip internal parse)
 
         Returns:
             AnalysisResult with similarity and typed matches
@@ -76,12 +77,12 @@ class Analyzer:
 
         # Compute AST hashes and token-level similarity
         try:
-            tree1, bytes1 = parse_string_once(source1, language)
-            tree2, bytes2 = parse_string_once(source2, language)
+            if tree1 is None or bytes1 is None:
+                tree1, bytes1 = parse_string_once(source1, language)
+            if tree2 is None or bytes2 is None:
+                tree2, bytes2 = parse_string_once(source2, language)
             ast1 = hash_ast_subtrees(tree1.root_node)
             ast2 = hash_ast_subtrees(tree2.root_node)
-            norm1 = hash_ast_subtrees_normalized(tree1.root_node)
-            norm2 = hash_ast_subtrees_normalized(tree2.root_node)
             tok_sim = compute_token_similarity(
                 source1, source2, language,
                 tree1=tree1, tree2=tree2,
@@ -91,19 +92,17 @@ class Analyzer:
             logger.warning(
                 "Failed to parse sources for similarity, defaulting to 0", exc_info=True
             )
-            ast1, ast2, norm1, norm2 = [], [], [], []
+            ast1, ast2 = [], []
             tok_sim = 0.0
 
-        # Exact structural similarity (order-sensitive)
         ast_sim_exact = compute_ast_similarity(ast1, ast2)
-        # Order-invariant structural similarity (handles reordering)
-        ast_sim_norm = compute_ast_similarity(norm1, norm2)
-        structural_sim = max(ast_sim_exact, ast_sim_norm)
 
         # Multi-level matching using the new detector
         # Use min_match_lines=2 to catch identical fragments (default was 1 but we use 2 for performance)
         detector = PlagiarismDetector(min_match_lines=2, min_function_lines=2)
-        result = detector.detect(source1, source2, lang=language)
+        result = detector.detect(source1, source2, lang=language,
+                                  tree_a=tree1, bytes_a=bytes1,
+                                  tree_b=tree2, bytes_b=bytes2)
         matches = result.matches
 
         # Compute metrics (count ALL lines to be consistent with line indices in matches)
@@ -123,26 +122,7 @@ class Analyzer:
 
         type_coverage = getattr(result.metrics, 'type_coverage', None)
 
-        # Per-type blended similarity: use type_coverage from detector to
-        # weight type-specific TOKEN_BOOST values for each detected match type.
-        if type_coverage and sum(type_coverage.values()) > 0:
-            weighted = 0.0
-            total_weight = 0.0
-            for t, cov in type_coverage.items():
-                boost = TYPE_BOOSTS.get(t, TOKEN_BOOST)
-                if tok_sim > structural_sim:
-                    per_type = structural_sim + boost * (tok_sim - structural_sim)
-                else:
-                    per_type = structural_sim
-                weighted += per_type * cov
-                total_weight += cov
-            ast_sim = weighted / total_weight if total_weight > 0 else structural_sim
-        else:
-            # Fallback: global boost when no type info
-            if tok_sim > structural_sim:
-                ast_sim = structural_sim + TOKEN_BOOST * (tok_sim - structural_sim)
-            else:
-                ast_sim = structural_sim
+        ast_sim = max(ast_sim_exact, tok_sim)
 
         metrics = SimilarityMetrics(
             left_covered=matched_lines_a,
@@ -172,6 +152,10 @@ class Analyzer:
         file1: str,
         file2: str,
         language: str = "python",
+        tree1=None,
+        bytes1: bytes = None,
+        tree2=None,
+        bytes2: bytes = None,
     ) -> AnalysisResult:
         """
         Complete plagiarism analysis between two files.
@@ -179,10 +163,16 @@ class Analyzer:
         This method reads the files from disk and calls analyze_sources().
         For in-memory analysis without file I/O, use analyze_sources() directly.
 
+        If pre-parsed trees (tree1, bytes1, tree2, bytes2) are provided,
+        they will be reused across all sub-detectors. When not provided,
+        the method parses after reading the files.
+
         Args:
             file1: Path to first file
             file2: Path to second file
             language: Programming language
+            tree1, bytes1: Pre-parsed tree and bytes for file1 (skip internal parse)
+            tree2, bytes2: Pre-parsed tree and bytes for file2 (skip internal parse)
 
         Returns:
             AnalysisResult with similarity and typed matches
@@ -192,7 +182,11 @@ class Analyzer:
         with open(file2, encoding="utf-8", errors="ignore") as f:
             source2 = f.read()
 
-        return self.analyze_sources(source1, source2, language, file1_path=file1, file2_path=file2)
+        return self.analyze_sources(
+            source1, source2, language,
+            file1_path=file1, file2_path=file2,
+            tree1=tree1, bytes1=bytes1, tree2=tree2, bytes2=bytes2,
+        )
 
     def analyze_cached(
         self,
@@ -202,15 +196,25 @@ class Analyzer:
         file2_hash: str,
         get_ast_hashes: Callable[[str], list[int] | None],
         language: str = "python",
+        tree1=None,
+        bytes1: bytes = None,
+        tree2=None,
+        bytes2: bytes = None,
     ) -> tuple[float, list[dict[str, Any]], dict[str, Any]]:
         """
         Analyze with caching support (AST hashes).
+
+        If pre-parsed trees (tree1, bytes1, tree2, bytes2) are provided,
+        they will be reused across all sub-detectors, avoiding redundant
+        parsing.
 
         Args:
             file1_path, file2_path: File paths
             file1_hash, file2_hash: File content hashes
             get_ast_hashes: Function to get AST hashes from cache
             language: Programming language
+            tree1, bytes1: Pre-parsed tree and bytes for file1 (skip internal parse)
+            tree2, bytes2: Pre-parsed tree and bytes for file2 (skip internal parse)
 
         Returns:
             Tuple of (ast_similarity, matches_data, metrics)
@@ -236,17 +240,23 @@ class Analyzer:
         ast_sim_exact = compute_ast_similarity(ast1, ast2)
 
         # Token-level similarity
-        tok_sim = compute_token_similarity(source1, source2, language)
+        tok_sim = compute_token_similarity(source1, source2, language,
+                                           tree1=tree1, bytes1=bytes1,
+                                           tree2=tree2, bytes2=bytes2)
 
-        # Blend: gentle token boost
-        if tok_sim > ast_sim_exact:
-            ast_sim = ast_sim_exact + TOKEN_BOOST * (tok_sim - ast_sim_exact)
-        else:
-            ast_sim = ast_sim_exact
+        ast_sim = max(ast_sim_exact, tok_sim)
 
         # Multi-level matching with new detector
+        # Parse once and pass trees through to avoid redundant parsing
+        from .fingerprinting.parser import parse_string_once
+        if tree1 is None or bytes1 is None:
+            tree1, bytes1 = parse_string_once(source1, language)
+        if tree2 is None or bytes2 is None:
+            tree2, bytes2 = parse_string_once(source2, language)
         detector = PlagiarismDetector(min_match_lines=2, min_function_lines=2)
-        result = detector.detect(source1, source2, lang=language)
+        result = detector.detect(source1, source2, lang=language,
+                                  tree_a=tree1, bytes_a=bytes1,
+                                  tree_b=tree2, bytes_b=bytes2)
         matches = result.matches
 
         # Compute metrics (count ALL lines to be consistent with line indices in matches)

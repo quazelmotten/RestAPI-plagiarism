@@ -21,26 +21,59 @@ from .models import Region as Region
 from .models import SimilarityMetrics as SimilarityMetrics
 
 
-def detect_plagiarism(source_a: str, source_b: str, lang_code: str = "python", **kwargs) -> list:
+def detect_plagiarism(
+    source_a: str,
+    source_b: str,
+    lang_code: str = "python",
+    tree_a=None,
+    bytes_a: bytes = None,
+    tree_b=None,
+    bytes_b: bytes = None,
+    **kwargs,
+) -> list:
     """
     Convenience function for single-shot plagiarism detection.
+
+    If pre-parsed trees (tree_a, bytes_a, tree_b, bytes_b) are provided,
+    they will be reused across all sub-detectors, avoiding redundant
+    parsing.
 
     Creates a PlagiarismDetector and returns list of Match objects.
     """
     detector = PlagiarismDetector()
-    result = detector.detect(source_a, source_b, lang=lang_code)
+    result = detector.detect(source_a, source_b, lang=lang_code,
+                              tree_a=tree_a, bytes_a=bytes_a,
+                              tree_b=tree_b, bytes_b=bytes_b)
     return result.matches
 
 
-def detect_plagiarism_from_files(file_a: str, file_b: str, lang_code: str = "python", **kwargs) -> list:
+def detect_plagiarism_from_files(
+    file_a: str,
+    file_b: str,
+    lang_code: str = "python",
+    tree_a=None,
+    bytes_a: bytes = None,
+    tree_b=None,
+    bytes_b: bytes = None,
+    **kwargs,
+) -> list:
     """
     Convenience function for file-based plagiarism detection.
+
+    If pre-parsed trees (tree_a, bytes_a, tree_b, bytes_b) are provided,
+    they will be reused across all sub-detectors. When not provided,
+    the method parses after reading the files.
     """
     with open(file_a, encoding="utf-8", errors="ignore") as f:
         source_a = f.read()
     with open(file_b, encoding="utf-8", errors="ignore") as f:
         source_b = f.read()
-    return detect_plagiarism(source_a, source_b, lang_code=lang_code, **kwargs)
+    return detect_plagiarism(
+        source_a, source_b, lang_code=lang_code,
+        tree_a=tree_a, bytes_a=bytes_a,
+        tree_b=tree_b, bytes_b=bytes_b,
+        **kwargs,
+    )
 
 
 __all__ = [
