@@ -14,11 +14,12 @@ services:
       POSTGRES_USER: ${DB_USER:-plagiarism_user}
       POSTGRES_PASSWORD: ${DB_PASS}
       PGDATA: /var/lib/postgresql/data/pgdata
+      PGPORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:-plagiarism_db}
       DB_USER: ${DB_USER:-plagiarism_user}
       DB_PASS: ${DB_PASS}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:${DB_PORT:-5432}"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -60,7 +61,7 @@ services:
       context: .
       dockerfile: api.Dockerfile
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
     environment:
       # Database
       DB_HOST: postgres
@@ -129,7 +130,7 @@ services:
       - uploads-data:/app/uploads
       - s3-storage:/app/s3_storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:${API_PORT:-8000}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -179,7 +180,7 @@ services:
       WORKER_PREFETCH_COUNT: ${WORKER_PREFETCH_COUNT:-1}
 
       # Embedding service (F2LLM-v2-80M)
-      EMBEDDING_ENABLED: ${EMBEDDING_ENABLED:-true}
+      EMBEDDING_ENABLED: ${EMBEDDING_ENABLED:-false}  # v2.0 detector doesn't need embeddings
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-codefuse-ai/F2LLM-v2-80M}
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-256}
       EMBEDDING_USE_QUANTIZATION: ${EMBEDDING_USE_QUANTIZATION:-true}
@@ -213,8 +214,10 @@ services:
       RABBITMQ_DEFAULT_USER: ${RMQ_USER:-plagiarism_mq_user}
       RABBITMQ_DEFAULT_PASS: ${RMQ_PASS}
       RABBITMQ_FEATURE_FLAGS: stream_filtering
+      RABBITMQ_NODE_PORT: ${RMQ_PORT:-5672}
     ports:
-      - "15672:15672"
+      - "${RMQ_PORT:-5672}:${RMQ_PORT:-5672}"
+      - "${RMQ_MGMT_PORT:-15672}:15672"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     networks:
@@ -233,15 +236,15 @@ services:
     container_name: plagiarism-redis
     hostname: redis
     image: redis:8.6.1-alpine
-    command: redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru
+    command: redis-server --port ${REDIS_PORT:-6379} --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT:-6379}:${REDIS_PORT:-6379}"
     volumes:
       - redis-data:/data
     networks:
       - plagiarism-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -p ${REDIS_PORT:-6379} ping"]
       interval: 10s
       timeout: 5s
       retries: 5

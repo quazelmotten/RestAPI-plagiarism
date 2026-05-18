@@ -6,7 +6,7 @@ if [ "$number_of_files" == "0" ]; then
   initdb -D /var/lib/postgresql/data/ -U postgres
   cp /database/pg_hba.conf /var/lib/postgresql/data/
 fi
-pg_ctl -D /var/lib/postgresql/data/ -l ./db_log start
+pg_ctl -D /var/lib/postgresql/data/ -l ./db_log start -o "-p ${PGPORT:-5432}"
 
 sleep 5
 psql -U postgres -d postgres -c "CREATE USER ${DB_USER:-appuser} WITH PASSWORD '${DB_PASS:-password}' CREATEDB;" || echo "User might already exist"
