@@ -19,7 +19,7 @@ from plagiarism_core.fingerprinting.languages import detect_language_from_extens
 from auth.dependencies import get_current_user
 from auth.models import User
 from config import settings
-from dependencies import get_publisher, get_s3_storage
+from dependencies import get_publisher, get_redis_client, get_s3_storage
 from exceptions.exceptions import PlagiarismValidationError
 from schemas.common import PaginatedResponse
 from tasks.dependencies import get_task_service, valid_task_id
@@ -131,6 +131,42 @@ async def get_all_tasks(
 
 
 @router.get(
+    "/tasks/orphaned",
+    response_model=PaginatedResponse,
+    summary="List orphaned tasks",
+    description="List tasks with assignment_id = NULL (unassigned tasks).",
+)
+async def get_orphaned_tasks(
+    task_service: TaskService = Depends(get_task_service),
+    limit: int = Query(default=50, ge=1, le=500, description="Number of tasks to return"),
+    offset: int = Query(default=0, ge=0, description="Number of tasks to skip"),
+    current_user: User = Depends(get_current_user),
+):
+    """Get orphaned tasks (tasks without an assignment). Admin only."""
+    return await task_service.get_orphaned_tasks(limit=limit, offset=offset)
+
+
+@router.post(
+    "/tasks/orphaned/cleanup",
+    status_code=status.HTTP_200_OK,
+    summary="Bulk-delete orphaned tasks",
+    description="Permanently delete all orphaned tasks with full cascade cleanup.",
+)
+async def cleanup_orphaned_tasks(
+    task_service: TaskService = Depends(get_task_service),
+    s3_storage=Depends(get_s3_storage),
+    redis_client=Depends(get_redis_client),
+    current_user: User = Depends(get_current_user),
+):
+    """Bulk-delete all orphaned tasks. Admin only."""
+    result = await task_service.bulk_delete_orphaned_tasks(
+        s3_storage=s3_storage,
+        redis_client=redis_client,
+    )
+    return result
+
+
+@router.get(
     "/tasks/{task_id}",
     response_model=TaskResponse,
     summary="Get plagiarism task details",
@@ -152,3 +188,74 @@ async def get_plagiarism_result(
 ):
     """Get plagiarism task by ID. Uses dependency validation to ensure task exists."""
     return task
+
+
+@router.post(
+    "/tasks/{task_id}/soft-delete",
+    status_code=status.HTTP_200_OK,
+    summary="Soft-delete a task",
+    description="Mark a task as deleted without removing files or results.",
+)
+async def soft_delete_task(
+    task_id: str,
+    task_service: TaskService = Depends(get_task_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Soft-delete a task. Reviewer or higher role required."""
+    success = await task_service.soft_delete_task(task_id)
+    if not success:
+        raise PlagiarismValidationError(f"Task {task_id} not found")
+    return {"success": True, "task_id": task_id, "message": "Task soft-deleted"}
+
+
+@router.delete(
+    "/tasks/{task_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Hard-delete a task",
+    description="Permanently delete a task with full cascade (files, results, S3, Redis).",
+)
+async def hard_delete_task(
+    task_id: str,
+    task_service: TaskService = Depends(get_task_service),
+    s3_storage=Depends(get_s3_storage),
+    redis_client=Depends(get_redis_client),
+    current_user: User = Depends(get_current_user),
+):
+    """Hard-delete a task with full cascade cleanup. Admin only."""
+    result = await task_service.hard_delete_task(
+        task_id,
+        s3_storage=s3_storage,
+        redis_client=redis_client,
+    )
+    if not result.get("success"):
+        raise PlagiarismValidationError(result.get("error", "Failed to delete task"))
+    return result
+
+
+@router.post(
+    "/tasks/{task_id}/reassign",
+    status_code=status.HTTP_200_OK,
+    summary="Reassign orphaned task to assignment",
+    description="Assign an orphaned task (assignment_id=NULL) to a specific assignment.",
+)
+async def reassign_task(
+    task_id: str,
+    assignment_id: str = Form(..., description="Assignment UUID to reassign the task to"),
+    task_service: TaskService = Depends(get_task_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Reassign an orphaned task to an assignment. Admin only."""
+    try:
+        validated_assignment_id = str(uuid.UUID(assignment_id.strip()))
+    except ValueError:
+        raise PlagiarismValidationError("Invalid assignment_id format. Must be a valid UUID.")
+
+    success = await task_service.reassign_task(task_id, validated_assignment_id)
+    if not success:
+        raise PlagiarismValidationError(f"Task {task_id} not found or already assigned")
+    return {
+        "success": True,
+        "task_id": task_id,
+        "assignment_id": validated_assignment_id,
+        "message": "Task reassigned successfully",
+    }

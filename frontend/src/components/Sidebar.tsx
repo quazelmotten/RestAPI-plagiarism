@@ -25,9 +25,24 @@ import {
   DrawerCloseButton,
   useDisclosure,
 } from '@chakra-ui/react';
-import { FiMenu } from 'react-icons/fi';
+import {
+  FiMenu,
+  FiUploadCloud,
+  FiFileText,
+  FiCheckCircle,
+  FiBookOpen,
+  FiChevronDown,
+  FiChevronRight,
+  FiFolder,
+  FiGlobe,
+} from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../contexts/AuthContext';
+import { MdDragIndicator } from 'react-icons/md';
 import { useQuery } from '@tanstack/react-query';
+import api, { API_ENDPOINTS } from '../services/api';
+import { SIDEBAR_WIDTH_PX } from '../constants/layout';
+import { useSidebar } from '../contexts/SidebarContext';
 import {
   DndContext,
   closestCenter,
@@ -40,28 +55,6 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import {
-  FiHome,
-  FiFileText,
-  FiShare2,
-  FiUpload,
-  FiBarChart2,
-  FiColumns,
-  FiBookOpen,
-  FiPlus,
-  FiChevronDown,
-  FiChevronRight,
-  FiFolder,
-  FiList,
-  FiGlobe,
-  FiUsers,
-} from 'react-icons/fi';
-import { useAuth } from '../contexts/AuthContext';
-import { MdDragIndicator } from 'react-icons/md';
-import api, { API_ENDPOINTS } from '../services/api';
-import { useViewMode } from '../contexts/ViewModeContext';
-import { SIDEBAR_WIDTH_PX } from '../constants/layout';
-import { useSidebar } from '../contexts/SidebarContext';
 
 const blink = keyframes`
   0%, 50% { opacity: 1; }
@@ -104,14 +97,10 @@ interface SubjectGroup {
 
 const SIDEBAR_LOCAL_STORAGE_KEY = 'sidebar-subjects-collapsed';
 
-const classicMenuItems = [
-  { path: '/dashboard', label: 'overview', icon: FiHome },
+const navItems = [
+  { path: '/dashboard/uploads', label: 'uploads', icon: FiFileText },
+  { path: '/dashboard/review', label: 'review', icon: FiCheckCircle },
   { path: '/dashboard/assignments', label: 'assignments', icon: FiBookOpen },
-  { path: '/dashboard/submissions', label: 'submissions', icon: FiFileText },
-  { path: '/dashboard/graph', label: 'plagiarismGraph', icon: FiShare2 },
-  { path: '/dashboard/upload', label: 'uploadFiles', icon: FiUpload },
-  { path: '/dashboard/results', label: 'results', icon: FiBarChart2 },
-  { path: '/dashboard/pair-comparison', label: 'pairComparison', icon: FiColumns },
 ];
 
 const SortableAssignment: React.FC<{
@@ -184,7 +173,6 @@ const Sidebar: React.FC = () => {
   const { t: tNav } = useTranslation('navigation');
   const { t: tCommon } = useTranslation();
   const location = useLocation();
-  const { mode } = useViewMode();
   const { user } = useAuth();
   const { isMobileOpen, closeMobile } = useSidebar();
   const [assignmentsExpanded, setAssignmentsExpanded] = useState(true);
@@ -233,7 +221,12 @@ const Sidebar: React.FC = () => {
 
   const isLoading = assignmentsLoading || subjectsLoading;
 
-  const isActive = (path: string) => location.pathname === path || location.pathname === `${path}/`;
+  const isActive = (path: string) => {
+    if (path === '/dashboard/uploads' || path === '/dashboard/assignments') {
+      return location.pathname.startsWith(path);
+    }
+    return location.pathname === path || location.pathname === `${path}/`;
+  };
 
   const toggleSubject = (subjectId: string) => {
     setCollapsedSubjects(prev => {
@@ -257,7 +250,6 @@ const Sidebar: React.FC = () => {
         subjectMap.set(s.id, s.assignments || []);
       }
     }
-    // Use uncategorized from the API response, not from assignments
     const uncategorized = uncategorizedAssignments || [];
 
     const sortAssignments = (groupId: string, arr: Assignment[]) => {
@@ -342,6 +334,30 @@ const Sidebar: React.FC = () => {
     setActiveDragId(event.active.id as string);
   };
 
+  const renderNavItems = (onClick?: () => void) => (
+    <>
+      {navItems.map((item) => (
+        <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none' }} onClick={onClick}>
+          <Flex
+            align="center"
+            px={4}
+            py={3}
+            borderRadius="md"
+            bg={isActive(item.path) ? 'brand.500' : 'transparent'}
+            color={isActive(item.path) ? 'white' : 'inherit'}
+            _hover={{
+              bg: isActive(item.path) ? 'brand.600' : hoverBg,
+            }}
+            transition="all 0.2s"
+          >
+            <Icon as={item.icon} boxSize={5} mr={3} />
+            <Text fontWeight="medium">{tNav(item.label)}</Text>
+          </Flex>
+        </NavLink>
+      ))}
+    </>
+  );
+
   return (
     <>
       {/* Desktop fixed sidebar - hidden on mobile */}
@@ -376,198 +392,122 @@ const Sidebar: React.FC = () => {
         </Text>
       </Box>
 
-      {mode === 'classic' ? (
-        <VStack spacing={2} align="stretch">
-          {classicMenuItems.map((item) => (
-            <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none' }}>
-              <Flex
-                align="center"
-                px={4}
-                py={3}
-                borderRadius="md"
-                bg={isActive(item.path) ? 'brand.500' : 'transparent'}
-                color={isActive(item.path) ? 'white' : 'inherit'}
-                _hover={{
-                  bg: isActive(item.path) ? 'brand.600' : hoverBg,
-                }}
-                transition="all 0.2s"
-              >
-                <Icon as={item.icon} boxSize={5} mr={3} />
-                <Text fontWeight="medium">{tNav(item.label)}</Text>
-              </Flex>
-            </NavLink>
-          ))}
-           {user?.is_global_admin && (
-             <NavLink to="/dashboard/users" style={{ textDecoration: 'none' }}>
-               <Flex
-                 align="center"
-                 px={4}
-                 py={3}
-                 borderRadius="md"
-                 bg={isActive('/dashboard/users') ? 'brand.500' : 'transparent'}
-                 color={isActive('/dashboard/users') ? 'white' : 'inherit'}
-                 _hover={{
-                   bg: isActive('/dashboard/users') ? 'brand.600' : hoverBg,
-                 }}
-                 transition="all 0.2s"
-               >
-                 <Icon as={FiUsers} boxSize={5} mr={3} />
-                 <Text fontWeight="medium">{tCommon('users')}</Text>
-               </Flex>
-             </NavLink>
-           )}
-        </VStack>
-      ) : (
+      <VStack spacing={2} align="stretch">
+        {renderNavItems()}
+      </VStack>
+
+      <Divider my={4} />
+
+      <Flex
+        align="center"
+        justify="space-between"
+        px={4}
+        mb={2}
+        cursor="pointer"
+        onClick={() => setAssignmentsExpanded(!assignmentsExpanded)}
+        userSelect="none"
+      >
+        <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wider" color={sectionColor}>
+          {tCommon('assignments')}
+        </Text>
+        <Icon
+          as={assignmentsExpanded ? FiChevronDown : FiChevronRight}
+          boxSize={3.5}
+          color={sectionColor}
+        />
+      </Flex>
+
+      {assignmentsExpanded && (
         <DndContext
           collisionDetection={closestCenter}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <VStack spacing={1} align="stretch" flexShrink={0}>
-            <NavLink to="/dashboard" style={{ textDecoration: 'none' }}>
-              <Flex
-                align="center"
-                px={4}
-                py={2.5}
-                borderRadius="md"
-                bg={isActive('/dashboard') ? 'brand.500' : 'transparent'}
-                color={isActive('/dashboard') ? 'white' : 'inherit'}
-                _hover={{ bg: isActive('/dashboard') ? 'brand.600' : hoverBg }}
-                transition="all 0.2s"
-              >
-                <Icon as={FiHome} boxSize={4.5} mr={3} />
-                <Text fontWeight="medium" fontSize="sm">{tNav('overview')}</Text>
+          <VStack spacing={0} align="stretch" flex="1" minH={0} overflowY="auto" css={{
+            '&::-webkit-scrollbar': { width: '4px' },
+            '&::-webkit-scrollbar-thumb': { bg: scrollbarBg, borderRadius: '2px' },
+          }}>
+            {isLoading ? (
+              <Flex justify="center" py={4}>
+                <Spinner size="sm" />
               </Flex>
-            </NavLink>
+            ) : subjectGroups.length === 0 ? (
+              <Text fontSize="xs" color={mutedColor} px={4} py={2}>
+                {tCommon('noAssignments')}
+              </Text>
+            ) : (
+              subjectGroups.map((group) => {
+                const isCollapsed = collapsedSubjects.has(group.id);
 
-            <NavLink to="/dashboard/assignments" style={{ textDecoration: 'none' }}>
-              <Flex
-                align="center"
-                px={4}
-                py={2.5}
-                borderRadius="md"
-                bg={isActive('/dashboard/assignments') ? 'brand.500' : 'transparent'}
-                color={isActive('/dashboard/assignments') ? 'white' : 'inherit'}
-                _hover={{ bg: isActive('/dashboard/assignments') ? 'brand.600' : hoverBg }}
-                transition="all 0.2s"
-                gap={2}
-              >
-                <Icon as={FiList} boxSize={4.5} mr={1} />
-                <Text fontWeight="medium" fontSize="sm">{tNav('viewAllAssignments')}</Text>
-              </Flex>
-            </NavLink>
+                return (
+                  <Box key={group.id} mb={1}>
+                    <Flex
+                      align="center"
+                      justify="space-between"
+                      px={3}
+                      py={1.5}
+                      borderRadius="md"
+                      cursor="pointer"
+                      onClick={() => toggleSubject(group.id)}
+                      userSelect="none"
+                      bg={subjectHeaderBg}
+                      _hover={{ bg: subjectHeaderHoverBg }}
+                      transition="all 0.15s"
+                    >
+                      <HStack spacing={2} flex={1} minW={0}>
+                        <Icon
+                          as={isCollapsed ? FiChevronRight : FiChevronDown}
+                          boxSize={3}
+                          color={mutedColor}
+                          flexShrink={0}
+                        />
+                        <Icon
+                          as={FiFolder}
+                          boxSize={3.5}
+                          color={group.isUncategorized ? 'gray.400' : 'purple.500'}
+                          flexShrink={0}
+                        />
+                        <Text
+                          fontSize="xs"
+                          fontWeight="semibold"
+                          noOfLines={1}
+                          color={group.isUncategorized ? mutedColor : 'inherit'}
+                        >
+                          {group.name}
+                        </Text>
+                        <Badge size="sm" colorScheme={group.isUncategorized ? 'gray' : 'purple'} flexShrink={0}>
+                          {group.assignments.length}
+                        </Badge>
+                      </HStack>
+                    </Flex>
+
+                    {!isCollapsed && (
+                      <VStack spacing={0} align="stretch" pl={2}>
+                        <SortableContext items={group.assignments.map(a => a.id)} strategy={verticalListSortingStrategy}>
+                          {group.assignments.map((assignment) => {
+                            const path = `/dashboard/assignments/${assignment.id}`;
+                            const isCurrent = location.pathname.startsWith(path);
+                            const isDragging = activeDragId === assignment.id;
+
+                            return (
+                              <SortableAssignment
+                                key={assignment.id}
+                                assignment={assignment}
+                                isCurrent={isCurrent}
+                                hoverBg={hoverBg}
+                                t={tCommon}
+                                isDragging={isDragging}
+                              />
+                            );
+                          })}
+                        </SortableContext>
+                      </VStack>
+                    )}
+                  </Box>
+                );
+              })
+            )}
           </VStack>
-
-          <Divider my={4} />
-
-          <Flex
-            align="center"
-            justify="space-between"
-            px={4}
-            mb={2}
-            cursor="pointer"
-            onClick={() => setAssignmentsExpanded(!assignmentsExpanded)}
-            userSelect="none"
-          >
-            <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wider" color={sectionColor}>
-              {tCommon('assignments')}
-            </Text>
-            <Icon
-              as={assignmentsExpanded ? FiChevronDown : FiChevronRight}
-              boxSize={3.5}
-              color={sectionColor}
-            />
-          </Flex>
-
-          {assignmentsExpanded && (
-            <VStack spacing={0} align="stretch" flex="1" minH={0} overflowY="auto" css={{
-              '&::-webkit-scrollbar': { width: '4px' },
-              '&::-webkit-scrollbar-thumb': { bg: scrollbarBg, borderRadius: '2px' },
-            }}>
-              {isLoading ? (
-                <Flex justify="center" py={4}>
-                  <Spinner size="sm" />
-                </Flex>
-              ) : subjectGroups.length === 0 ? (
-                <Text fontSize="xs" color={mutedColor} px={4} py={2}>
-                  {tCommon('noAssignments')}
-                </Text>
-              ) : (
-                subjectGroups.map((group) => {
-                  const isCollapsed = collapsedSubjects.has(group.id);
-
-                  return (
-                    <Box key={group.id} mb={1}>
-                      <Flex
-                        align="center"
-                        justify="space-between"
-                        px={3}
-                        py={1.5}
-                        borderRadius="md"
-                        cursor="pointer"
-                        onClick={() => toggleSubject(group.id)}
-                        userSelect="none"
-                        bg={subjectHeaderBg}
-                        _hover={{ bg: subjectHeaderHoverBg }}
-                        transition="all 0.15s"
-                      >
-                        <HStack spacing={2} flex={1} minW={0}>
-                          <Icon
-                            as={isCollapsed ? FiChevronRight : FiChevronDown}
-                            boxSize={3}
-                            color={mutedColor}
-                            flexShrink={0}
-                          />
-                          <Icon
-                            as={FiFolder}
-                            boxSize={3.5}
-                            color={group.isUncategorized ? 'gray.400' : 'purple.500'}
-                            flexShrink={0}
-                          />
-                          <Text
-                            fontSize="xs"
-                            fontWeight="semibold"
-                            noOfLines={1}
-                            color={group.isUncategorized ? mutedColor : 'inherit'}
-                          >
-                            {group.name}
-                          </Text>
-                          <Badge size="sm" colorScheme={group.isUncategorized ? 'gray' : 'purple'} flexShrink={0}>
-                            {group.assignments.length}
-                          </Badge>
-                        </HStack>
-                      </Flex>
-
-                      {!isCollapsed && (
-                        <VStack spacing={0} align="stretch" pl={2}>
-                          <SortableContext items={group.assignments.map(a => a.id)} strategy={verticalListSortingStrategy}>
-                            {group.assignments.map((assignment) => {
-                              const path = `/dashboard/assignments/${assignment.id}`;
-                              const isCurrent = location.pathname.startsWith(path);
-                              const isDragging = activeDragId === assignment.id;
-
-                              return (
-                                <SortableAssignment
-                                  key={assignment.id}
-                                  assignment={assignment}
-                                  isCurrent={isCurrent}
-                                  hoverBg={hoverBg}
-                                  t={tCommon}
-                                  isDragging={isDragging}
-                                />
-                              );
-                            })}
-                          </SortableContext>
-                        </VStack>
-                      )}
-                    </Box>
-                  );
-                })
-              )}
-
-
-            </VStack>
-          )}
 
           <DragOverlay>
             {activeDragId ? (
@@ -625,61 +565,12 @@ const Sidebar: React.FC = () => {
           </Box>
         </DrawerHeader>
         <DrawerBody p={0} overflow="auto">
-          {/* Classic menu items for mobile */}
           <VStack spacing={1} align="stretch" px={2} py={2}>
-            {classicMenuItems.map((item) => (
-              <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none' }} onClick={closeMobile}>
-                <Flex
-                  align="center"
-                  px={3}
-                  py={2.5}
-                  borderRadius="md"
-                  bg={isActive(item.path) ? 'brand.500' : 'transparent'}
-                  color={isActive(item.path) ? 'white' : 'inherit'}
-                  _hover={{ bg: isActive(item.path) ? 'brand.600' : hoverBg }}
-                  transition="all 0.2s"
-                >
-                  <Icon as={item.icon} boxSize={4.5} mr={3} />
-                  <Text fontWeight="medium" fontSize="sm">{tNav(item.label)}</Text>
-                </Flex>
-              </NavLink>
-            ))}
-            {user?.is_global_admin && (
-              <NavLink to="/dashboard/users" style={{ textDecoration: 'none' }} onClick={closeMobile}>
-                <Flex
-                  align="center"
-                  px={3}
-                  py={2.5}
-                  borderRadius="md"
-                  bg={isActive('/dashboard/users') ? 'brand.500' : 'transparent'}
-                  color={isActive('/dashboard/users') ? 'white' : 'inherit'}
-                  _hover={{ bg: isActive('/dashboard/users') ? 'brand.600' : hoverBg }}
-                  transition="all 0.2s"
-                >
-                  <Icon as={FiUsers} boxSize={4.5} mr={3} />
-                  <Text fontWeight="medium" fontSize="sm">{tCommon('users')}</Text>
-                </Flex>
-              </NavLink>
-            )}
-            <Divider my={2} />
-            <NavLink to="/dashboard/assignments" style={{ textDecoration: 'none' }} onClick={closeMobile}>
-              <Flex
-                align="center"
-                px={3}
-                py={2}
-                borderRadius="md"
-                bg={isActive('/dashboard/assignments') ? 'brand.500' : 'transparent'}
-                color={isActive('/dashboard/assignments') ? 'white' : 'inherit'}
-                _hover={{ bg: isActive('/dashboard/assignments') ? 'brand.600' : hoverBg }}
-                transition="all 0.2s"
-              >
-                <Icon as={FiList} boxSize={4.5} mr={3} />
-                <Text fontWeight="medium" fontSize="sm">{tNav('viewAllAssignments')}</Text>
-              </Flex>
-            </NavLink>
+            {renderNavItems(closeMobile)}
           </VStack>
 
-          {/* Assignments list for mobile */}
+          <Divider my={2} />
+
           <Box px={2} py={2} overflow="auto" maxH="calc(100vh - 280px)">
             {isLoading ? (
               <Flex justify="center" py={4}>

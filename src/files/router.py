@@ -13,7 +13,9 @@ from dependencies import get_s3_storage
 from exceptions.exceptions import NotFoundError
 from files.dependencies import get_file_service, valid_file_id
 from files.schemas import (
+    BulkFileMoveRequest,
     FileContentResponse,
+    FileMoveRequest,
     FileResponse,
     ReviewNoteCreate,
     ReviewNoteResponse,
@@ -179,6 +181,95 @@ async def unconfirm_file(
 ):
     """Remove confirmed status from a file. Requires reviewer or higher role."""
     return await file_service.unconfirm_file(str(file_id))
+
+
+@router.post(
+    "/files/{file_id}/move",
+    response_model=FileResponse,
+    summary="Move file to another upload",
+    description="Move a file from one upload to another.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": FileResponse,
+            "description": "File moved successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "File or target upload not found",
+        },
+    },
+)
+async def move_file(
+    file_id: uuid.UUID,
+    request: FileMoveRequest,
+    file_service: FileService = Depends(get_file_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Move a file to a different upload. Requires reviewer or higher role."""
+    return await file_service.move_file(str(file_id), request.target_task_id)
+
+
+@router.delete(
+    "/files/{file_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a file",
+    description="Soft-delete a file by setting its deleted_at timestamp.",
+    responses={
+        status.HTTP_204_NO_CONTENT: {
+            "description": "File deleted successfully",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": None,
+            "description": "File not found",
+        },
+    },
+)
+async def delete_file(
+    file_id: uuid.UUID = Path(..., description="UUID of the file"),
+    file_service: FileService = Depends(get_file_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Soft-delete a file. Requires reviewer or higher role."""
+    await file_service.delete_file(str(file_id))
+
+
+@router.post(
+    "/files/bulk/move",
+    response_model=PaginatedResponse,
+    summary="Bulk move files to another upload",
+    description="Move multiple files to a different upload. Processes sequentially to avoid race conditions.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": PaginatedResponse,
+            "description": "Files moved successfully",
+        },
+    },
+)
+async def bulk_move_files(
+    request: BulkFileMoveRequest,
+    file_service: FileService = Depends(get_file_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Move multiple files to a different upload. Requires reviewer or higher role."""
+    moved = []
+    failed = []
+
+    for file_id in request.file_ids:
+        try:
+            result = await file_service.move_file(str(file_id), str(request.target_task_id))
+            if result:
+                moved.append(result)
+            else:
+                failed.append(file_id)
+        except Exception:
+            failed.append(file_id)
+
+    return PaginatedResponse(
+        items=moved,
+        total=len(moved),
+        limit=len(moved),
+        offset=0,
+    )
 
 
 @router.get(

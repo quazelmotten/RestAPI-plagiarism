@@ -214,9 +214,10 @@
   "keyboardShortcuts": "Keyboard Shortcuts",
   "emptyStates": {
     "uploadToGetStarted": "Upload files to get started",
-    "uploadToSeeActivity": "Upload files to see activity",
-    "uploadToGenerateGraph": "Upload files to generate graph"
+    "uploadToSeeActivity": "Upload files to see activity"
   },
+  "noAssignments": "No assignments yet",
+  "uncategorized": "Uncategorized",
   "settings": "Settings",
   "apiKeys": "API Keys",
   "createApiKey": "Create new key",
@@ -239,5 +240,21 @@
   "failedToUpdateUsername": "Failed to update username",
   "changePasswordInSettings": "Change your password in the Settings page.",
   "apiKeyCreatedDesc": "Your new API key is shown below. Store it securely!",
-  "adminUsers": "Admin Users"
+  "adminUsers": "Admin Users",
+  "session": "Session",
+  "optional": "optional",
+  "language": "Language",
+  "completed": "Completed",
+  "processing": "Processing",
+  "failed": "Failed",
+  "success": "Success",
+  "created": "Created",
+  "fileManagement": "File Management",
+  "noFilesFound": "No files found",
+  "backToUploads": "Back to Uploads",
+  "selectAssignment": "Select an assignment",
+  "moveToUpload": "Move to upload...",
+  "moveFiles": "Move Files",
+  "move": "Move",
+  "filterByAssignment": "Filter by assignment..."
 }

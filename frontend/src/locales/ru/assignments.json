@@ -27,8 +27,9 @@
   "table": {
     "name": "Название",
     "description": "Описание",
-    "tasks": "Задачи",
+    "tasks": "Загрузки",
     "files": "№ Файлов",
+    "highSim": "Выс. сходство",
     "created": "Дата создания",
     "actions": "Действия"
   },
@@ -62,5 +63,7 @@
   "filename": "Имя файла",
   "task": "ID проверки",
   "maxSim": "Макс. % плагиата",
-  "allTasksAggregated": "Все задачи"
+  "allTasksAggregated": "Все задачи",
+  "noUploads": "Загрузок пока нет",
+  "uploadFilesToStart": "Загрузите файлы, чтобы начать анализ"
 }

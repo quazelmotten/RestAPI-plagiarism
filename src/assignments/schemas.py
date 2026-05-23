@@ -54,6 +54,8 @@ class AssignmentResponse(CustomBaseModel):
     created_at: datetime | None = None
     tasks_count: int = 0
     files_count: int = 0
+    uploads_count: int = 0
+    high_similarity_count: int = 0
 
 
 class AssignmentUpdate(CustomBaseModel):

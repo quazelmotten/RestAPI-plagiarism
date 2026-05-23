@@ -18,6 +18,8 @@ class TaskCreate(CustomBaseModel):
 
 class TaskResponse(CustomBaseModel):
     task_id: str
+    name: str | None = None
+    language: str | None = None
     status: str
     similarity: float | None = None
     matches: list[dict] | dict | None = None
@@ -28,6 +30,8 @@ class TaskResponse(CustomBaseModel):
 
 class TaskListResponse(CustomBaseModel):
     task_id: str
+    name: str | None = None
+    language: str | None = None
     status: str
     similarity: float | None = None
     matches: list[dict] | dict | None = None
@@ -46,5 +50,16 @@ class TaskListResponse(CustomBaseModel):
 
 class TaskCreateResponse(CustomBaseModel):
     task_id: str
+    name: str | None = None
     status: str
     files_count: int
+
+
+class TaskUpdateRequest(CustomBaseModel):
+    name: str | None = None
+    language: str | None = None
+    assignment_id: str | None = None
+
+
+class ReanalyzeRequest(CustomBaseModel):
+    language: str | None = None

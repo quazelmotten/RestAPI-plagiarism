@@ -5,8 +5,9 @@ Tests file-related database operations.
 
 import os
 import sys
+import uuid
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_project_root, "src"))
@@ -279,3 +280,81 @@ class TestFileRepository:
         result = await repo.get_file_similarities(str(sample_file.id))
 
         assert len(result.items) == 0
+
+    # ------------------------------------------------------------------
+    # move_file
+    # ------------------------------------------------------------------
+
+    async def test_move_file_moves_file_and_commits(self, repo, mock_db, sample_file, sample_task):
+        """Happy path: file found, target task found, task_id updated, commit + refresh."""
+        target_task_id = str(uuid.uuid4())
+        mock_db.get.side_effect = [sample_file, sample_task]
+        mock_db.commit = AsyncMock()
+        mock_db.refresh = AsyncMock()
+
+        result = await repo.move_file(sample_file.id, target_task_id)
+
+        assert result is sample_file
+        assert sample_file.task_id == target_task_id
+        mock_db.commit.assert_called_once()
+        mock_db.refresh.assert_called_once_with(sample_file)
+        # First db.get = file, second db.get = target task
+        assert mock_db.get.call_count == 2
+
+    async def test_move_file_returns_none_when_file_not_found(self, repo, mock_db):
+        mock_db.get.return_value = None
+
+        result = await repo.move_file("nonexistent", str(uuid.uuid4()))
+
+        assert result is None
+
+    async def test_move_file_returns_none_when_target_task_not_found(self, repo, mock_db, sample_file):
+        mock_db.get.side_effect = [sample_file, None]
+
+        result = await repo.move_file(sample_file.id, str(uuid.uuid4()))
+
+        assert result is None
+        mock_db.commit.assert_not_called()
+
+    # ------------------------------------------------------------------
+    # exist
+    # ------------------------------------------------------------------
+
+    async def test_exist_returns_true_when_file_found(self, repo, mock_db, sample_file):
+        mock_db.get.return_value = sample_file
+
+        result = await repo.exist(sample_file.id)
+
+        assert result is True
+        mock_db.get.assert_called_once_with(File, sample_file.id)
+
+    async def test_exist_returns_false_when_file_missing(self, repo, mock_db):
+        mock_db.get.return_value = None
+
+        result = await repo.exist("nonexistent")
+
+        assert result is False
+
+    # ------------------------------------------------------------------
+    # delete_file
+    # ------------------------------------------------------------------
+
+    async def test_delete_file_sets_deleted_at_and_commits(self, repo, mock_db, sample_file):
+        now_dt = datetime(2025, 1, 1, tzinfo=UTC)
+        mock_db.get.return_value = sample_file
+        mock_db.commit = AsyncMock()
+
+        with patch("files.repository.datetime") as mock_dt:
+            mock_dt.now.return_value = now_dt
+            result = await repo.delete_file(sample_file.id)
+
+        assert result is True
+        assert sample_file.deleted_at == now_dt
+        mock_db.commit.assert_called_once()
+
+    async def test_delete_file_returns_false_when_file_not_found(self, repo, mock_db):
+        mock_db.get.return_value = None
+
+        result = await repo.delete_file("nonexistent")
+
+        assert result is False

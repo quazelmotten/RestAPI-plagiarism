@@ -2,6 +2,8 @@
 Files domain schemas - Pydantic models for file request/response.
 """
 
+import uuid
+
 from schemas.base import CustomBaseModel
 
 
@@ -63,3 +65,12 @@ class ReviewNoteResponse(CustomBaseModel):
 
 class ReviewNoteCreate(CustomBaseModel):
     content: str
+
+
+class FileMoveRequest(CustomBaseModel):
+    target_task_id: uuid.UUID
+
+
+class BulkFileMoveRequest(CustomBaseModel):
+    file_ids: list[uuid.UUID]
+    target_task_id: uuid.UUID

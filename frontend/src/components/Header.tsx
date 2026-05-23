@@ -21,7 +21,6 @@ import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { FiMoon, FiSun, FiClock, FiChevronDown, FiMenu } from 'react-icons/fi';
 import { FiCheckCircle, FiAlertCircle, FiActivity, FiLayers } from 'react-icons/fi';
-import { useViewMode } from '../contexts/ViewModeContext';
 import { useAssignmentInfo } from '../contexts/AssignmentContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSidebar } from '../contexts/SidebarContext';
@@ -33,22 +32,22 @@ import { getStatusColorScheme } from '../utils/statusColors';
 const ROUTE_TITLES: Record<string, string> = {
   '/dashboard': 'overview',
   '/dashboard/': 'overview',
+  '/dashboard/uploads': 'uploads',
+  '/dashboard/review': 'review',
+  '/dashboard/quick-check': 'quickCheck',
   '/dashboard/assignments': 'assignments',
-  '/dashboard/submissions': 'submissions',
-  '/dashboard/graph': 'plagiarismGraph',
-  '/dashboard/upload': 'uploadFiles',
-  '/dashboard/results': 'results',
-  '/dashboard/pair-comparison': 'pairComparison',
+  '/dashboard/settings': 'settings',
+  '/dashboard/admin/stats': 'adminStats',
 };
 
 const BREADCRUMB_MAP: Record<string, { labelKey: string; to?: string }[]> = {
   '/dashboard': [{ labelKey: 'overview', to: '/dashboard' }],
+  '/dashboard/uploads': [{ labelKey: 'uploads', to: '/dashboard/uploads' }],
+  '/dashboard/review': [{ labelKey: 'review', to: '/dashboard/review' }],
+  '/dashboard/quick-check': [{ labelKey: 'quickCheck', to: '/dashboard/quick-check' }],
   '/dashboard/assignments': [{ labelKey: 'assignments', to: '/dashboard/assignments' }],
-  '/dashboard/submissions': [{ labelKey: 'submissions', to: '/dashboard/submissions' }],
-  '/dashboard/graph': [{ labelKey: 'plagiarismGraph', to: '/dashboard/graph' }],
-  '/dashboard/upload': [{ labelKey: 'uploadFiles', to: '/dashboard/upload' }],
-  '/dashboard/results': [{ labelKey: 'results', to: '/dashboard/results' }],
-  '/dashboard/pair-comparison': [{ labelKey: 'pairComparison', to: '/dashboard/pair-comparison' }],
+  '/dashboard/settings': [{ labelKey: 'settings', to: '/dashboard/settings' }],
+  '/dashboard/admin/stats': [{ labelKey: 'adminStats', to: '/dashboard/admin/stats' }],
 };
 
 const getStatusIcon = (status: string) => {
@@ -67,7 +66,6 @@ const Header: React.FC = () => {
   const { user, logout } = useAuth();
   const { colorMode, toggleColorMode } = useColorMode();
   const { t } = useTranslation(['navigation', 'common']);
-  const { mode, setMode } = useViewMode();
   const { assignmentInfo } = useAssignmentInfo();
   const { openMobile } = useSidebar();
   const navigate = useNavigate();
@@ -112,15 +110,6 @@ const Header: React.FC = () => {
     }
     return translatedBc;
   }, [location.pathname, pageTitle, t]);
-
-  const handleModeSwitch = (newMode: 'assignments' | 'classic') => {
-    setMode(newMode);
-    if (newMode === 'assignments') {
-      navigate('/dashboard/assignments');
-    } else {
-      navigate('/dashboard');
-    }
-  };
 
   return (
     <Box
@@ -241,35 +230,6 @@ const Header: React.FC = () => {
                 </MenuList>
              </Menu>
 
-          <Flex
-            bg={useColorModeValue('gray.100', 'gray.700')}
-            borderRadius="md"
-            p="2px"
-            flexShrink={0}
-            display={{ base: 'none', lg: 'flex' }}
-          >
-            <Button
-              size="xs"
-              variant={mode === 'assignments' ? 'solid' : 'ghost'}
-              colorScheme={mode === 'assignments' ? 'brand' : 'gray'}
-              onClick={() => handleModeSwitch('assignments')}
-              borderRadius="sm"
-              px={3}
-            >
-              {t('modeAssignments')}
-            </Button>
-            <Button
-              size="xs"
-              variant={mode === 'classic' ? 'solid' : 'ghost'}
-              colorScheme={mode === 'classic' ? 'brand' : 'gray'}
-              onClick={() => handleModeSwitch('classic')}
-              borderRadius="sm"
-              px={3}
-            >
-              {t('modeClassic')}
-            </Button>
-          </Flex>
-
           <IconButton
             aria-label={t('common:aria.toggleDarkMode')}
             icon={colorMode === 'light' ? <FiMoon /> : <FiSun />}
@@ -295,8 +255,9 @@ const Header: React.FC = () => {
                 </MenuButton>
                 <MenuList>
                    <MenuItem as={Link} to="/dashboard/settings">{t('common:settings')}</MenuItem>
+                   <MenuItem as={Link} to="/dashboard/admin/stats">{t('common:admin') || 'Administration'}</MenuItem>
                    {user.is_global_admin && (
-                     <MenuItem as={Link} to="/dashboard/users">{t('common:adminUsers')}</MenuItem>
+                     <MenuItem as={Link} to="/dashboard/admin/users">{t('common:adminUsers')}</MenuItem>
                    )}
                      <MenuItem onClick={async () => {
                        try {

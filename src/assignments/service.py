@@ -136,8 +136,58 @@ class AssignmentService:
         update_data = data.model_dump(exclude_unset=True)
         return await self.repo.update_assignment(assignment_id, **update_data)
 
-    async def delete_assignment(self, assignment_id: str) -> bool:
-        return await self.repo.delete_assignment(assignment_id)
+    async def delete_assignment(self, assignment_id: str, cascade: bool = False) -> dict:
+        """
+        Delete an assignment.
+
+        If cascade=True, also hard-delete all associated tasks, files, results,
+        S3 files, and Redis index entries.
+
+        If cascade=False, soft-delete the assignment and set assignment_id = NULL
+        on all associated tasks (orphaning them).
+
+        Returns a dict with deletion summary.
+        """
+        assignment = await self.repo.get_assignment(assignment_id)
+        if not assignment:
+            return {"success": False, "error": "Assignment not found"}
+
+        if cascade:
+            from tasks.service import TaskService
+
+            task_service = TaskService(self.db)
+            tasks = await self.repo.get_assignment_tasks(assignment_id)
+
+            total_files = 0
+            total_s3 = 0
+            total_redis = 0
+            tasks_deleted = 0
+
+            for task_id in tasks:
+                result = await task_service.hard_delete_task(task_id)
+                if result.get("success"):
+                    tasks_deleted += 1
+                    total_files += result.get("files_deleted", 0)
+                    total_s3 += result.get("s3_files_deleted", 0)
+                    total_redis += result.get("redis_entries_removed", 0)
+
+            await self.repo.hard_delete_assignment(assignment_id)
+
+            return {
+                "success": True,
+                "assignment_id": assignment_id,
+                "tasks_deleted": tasks_deleted,
+                "files_deleted": total_files,
+                "s3_files_deleted": total_s3,
+                "redis_entries_removed": total_redis,
+            }
+        else:
+            await self.repo.orphan_tasks_and_delete(assignment_id)
+            return {
+                "success": True,
+                "assignment_id": assignment_id,
+                "message": "Assignment deleted, tasks orphaned",
+            }
 
     async def restore_assignment(self, assignment_id: str) -> bool:
         return await self.repo.restore_assignment(assignment_id)

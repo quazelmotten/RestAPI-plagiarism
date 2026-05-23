@@ -160,3 +160,109 @@ class TestIndexingService:
         assert "h1" in result and "h3" in result
         assert mock_fingerprint_svc.ensure_fingerprinted.call_count == 3
         assert "Failed to index file" in caplog.text
+
+    # ── compute_ast_similarities ──────────────────────────────────────────────
+
+    def test_compute_ast_similarities_empty_pairs(self, service):
+        """Empty pairs returns empty list."""
+        result = service.compute_ast_similarities([])
+        assert result == []
+
+    def test_compute_ast_similarities_preserves_pair_count(self, service, mock_cache):
+        """Output has the same number of pairs as input."""
+        pairs = [
+            ({"hash": "h1"}, {"hash": "h2"}, 0.5),
+            ({"hash": "h1"}, {"hash": "h3"}, 0.5),
+        ]
+        mock_cache.batch_get.return_value = {
+            "h1": {"ast_hashes": [1, 2]},
+            "h2": {"ast_hashes": [1, 3]},
+            "h3": {"ast_hashes": [2, 3]},
+        }
+        result = service.compute_ast_similarities(pairs)
+        assert len(result) == 2
+
+    def test_compute_ast_similarities_identical_files(self, service, mock_cache):
+        """Two files with identical AST hashes → similarity 1.0."""
+        pairs = [({"hash": "h1"}, {"hash": "h2"}, 0.5)]
+        mock_cache.batch_get.return_value = {
+            "h1": {"ast_hashes": [1, 2, 3]},
+            "h2": {"ast_hashes": [1, 2, 3]},
+        }
+        result = service.compute_ast_similarities(pairs)
+        assert len(result) == 1
+        assert result[0][2] == 1.0
+
+    def test_compute_ast_similarities_disjoint_files(self, service, mock_cache):
+        """Two files with no common AST hashes → similarity 0.0."""
+        pairs = [({"hash": "h1"}, {"hash": "h2"}, 0.5)]
+        mock_cache.batch_get.return_value = {
+            "h1": {"ast_hashes": [1, 2]},
+            "h2": {"ast_hashes": [3, 4]},
+        }
+        result = service.compute_ast_similarities(pairs)
+        assert len(result) == 1
+        assert result[0][2] == 0.0
+
+    def test_compute_ast_similarities_partial_overlap(self, service, mock_cache):
+        """Files with partial AST hash overlap → Jaccard = intersection / union."""
+        pairs = [({"hash": "h1"}, {"hash": "h2"}, 0.5)]
+        # h1: {1, 2}, h2: {2, 3} → intersection={2}, union={1,2,3}, J=1/3
+        mock_cache.batch_get.return_value = {
+            "h1": {"ast_hashes": [1, 2]},
+            "h2": {"ast_hashes": [2, 3]},
+        }
+        result = service.compute_ast_similarities(pairs)
+        assert len(result) == 1
+        assert abs(result[0][2] - 1.0 / 3.0) < 1e-6
+
+    def test_compute_ast_similarities_similarity_bounded(self, service, mock_cache):
+        """All similarity values are in [0.0, 1.0]."""
+        pairs = [
+            ({"hash": "h1"}, {"hash": "h2"}, 0.5),
+            ({"hash": "h1"}, {"hash": "h3"}, 0.5),
+            ({"hash": "h2"}, {"hash": "h3"}, 0.5),
+        ]
+        mock_cache.batch_get.return_value = {
+            "h1": {"ast_hashes": [1, 2]},
+            "h2": {"ast_hashes": [2, 3]},
+            "h3": {"ast_hashes": [4]},
+        }
+        result = service.compute_ast_similarities(pairs)
+        for _, _, sim in result:
+            assert 0.0 <= sim <= 1.0
+
+    def test_compute_ast_similarities_missing_cache(self, service, mock_cache):
+        """Files with no ast_hashes in cache → similarity 0.0."""
+        pairs = [({"hash": "h1"}, {"hash": "h2"}, 0.5)]
+        mock_cache.batch_get.return_value = {
+            "h1": {"ast_hashes": None},
+            "h2": {"ast_hashes": None},
+        }
+        result = service.compute_ast_similarities(pairs)
+        assert len(result) == 1
+        assert result[0][2] == 0.0
+
+    def test_compute_ast_similarities_partial_missing_cache(self, service, mock_cache):
+        """When one file lacks ast_hashes → similarity 0.0."""
+        pairs = [({"hash": "h1"}, {"hash": "h2"}, 0.5)]
+        mock_cache.batch_get.return_value = {
+            "h1": {"ast_hashes": [1, 2]},
+            "h2": {"ast_hashes": None},
+        }
+        result = service.compute_ast_similarities(pairs)
+        assert len(result) == 1
+        assert result[0][2] == 0.0
+
+    def test_compute_ast_similarities_preserves_file_references(self, service, mock_cache):
+        """Output file dicts are the same objects as input."""
+        fa = {"hash": "h1", "id": "1"}
+        fb = {"hash": "h2", "id": "2"}
+        pairs = [(fa, fb, 0.5)]
+        mock_cache.batch_get.return_value = {
+            "h1": {"ast_hashes": [1]},
+            "h2": {"ast_hashes": [1]},
+        }
+        result = service.compute_ast_similarities(pairs)
+        assert result[0][0] is fa
+        assert result[0][1] is fb

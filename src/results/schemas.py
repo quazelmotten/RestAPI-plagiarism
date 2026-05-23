@@ -45,6 +45,7 @@ class ResultItem(CustomBaseModel):
     type_coverage: dict[int, float] | None = None
     matches: list[MatchDetail] | None = None
     created_at: str | None = None
+    review_disposition: str | None = None
 
 
 class ResultsListResponse(CustomBaseModel):

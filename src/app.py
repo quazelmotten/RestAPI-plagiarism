@@ -191,7 +191,6 @@ async def on_startup():
 
     await create_initial_admin()
 
-
 @app.on_event("shutdown")
 async def on_shutdown():
     # Disconnect services

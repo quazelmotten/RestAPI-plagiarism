@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
 import {
   Box,
@@ -19,6 +19,9 @@ import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
+  InputGroup,
+  InputLeftElement,
+  Input,
   Table,
   Thead,
   Tbody,
@@ -33,9 +36,14 @@ import {
   ModalBody,
   ModalCloseButton,
   useDisclosure,
-  InputGroup,
-  InputLeftElement,
-  Input,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
+  Card,
+  CardBody,
 } from '@chakra-ui/react';
 import {
   FiChevronRight,
@@ -47,27 +55,29 @@ import {
   FiActivity,
   FiClock,
   FiX,
-  FiSearch,
   FiLayers,
-  FiArrowRight,
-  FiEye,
-  FiFileText,
+  FiDownload,
+  FiTrash2,
+  FiHardDrive,
   FiChevronDown,
   FiChevronUp,
-  FiChevronLeft,
-  FiList,
-  FiDownload,
+  FiFileText,
 } from 'react-icons/fi';
 import { useTranslation } from 'react-i18next';
-import api, { API_ENDPOINTS } from '../../services/api';
-import type { AssignmentFullResponse, PlagiarismResult, AssignmentFullFile } from '../../types';
+import api, { API_ENDPOINTS, getAssignmentStorageUsage } from '../../services/api';
+import type { AssignmentFullResponse, PlagiarismResult } from '../../types';
 import { getSimilarityColor, getStatusColorScheme } from '../../utils/statusColors';
 import TaskProgress from '../../components/Results/TaskProgress';
-import SimilarityDistribution from '../../components/Results/SimilarityDistribution';
 import PairComparisonModal from '../../components/PairComparisonModal';
-import ReviewQueue from '../../components/Review/ReviewQueue';
 import { useAssignmentInfo } from '../../contexts/AssignmentContext';
 import { useExportAllPdf } from '../../hooks/useGrading';
+import {
+  AssignmentUploadsTab,
+  AssignmentReviewTab,
+  AssignmentStatsTab,
+  AssignmentFilesTab,
+  AssignmentSettingsTab,
+} from './tabs';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024;
 const MAX_FILES = 1000;
@@ -156,24 +166,12 @@ const AssignmentDetail: React.FC = () => {
   // Tab state
   const [activeTab, setActiveTab] = useState(0);
 
-  // Results pagination & filters (search/filter are client-side on current page)
-  const [resultsSearch, setResultsSearch] = useState('');
-  const [similarityFilter, setSimilarityFilter] = useState<string>('all');
+  // Results pagination
   const [pairsPage, setPairsPage] = useState(0);
-  const [pairsGoPage, setPairsGoPage] = useState('');
 
   // Files tab
   const [filesPage, setFilesPage] = useState(0);
-  const [filesGoPage, setFilesGoPage] = useState('');
   const FILES_PER_PAGE = 50;
-  const [fileFilterName, setFileFilterName] = useState('');
-  const [fileFilterTask, setFileFilterTask] = useState('');
-  const [fileSortCol, setFileSortCol] = useState<'filename' | 'task_id' | 'max_similarity'>('filename');
-  const [fileSortDir, setFileSortDir] = useState<'asc' | 'desc'>('asc');
-  const [colWidths, setColWidths] = useState({ filename: 300, task: 120, maxSim: 120 });
-  const [resizingCol, setResizingCol] = useState<string | null>(null);
-  const [resizeStartX, setResizeStartX] = useState(0);
-  const [resizeStartW, setResizeStartW] = useState(0);
 
   // Pair comparison
   const [pairModalOpen, setPairModalOpen] = useState(false);
@@ -190,10 +188,55 @@ const AssignmentDetail: React.FC = () => {
   const { isOpen: isFileViewerOpen, onOpen: onFileViewerOpen, onClose: onFileViewerClose } = useDisclosure();
   const [viewingFile, setViewingFile] = useState<{ id: string; filename: string } | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
+
+  // Task deletion
+  const queryClient = useQueryClient();
+  const { isOpen: isDeleteTaskOpen, onOpen: onDeleteTaskOpen, onClose: onDeleteTaskClose } = useDisclosure();
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+  const cancelDeleteRef = React.useRef<HTMLButtonElement>(null);
   const [loadingFileContent, setLoadingFileContent] = useState(false);
 
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      const res = await api.delete(API_ENDPOINTS.HARD_DELETE_TASK(taskId));
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['assignmentFull', assignmentId] });
+      toast({
+        title: t('common:success'),
+        description: t('sessions:taskDeleted'),
+        status: 'success',
+        duration: 3000,
+      });
+    },
+    onError: () => {
+      toast({
+        title: t('common:error'),
+        description: t('sessions:deleteFailed'),
+        status: 'error',
+        duration: 4000,
+      });
+    },
+  });
+
+  const handleDeleteTask = (taskId: string) => {
+    setTaskToDelete(taskId);
+    onDeleteTaskOpen();
+  };
+
+  const confirmDeleteTask = () => {
+    if (taskToDelete) {
+      deleteTaskMutation.mutate(taskToDelete);
+      if (selectedTaskId === taskToDelete) {
+        setSelectedTaskId('');
+      }
+    }
+    onDeleteTaskClose();
+  };
+
   // Fetch full assignment data (server-side paginated results and files)
-const { data: assignmentData, isLoading, refetch, isFetching, error: queryError } = useQuery<AssignmentFullResponse>({
+  const { data: assignmentData, isLoading, refetch, isFetching, error: queryError } = useQuery<AssignmentFullResponse>({
     queryKey: ['assignmentFull', assignmentId, selectedTaskId, pairsPage, filesPage],
     retry: 0,
     queryFn: async () => {
@@ -211,6 +254,15 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
         const msg = axiosErr.response?.data?.error_details || t('common:errors.noAccess');
         throw new Error(msg);
       }
+    },
+    enabled: !!assignmentId,
+  });
+
+  const { data: storageData } = useQuery({
+    queryKey: ['storage', 'assignment', assignmentId],
+    queryFn: async () => {
+      const res = await getAssignmentStorageUsage(assignmentId!);
+      return res.data;
     },
     enabled: !!assignmentId,
   });
@@ -240,93 +292,14 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
 
   const exportAllPdfMutation = useExportAllPdf();
 
-  // Files are server-paginated, with client-side filter/sort on the current page
-  const displayedFiles = useMemo((): AssignmentFullFile[] => {
-    const files = assignmentData?.files ?? [];
-    let result = [...files];
-    if (fileFilterName.trim()) {
-      const q = fileFilterName.toLowerCase();
-      result = result.filter(f => f.filename.toLowerCase().includes(q));
-    }
-    if (fileFilterTask) result = result.filter(f => f.task_id === fileFilterTask);
-    result.sort((a, b) => {
-      if (fileSortCol === 'max_similarity') {
-        const aVal = a.max_similarity ?? 0;
-        const bVal = b.max_similarity ?? 0;
-        return fileSortDir === 'asc' ? aVal - bVal : bVal - aVal;
-      }
-      const aVal = (a[fileSortCol] || '') as string;
-      const bVal = (b[fileSortCol] || '') as string;
-      const cmp = aVal.localeCompare(bVal);
-      return fileSortDir === 'asc' ? cmp : -cmp;
-    });
-    return result;
-  }, [assignmentData?.files, fileFilterName, fileFilterTask, fileSortCol, fileSortDir]);
-
   const totalFiles = assignmentData?.total_files ?? 0;
-  const totalFilePages = Math.max(1, Math.ceil(totalFiles / FILES_PER_PAGE));
-
-  const handleFileSort = (col: 'filename' | 'task_id' | 'max_similarity') => {
-    if (fileSortCol === col) setFileSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setFileSortCol(col); setFileSortDir('asc'); }
-  };
-
-  const handlePairsGoToPage = () => {
-    const pageNum = parseInt(pairsGoPage, 10);
-    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
-      setPairsPage(pageNum - 1);
-      setPairsGoPage('');
-    }
-  };
-
-  const handleFilesGoToPage = () => {
-    const pageNum = parseInt(filesGoPage, 10);
-    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalFilePages) {
-      setFilesPage(pageNum - 1);
-      setFilesGoPage('');
-    }
-  };
 
   const activeTask = assignmentData?.tasks.find(t => ACTIVE_STATUSES.includes(t.status));
   const isProcessing = !!activeTask;
   const refreshData = useCallback(() => refetch(), [refetch]);
 
-  // Column resize
-  const handleResizeStart = useCallback((col: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setResizingCol(col);
-    setResizeStartX(e.clientX);
-    setResizeStartW(colWidths[col as keyof typeof colWidths]);
-  }, [colWidths]);
-
-  React.useEffect(() => {
-    if (!resizingCol) return;
-    const handleMove = (e: MouseEvent) => {
-      const diff = e.clientX - resizeStartX;
-      setColWidths(prev => ({ ...prev, [resizingCol]: Math.max(60, resizeStartW + diff) }));
-    };
-    const handleUp = () => setResizingCol(null);
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-    };
-  }, [resizingCol, resizeStartX, resizeStartW]);
-
   // Reset page when task changes
   React.useEffect(() => { setPairsPage(0); setFilesPage(0); }, [selectedTaskId]);
-
-  // Auto-detect language when files change
-  React.useEffect(() => {
-    if (language !== 'auto' || files.length === 0) {
-      setDetectedLanguage(null);
-      return;
-    }
-    const detected = detectLanguageFromExtension(files[0].name);
-    setDetectedLanguage(detected);
-  }, [files, language]);
 
   // Upload
   const onDrop = useCallback(
@@ -399,19 +372,6 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
 
   // Results (client-side filter on current page)
   const currentPageResults = assignmentData?.results ?? [];
-  const filteredResults = (() => {
-    let results = [...currentPageResults];
-    if (similarityFilter === 'high') results = results.filter(r => (r.ast_similarity || 0) >= 0.8);
-    else if (similarityFilter === 'medium') results = results.filter(r => (r.ast_similarity || 0) >= 0.5 && (r.ast_similarity || 0) < 0.8);
-    else if (similarityFilter === 'low') results = results.filter(r => (r.ast_similarity || 0) < 0.5);
-    if (resultsSearch.trim()) {
-      const q = resultsSearch.toLowerCase();
-      results = results.filter(r =>
-        r.file_a.filename.toLowerCase().includes(q) || r.file_b.filename.toLowerCase().includes(q)
-      );
-    }
-    return results;
-  })();
 
   const totalPairsCount = assignmentData?.total_results ?? assignmentData?.total_pairs ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalPairsCount / PAIRS_PER_PAGE));
@@ -496,23 +456,41 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
   const selectedTask = selectedTaskId ? assignmentData.tasks.find(t => t.task_id === selectedTaskId) : null;
 
   const tabLabels = [
+    t('assignments:uploads'),
     t('assignments:review'),
     t('results:distribution.title'),
     t('assignments:files'),
-    t('results:resultsList.topSimilarities'),
+    t('common:settings'),
   ];
-
-  const renderResizeHandle = (col: string) => (
-    <Box
-      position="absolute" right={0} top={0} bottom={0} w="4px" cursor="col-resize" zIndex={2}
-      bg={resizingCol === col ? 'brand.400' : 'transparent'}
-      _hover={{ bg: 'brand.300' }}
-      onMouseDown={(e: React.MouseEvent) => handleResizeStart(col, e)}
-    />
-  );
 
   return (
     <Box display="flex" flexDirection="column" flex={1} minH={0} overflow="hidden" position="relative">
+      {/* Storage Usage Widget */}
+      {storageData && (
+        <Card bg={cardBg} borderRadius="lg" borderWidth="1px" borderColor={borderColor} mb={3} flexShrink={0}>
+          <CardBody py={3}>
+            <HStack justify="space-between" spacing={4} wrap="wrap">
+              <HStack spacing={3}>
+                <Icon as={FiHardDrive} boxSize={4} color="brand.500" />
+                <Text fontSize="sm" fontWeight="semibold">{t('storage:storageUsage')}</Text>
+                <Text fontSize="sm" color={mutedColor}>
+                  {storageData.total_human} · {storageData.file_count} {t('common:files')}
+                </Text>
+              </HStack>
+              <Button
+                size="xs"
+                variant="ghost"
+                leftIcon={<FiRefreshCw />}
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['storage', 'assignment', assignmentId] })}
+                isLoading={queryClient.isFetching({ queryKey: ['storage', 'assignment', assignmentId] }) > 0}
+              >
+                {t('common:refresh')}
+              </Button>
+            </HStack>
+          </CardBody>
+        </Card>
+      )}
+
       {/* Combined Tasks + Upload section */}
       <Box bg={cardBg} borderRadius="lg" borderWidth="1px" borderColor={borderColor} mb={3} flexShrink={0} overflow="hidden">
         {/* Expanded view: upload + task table */}
@@ -594,9 +572,10 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                        <Th fontSize="xs" isNumeric>{t('assignments:files')}</Th>
                        <Th fontSize="xs" isNumeric>{t('assignments:pairs')}</Th>
                        <Th fontSize="xs" isNumeric>{t('assignments:high')}</Th>
-                       <Th fontSize="xs" isNumeric>{t('assignments:avgSim')}</Th>
-                       <Th fontSize="xs" isNumeric>{t('results:exportPdf')}</Th>
-                     </Tr>
+                        <Th fontSize="xs" isNumeric>{t('assignments:avgSim')}</Th>
+                        <Th fontSize="xs" isNumeric>{t('results:exportPdf')}</Th>
+                        <Th fontSize="xs" w="40px"></Th>
+                      </Tr>
                   </Thead>
                   <Tbody>
                      <Tr
@@ -673,6 +652,19 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
                             }}
                           />
                         </Td>
+                        <Td>
+                          <IconButton
+                            aria-label="Delete task"
+                            icon={<FiTrash2 />}
+                            size="xs"
+                            variant="ghost"
+                            colorScheme="red"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteTask(task.task_id);
+                            }}
+                          />
+                        </Td>
                       </Tr>
                     ))}
                   </Tbody>
@@ -685,7 +677,7 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
         {/* Collapsed view: just the selected task summary + upload toggle */}
         {collapsed && (
           <Box px={3} py={2}>
-            <HStack justify="space-between" spacing={3}>
+            <HStack justify="space-between" spacing={3} wrap="wrap">
               <HStack spacing={3}>
                 <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />
                 {selectedTaskId === '' ? (
@@ -758,252 +750,64 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
 
           {/* Tab content */}
           <Box flex={1} minH={0} display="flex" flexDirection="column" overflow="hidden">
-            {/* Top Similarities */}
-            {activeTab === 3 && (
-              <Box flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
-                <HStack mb={3} flexShrink={0}>
-                  <InputGroup size="sm" maxW="300px">
-                    <InputLeftElement pointerEvents="none"><Icon as={FiSearch} color={mutedColor} /></InputLeftElement>
-                    <Input placeholder={t('results:taskPicker.search')} value={resultsSearch} onChange={(e) => setResultsSearch(e.target.value)} />
-                  </InputGroup>
-                  <Select size="sm" w="160px" value={similarityFilter} onChange={(e) => setSimilarityFilter(e.target.value)}>
-                    <option value="all">{t('common:all')}</option>
-                    <option value="high">{t('common:labels.highOption')}</option>
-                    <option value="medium">{t('common:labels.mediumOption')}</option>
-                    <option value="low">{t('common:labels.lowOption')}</option>
-                  </Select>
-                  <Text fontSize="sm" color={mutedColor}>
-                    {t('common:labels.of', { total: totalPairsCount })}
-                  </Text>
-                </HStack>
-
-                <Box flex={1} minH={0} overflowY="auto">
-                  <TableContainer>
-                    <Table variant="simple" size="sm">
-                      <Thead position="sticky" top={0} bg={cardBg} zIndex={1}>
-                         <Tr>
-                           <Th>{t('results:resultsList.topSimilarities')}</Th>
-                           <Th isNumeric>{t('assignments:similarity')}</Th>
-                           <Th w="100px"></Th>
-                         </Tr>
-                      </Thead>
-                      <Tbody>
-                        {filteredResults.map((result, idx) => (
-                          <Tr key={idx} _hover={{ bg: hoverBg }}>
-                            <Td>
-                              <HStack spacing={2}>
-                                <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="220px">{result.file_a.filename}</Text>
-                                <Text fontSize="xs" color={mutedColor}>vs</Text>
-                                <Text fontSize="sm" fontWeight="medium" noOfLines={1} maxW="220px">{result.file_b.filename}</Text>
-                              </HStack>
-                            </Td>
-                            <Td isNumeric>
-                              <Badge colorScheme={getSimilarityColor(result.ast_similarity || 0)} fontSize="sm" px={2} py={0.5}>
-                                {((result.ast_similarity || 0) * 100).toFixed(1)}%
-                              </Badge>
-                            </Td>
-                            <Td>
-                              <Button size="xs" rightIcon={<FiArrowRight />} variant="outline" colorScheme={getSimilarityColor(result.ast_similarity || 0)} onClick={() => handleCompare(result)}>
-                                {t('review:reviewInDetail')}
-                              </Button>
-                            </Td>
-                          </Tr>
-                        ))}
-                      </Tbody>
-                    </Table>
-                  </TableContainer>
-                  {filteredResults.length === 0 && !isFetching && (
-                    <Box textAlign="center" py={8} color={mutedColor}>
-                      <Text>{t('results:taskPicker.noMatches')}</Text>
-                    </Box>
-                  )}
-                  {isFetching && (
-                    <Flex justify="center" py={4}><Spinner size="sm" /></Flex>
-                  )}
-                </Box>
-
-                {/* Server-side pagination */}
-                <HStack justify="center" py={2} flexShrink={0} spacing={2}>
-                  <IconButton
-                    aria-label={t('common:aria.firstPage')}
-                    icon={<Icon as={FiChevronLeft} />}
-                    size="sm" variant="ghost"
-                    isDisabled={pairsPage === 0 || isFetching}
-                    onClick={() => setPairsPage(0)}
-                  />
-                  <IconButton
-                    aria-label={t('common:aria.previousPage')}
-                    icon={<Icon as={FiChevronLeft} transform="rotate(0deg)" />}
-                    size="sm" variant="ghost"
-                    isDisabled={pairsPage === 0 || isFetching}
-                    onClick={() => setPairsPage(p => Math.max(0, p - 1))}
-                  />
-                  <Text fontSize="xs" color={mutedColor} minW="100px" textAlign="center">
-                    {t('common:pageOf', { current: pairsPage + 1, total: totalPages })}
-                  </Text>
-                  <IconButton
-                    aria-label={t('common:aria.nextPage')}
-                    icon={<Icon as={FiChevronLeft} transform="rotate(180deg)" />}
-                    size="sm" variant="ghost"
-                    isDisabled={pairsPage >= totalPages - 1 || isFetching}
-                    onClick={() => setPairsPage(p => Math.min(totalPages - 1, p + 1))}
-                  />
-                  <IconButton
-                    aria-label={t('common:aria.lastPage')}
-                    icon={<Icon as={FiChevronLeft} transform="rotate(180deg)" />}
-                    size="sm" variant="ghost"
-                    isDisabled={pairsPage >= totalPages - 1 || isFetching}
-                    onClick={() => setPairsPage(totalPages - 1)}
-                  />
-                  <HStack spacing={1} ml={2}>
-                    <Input
-                      size="xs"
-                      w="60px"
-                      placeholder={t('common:placeholders.goToPage')}
-                      value={pairsGoPage}
-                      onChange={(e) => setPairsGoPage(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handlePairsGoToPage(); }}
-                    />
-                    <Button size="xs" onClick={handlePairsGoToPage} isDisabled={!pairsGoPage || isFetching}>
-                      {t('common:buttons.go')}
-                    </Button>
-                  </HStack>
-                </HStack>
-              </Box>
-            )}
-
-            {/* Distribution */}
-            {activeTab === 1 && (
-              <Box flex={1} display="flex" flexDirection="column" minH={0} overflowY="auto">
-                <SimilarityDistribution
-                  results={assignmentData.results}
-                  totalPairs={assignmentData.total_pairs}
-                  cardBg={cardBg}
-                  assignmentId={assignmentId}
-                  taskId={selectedTaskId || undefined}
-                  stats={stats}
-                />
-              </Box>
-            )}
-
-            {/* Files */}
-            {activeTab === 2 && (
-              <Box flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
-                <HStack spacing={3} mb={3} flexShrink={0} flexWrap="wrap">
-                  <InputGroup size="sm" maxW="250px">
-                    <InputLeftElement pointerEvents="none"><Icon as={FiSearch} color={mutedColor} /></InputLeftElement>
-                    <Input placeholder={t('common:placeholders.filterByFilename')} value={fileFilterName} onChange={(e) => setFileFilterName(e.target.value)} />
-                  </InputGroup>
-                  <Select size="sm" w="180px" value={fileFilterTask} onChange={(e) => { setFileFilterTask(e.target.value); setFilesPage(0); }}>
-                    <option value="">{t('review:allTasks')}</option>
-                    {assignmentData.tasks.map((task) => (
-                      <option key={task.task_id} value={task.task_id}>{task.task_id.substring(0, 8)}...</option>
-                    ))}
-                  </Select>
-                  <Text fontSize="xs" color={mutedColor}>{totalFiles} {t('common:files')}</Text>
-                </HStack>
-
-                <Box flex={1} overflowY="auto">
-                  <TableContainer>
-                    <Table variant="simple" size="sm">
-                      <colgroup>
-                        <col style={{ width: `${colWidths.filename}px` }} />
-                        <col style={{ width: `${colWidths.task}px` }} />
-                        <col style={{ width: `${colWidths.maxSim}px` }} />
-                        <col style={{ width: '80px' }} />
-                      </colgroup>
-                      <Thead position="sticky" top={0} bg={cardBg} zIndex={1}>
-                         <Tr>
-                           <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('filename')} pr="20px">
-                             <HStack spacing={1}>
-                               <Text as="span">{t('assignments:filename')}</Text>
-                               {fileSortCol === 'filename' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
-                             </HStack>
-                             {renderResizeHandle('filename')}
-                           </Th>
-                           <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('task_id')} pr="20px">
-                             <HStack spacing={1}>
-                               <Text as="span">{t('assignments:task')}</Text>
-                               {fileSortCol === 'task_id' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
-                             </HStack>
-                             {renderResizeHandle('task')}
-                           </Th>
-                           <Th position="relative" cursor="pointer" userSelect="none" _hover={{ bg: hoverBg }} onClick={() => handleFileSort('max_similarity')} pr="20px">
-                             <HStack spacing={1}>
-                               <Text as="span">{t('assignments:maxSim')}</Text>
-                               {fileSortCol === 'max_similarity' && <Icon as={fileSortDir === 'asc' ? FiChevronUp : FiChevronDown} boxSize={3} />}
-                             </HStack>
-                             {renderResizeHandle('maxSim')}
-                          </Th>
-                          <Th></Th>
-                        </Tr>
-                      </Thead>
-                      <Tbody>
-                        {displayedFiles.map((file) => (
-                          <Tr key={file.id} _hover={{ bg: hoverBg }}>
-                            <Td fontSize="sm" fontWeight="medium" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{file.filename}</Td>
-                            <Td fontSize="xs" fontFamily="monospace" color={mutedColor}>
-                              {file.task_id ? file.task_id.substring(0, 8) + '...' : '-'}
-                            </Td>
-                            <Td isNumeric>
-                              <Badge colorScheme={getSimilarityColor(file.max_similarity ?? 0)} fontSize="xs">
-                                {((file.max_similarity ?? 0) * 100).toFixed(1)}%
-                              </Badge>
-                            </Td>
-                            <Td>
-                               <Button size="xs" leftIcon={<FiEye />} variant="ghost" onClick={() => handleViewFile(file.id, file.filename)}>{t('common:view')}</Button>
-                            </Td>
-                          </Tr>
-                        ))}
-                      </Tbody>
-                    </Table>
-                  </TableContainer>
-                  {displayedFiles.length === 0 && (
-                    <Box textAlign="center" py={8} color={mutedColor}><Text>{t('review:noFilesInAssignment')}</Text></Box>
-                  )}
-                </Box>
-
-                {totalFilePages > 1 && (
-                  <HStack spacing={2} mt={3} flexShrink={0} justifyContent="center">
-                    <Button size="xs" leftIcon={<FiChevronLeft />} onClick={() => setFilesPage(p => Math.max(0, p - 1))} isDisabled={filesPage === 0}>
-                      {t('common:prev')}
-                    </Button>
-                    <Text fontSize="xs" color={mutedColor}>
-                      {t('common:pageOf', { current: filesPage + 1, total: totalFilePages })}
-                    </Text>
-                    <Button size="xs" rightIcon={<FiChevronRight />} onClick={() => setFilesPage(p => Math.min(totalFilePages - 1, p + 1))} isDisabled={filesPage >= totalFilePages - 1}>
-                      {t('common:next')}
-                    </Button>
-                    <HStack spacing={1} ml={2}>
-                      <Input
-                        size="xs"
-                        w="60px"
-                        placeholder={t('common:go')}
-                        value={filesGoPage}
-                        onChange={(e) => setFilesGoPage(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleFilesGoToPage(); }}
-                      />
-                      <Button size="xs" onClick={handleFilesGoToPage} isDisabled={!filesGoPage}>
-                        {t('common:go')}
-                      </Button>
-                    </HStack>
-                  </HStack>
-                )}
-              </Box>
-            )}
-
-            {/* Review */}
+            {/* Uploads Tab */}
             {activeTab === 0 && (
-              <Box flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
-                <ReviewQueue
-                  assignmentId={assignmentId!}
-                  onReviewPair={(pair, allPairs) => {
-                    setSelectedPair({ file_a: pair.file_a, file_b: pair.file_b, ast_similarity: pair.ast_similarity });
-                    setReviewQueuePairs(allPairs || []);
-                    setPairModalOpen(true);
-                  }}
-                />
-              </Box>
+              <AssignmentUploadsTab
+                tasks={assignmentData.tasks}
+                selectedTaskId={selectedTaskId}
+                onTaskSelect={setSelectedTaskId}
+                onExportPdf={(aid, tid) => exportAllPdfMutation.mutate({ assignmentId: aid, taskId: tid })}
+                isExporting={exportAllPdfMutation.isPending}
+                assignmentId={assignmentId!}
+              />
+            )}
+
+            {/* Review Tab */}
+            {activeTab === 1 && (
+              <AssignmentReviewTab
+                assignmentId={assignmentId!}
+                onReviewPair={(pair, allPairs) => {
+                  setSelectedPair({ file_a: pair.file_a, file_b: pair.file_b, ast_similarity: pair.ast_similarity });
+                  setReviewQueuePairs(allPairs || []);
+                  setPairModalOpen(true);
+                }}
+              />
+            )}
+
+            {/* Stats Tab */}
+            {activeTab === 2 && (
+              <AssignmentStatsTab
+                results={assignmentData.results}
+                totalPairs={assignmentData.total_pairs}
+                stats={stats}
+                assignmentId={assignmentId}
+                taskId={selectedTaskId || undefined}
+              />
+            )}
+
+            {/* Files Tab */}
+            {activeTab === 3 && (
+              <AssignmentFilesTab
+                files={assignmentData.files ?? []}
+                totalFiles={totalFiles}
+                tasks={assignmentData.tasks}
+                isLoading={isLoading}
+                isFetching={isFetching}
+                page={filesPage}
+                onPageChange={setFilesPage}
+                filesPerPage={FILES_PER_PAGE}
+                onViewFile={handleViewFile}
+              />
+            )}
+
+            {/* Settings Tab */}
+            {activeTab === 4 && (
+              <AssignmentSettingsTab
+                assignmentId={assignmentId!}
+                assignmentName={assignmentData.name}
+                assignmentDescription={assignmentData.description}
+                onRefetch={refreshData}
+              />
             )}
           </Box>
         </Box>
@@ -1046,6 +850,37 @@ const { data: assignmentData, isLoading, refetch, isFetching, error: queryError 
           </ModalBody>
         </ModalContent>
       </Modal>
+
+      <AlertDialog
+        isOpen={isDeleteTaskOpen}
+        leastDestructiveRef={cancelDeleteRef}
+        onClose={onDeleteTaskClose}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              {t('common:delete')} {t('common:session')}
+            </AlertDialogHeader>
+            <AlertDialogBody>
+              {t('sessions:deleteSessionConfirm')}
+            </AlertDialogBody>
+            <AlertDialogFooter>
+              <Button ref={cancelDeleteRef} onClick={onDeleteTaskClose}>
+                {t('common:cancel')}
+              </Button>
+              <Button
+                colorScheme="red"
+                onClick={confirmDeleteTask}
+                ml={3}
+                isLoading={deleteTaskMutation.isPending}
+                leftIcon={<FiTrash2 />}
+              >
+                {t('common:delete')}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Box>
   );
 };

@@ -289,11 +289,11 @@ async def update_assignment(
 
 @router.delete(
     "/{assignment_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
     summary="Delete an assignment",
-    description="Delete an assignment. Tasks associated with it will have their assignment_id set to null. Admin only.",
+    description="Delete an assignment. Use cascade=true to also delete all associated tasks, files, and results.",
     responses={
-        status.HTTP_204_NO_CONTENT: {
+        status.HTTP_200_OK: {
             "description": "Assignment deleted successfully",
         },
         status.HTTP_404_NOT_FOUND: {
@@ -305,10 +305,12 @@ async def update_assignment(
 async def delete_assignment(
     assignment: AssignmentResponse = Depends(valid_assignment_id),
     assignment_service: AssignmentService = Depends(get_assignment_service),
+    cascade: bool = Query(default=False, description="If true, also delete all associated tasks, files, and results"),
     current_user: User = Depends(require_subject_access),
 ):
     """Delete an assignment. Requires subject access."""
-    await assignment_service.delete_assignment(assignment.id)
+    result = await assignment_service.delete_assignment(assignment.id, cascade=cascade)
+    return result
 
 
 @router.post(

@@ -27,7 +27,7 @@ import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import api, { API_ENDPOINTS } from '../services/api';
 import type { FileInfo, ApiError } from '../types';
-import { useDebounce } from '../pages/Submissions/hooks/useDebounce';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface FileResponse extends FileInfo {
   created_at?: string;

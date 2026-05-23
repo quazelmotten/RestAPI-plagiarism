@@ -5,7 +5,7 @@ Assignments domain repository - data access for assignments.
 from datetime import datetime, timezone
 from uuid import UUID
 
-from shared.models import Assignment, File, PlagiarismTask, Subject
+from shared.models import Assignment, File, PlagiarismTask, SimilarityResult, Subject
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -115,14 +115,28 @@ class SubjectRepository:
             .subquery()
         )
 
+        high_sim_subq = (
+            select(
+                PlagiarismTask.assignment_id,
+                func.count().label("high_similarity_count"),
+            )
+            .join(SimilarityResult, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(SimilarityResult.ast_similarity >= 0.8)
+            .group_by(PlagiarismTask.assignment_id)
+            .subquery()
+        )
+
         query = (
             select(
                 Assignment,
                 func.coalesce(tasks_count_subq.c.tasks_count, 0).label("tasks_count"),
                 func.coalesce(files_count_subq.c.files_count, 0).label("files_count"),
+                func.coalesce(high_sim_subq.c.high_similarity_count, 0).label("high_similarity_count"),
             )
             .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
             .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
+            .outerjoin(high_sim_subq, Assignment.id == high_sim_subq.c.assignment_id)
             .where(Assignment.subject_id == subject_id)
             .where(Assignment.deleted_at.is_(None))  # Filter out deleted assignments
             .order_by(Assignment.created_at.desc())
@@ -144,6 +158,8 @@ class SubjectRepository:
                 else None,
                 tasks_count=row.tasks_count,
                 files_count=row.files_count,
+                uploads_count=row.tasks_count,
+                high_similarity_count=row.high_similarity_count,
             )
             for row in rows
         ]
@@ -251,6 +267,18 @@ class SubjectRepository:
             .subquery()
         )
 
+        high_sim_subq = (
+            select(
+                PlagiarismTask.assignment_id,
+                func.count().label("high_similarity_count"),
+            )
+            .join(SimilarityResult, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(SimilarityResult.ast_similarity >= 0.8)
+            .group_by(PlagiarismTask.assignment_id)
+            .subquery()
+        )
+
         query = (
             select(
                 Subject,
@@ -282,9 +310,11 @@ class SubjectRepository:
                     Assignment,
                     func.coalesce(tasks_count_subq.c.tasks_count, 0).label("tasks_count"),
                     func.coalesce(files_count_subq.c.files_count, 0).label("files_count"),
+                    func.coalesce(high_sim_subq.c.high_similarity_count, 0).label("high_similarity_count"),
                 )
                 .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
                 .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
+                .outerjoin(high_sim_subq, Assignment.id == high_sim_subq.c.assignment_id)
                 .where(Assignment.subject_id == subject.id)
                 .where(Assignment.deleted_at.is_(None))  # Filter out deleted assignments
                 .order_by(Assignment.created_at.desc())
@@ -307,6 +337,8 @@ class SubjectRepository:
                     else None,
                     tasks_count=row.tasks_count,
                     files_count=row.files_count,
+                    uploads_count=row.tasks_count,
+                    high_similarity_count=row.high_similarity_count,
                 )
                 for row in assignment_rows
             ]
@@ -422,14 +454,28 @@ class AssignmentRepository:
             .subquery()
         )
 
+        high_sim_subq = (
+            select(
+                PlagiarismTask.assignment_id,
+                func.count().label("high_similarity_count"),
+            )
+            .join(SimilarityResult, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(SimilarityResult.ast_similarity >= 0.8)
+            .group_by(PlagiarismTask.assignment_id)
+            .subquery()
+        )
+
         query = (
             select(
                 Assignment,
                 func.coalesce(tasks_count_subq.c.tasks_count, 0).label("tasks_count"),
                 func.coalesce(files_count_subq.c.files_count, 0).label("files_count"),
+                func.coalesce(high_sim_subq.c.high_similarity_count, 0).label("high_similarity_count"),
             )
             .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
             .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
+            .outerjoin(high_sim_subq, Assignment.id == high_sim_subq.c.assignment_id)
             .outerjoin(Subject, Assignment.subject_id == Subject.id)
             .where((Assignment.subject_id.is_(None)) | (Subject.deleted_at.isnot(None)))
             .where(Assignment.deleted_at.is_(None))  # Filter out deleted assignments
@@ -452,6 +498,8 @@ class AssignmentRepository:
                 else None,
                 tasks_count=row.tasks_count,
                 files_count=row.files_count,
+                uploads_count=row.tasks_count,
+                high_similarity_count=row.high_similarity_count,
             )
             for row in rows
         ]
@@ -483,6 +531,15 @@ class AssignmentRepository:
         )
         files_count = files_count_result.scalar_one()
 
+        high_sim_result = await self.db.execute(
+            select(func.count())
+            .select_from(SimilarityResult)
+            .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == assignment_id)
+            .where(SimilarityResult.ast_similarity >= 0.8)
+        )
+        high_similarity_count = high_sim_result.scalar_one()
+
         return AssignmentResponse(
             id=str(assignment.id),
             name=assignment.name,
@@ -491,6 +548,8 @@ class AssignmentRepository:
             created_at=assignment.created_at.isoformat() if assignment.created_at else None,
             tasks_count=tasks_count,
             files_count=files_count,
+            uploads_count=tasks_count,
+            high_similarity_count=high_similarity_count,
         )
 
     async def get_assignment_full(
@@ -596,6 +655,18 @@ class AssignmentRepository:
             .subquery()
         )
 
+        high_sim_subq = (
+            select(
+                PlagiarismTask.assignment_id,
+                func.count().label("high_similarity_count"),
+            )
+            .join(SimilarityResult, SimilarityResult.task_id == PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id.isnot(None))
+            .where(SimilarityResult.ast_similarity >= 0.8)
+            .group_by(PlagiarismTask.assignment_id)
+            .subquery()
+        )
+
         count_result = await self.db.execute(
             select(func.count()).select_from(Assignment).where(Assignment.deleted_at.is_(None))
         )
@@ -606,9 +677,11 @@ class AssignmentRepository:
                 Assignment,
                 func.coalesce(tasks_count_subq.c.tasks_count, 0).label("tasks_count"),
                 func.coalesce(files_count_subq.c.files_count, 0).label("files_count"),
+                func.coalesce(high_sim_subq.c.high_similarity_count, 0).label("high_similarity_count"),
             )
             .outerjoin(tasks_count_subq, Assignment.id == tasks_count_subq.c.assignment_id)
             .outerjoin(files_count_subq, Assignment.id == files_count_subq.c.assignment_id)
+            .outerjoin(high_sim_subq, Assignment.id == high_sim_subq.c.assignment_id)
             .where(Assignment.deleted_at.is_(None))  # Filter out deleted assignments
             .order_by(Assignment.created_at.desc())
             .limit(limit)
@@ -629,6 +702,8 @@ class AssignmentRepository:
                 else None,
                 tasks_count=row.tasks_count,
                 files_count=row.files_count,
+                uploads_count=row.tasks_count,
+                high_similarity_count=row.high_similarity_count,
             )
             for row in rows
         ]
@@ -657,6 +732,8 @@ class AssignmentRepository:
             created_at=assignment.created_at.isoformat() if assignment.created_at else None,
             tasks_count=0,
             files_count=0,
+            uploads_count=0,
+            high_similarity_count=0,
         )
 
     async def update_assignment(self, assignment_id: str, **updates) -> AssignmentResponse | None:
@@ -695,5 +772,45 @@ class AssignmentRepository:
             return False
 
         assignment.deleted_at = None
+        await self.db.commit()
+        return True
+
+    async def get_assignment_tasks(self, assignment_id: str) -> list[str]:
+        """Get all task IDs for an assignment."""
+        query = (
+            select(PlagiarismTask.id)
+            .where(PlagiarismTask.assignment_id == assignment_id)
+            .where(PlagiarismTask.deleted_at.is_(None))
+        )
+        result = await self.db.execute(query)
+        return [str(row[0]) for row in result.all()]
+
+    async def hard_delete_assignment(self, assignment_id: str) -> bool:
+        """Hard-delete an assignment. Returns True if deleted."""
+        assignment = await self.db.get(Assignment, assignment_id)
+        if not assignment:
+            return False
+
+        await self.db.delete(assignment)
+        await self.db.commit()
+        return True
+
+    async def orphan_tasks_and_delete(self, assignment_id: str) -> bool:
+        """Set assignment_id = NULL on all tasks, then soft-delete the assignment."""
+        from sqlalchemy import update
+
+        stmt = (
+            update(PlagiarismTask)
+            .where(PlagiarismTask.assignment_id == assignment_id)
+            .where(PlagiarismTask.deleted_at.is_(None))
+            .values(assignment_id=None)
+        )
+        await self.db.execute(stmt)
+
+        assignment = await self.db.get(Assignment, assignment_id)
+        if not assignment:
+            return False
+
+        assignment.deleted_at = datetime.now(timezone.utc)
         await self.db.commit()
         return True

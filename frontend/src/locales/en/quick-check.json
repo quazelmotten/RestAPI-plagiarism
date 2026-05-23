@@ -1,0 +1,23 @@
+{
+  "title": "Quick Check",
+  "modeTwoFiles": "Compare 2 files",
+  "modeVsAssignment": "Compare file vs assignment",
+  "fileA": "File to check",
+  "fileB": "Compare against",
+  "dropFile": "Drop file here or click to browse",
+  "compareAgainst": "Compare against",
+  "selectAssignmentPlaceholder": "Select assignment...",
+  "runAnalysis": "Run Analysis",
+  "results": "Results",
+  "completed": "Completed",
+  "maxSimilarity": "Max similarity",
+  "reviewPairs": "Review Pairs",
+  "viewUpload": "View Upload",
+  "notSavedHint": "This check is not saved. Delete it from Uploads when done.",
+  "analysisStarted": "Analysis started",
+  "analysisFailed": "Analysis failed",
+  "selectBothFiles": "Select both files to compare",
+  "selectFile": "Select a file to check",
+  "selectAssignment": "Select an assignment to compare against",
+  "fileTooLarge": "File too large (max 1MB)"
+}

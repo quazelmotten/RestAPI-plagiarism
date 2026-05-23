@@ -214,8 +214,7 @@
   "keyboardShortcuts": "Горячие клавиши",
   "emptyStates": {
     "uploadToGetStarted": "Загрузите файлы, чтобы начать",
-    "uploadToSeeActivity": "Загрузите файлы, чтобы увидеть активность",
-    "uploadToGenerateGraph": "Загрузите файлы для создания графика"
+    "uploadToSeeActivity": "Загрузите файлы, чтобы увидеть активность"
   },
   "settings": "Настройки",
   "apiKeys": "API‑ключи",

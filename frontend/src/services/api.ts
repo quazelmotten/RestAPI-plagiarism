@@ -190,5 +190,34 @@ export const restoreAssignment = (id: string) =>
 export const restoreSubject = (id: string) => 
   api.post(`${API_ENDPOINTS.SUBJECTS}/${id}/restore`);
 
+export const softDeleteTask = (taskId: string) =>
+  api.post(API_ENDPOINTS.SOFT_DELETE_TASK(taskId));
+
+export const hardDeleteTask = (taskId: string) =>
+  api.delete(API_ENDPOINTS.HARD_DELETE_TASK(taskId));
+
+export const reassignTask = (taskId: string, assignmentId: string) => {
+  const formData = new FormData();
+  formData.append('assignment_id', assignmentId);
+  return api.post(API_ENDPOINTS.REASSIGN_TASK(taskId), formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
+
+export const getOrphanedTasks = (limit = 50, offset = 0) =>
+  api.get(`${API_ENDPOINTS.ORPHANED_TASKS}?limit=${limit}&offset=${offset}`);
+
+export const cleanupOrphanedTasks = () =>
+  api.post(API_ENDPOINTS.CLEANUP_ORPHANED_TASKS);
+
+export const getStorageUsage = () =>
+  api.get(API_ENDPOINTS.STORAGE_USAGE);
+
+export const getAssignmentStorageUsage = (assignmentId: string) =>
+  api.get(API_ENDPOINTS.ASSIGNMENT_STORAGE_USAGE(assignmentId));
+
+export const deleteAssignmentWithCascade = (id: string, cascade = false) =>
+  api.delete(`${API_ENDPOINTS.ASSIGNMENTS}/${id}?cascade=${cascade}`);
+
 export { API_ENDPOINTS };
 export default api;

@@ -4,7 +4,7 @@
  */
 
 export const API_ENDPOINTS = {
-  // Plagiarism checks
+  // Plagiarism checks (legacy)
   CHECK: '/plagiarism/check',
   TASKS: '/plagiarism/tasks',
   TASK_DETAILS: (taskId: string) => `/plagiarism/tasks/${taskId}/results`,
@@ -16,6 +16,16 @@ export const API_ENDPOINTS = {
   FILE_CONTENT: (fileId: string) => `/plagiarism/files/${fileId}/content`,
   FILE_SIMILARITIES: (fileId: string) => `/plagiarism/files/${fileId}/similarities`,
   TOP_SIMILAR_PAIRS: (fileId: string) => `/plagiarism/files/${fileId}/top-similar-pairs`,
+
+  // Uploads (new API)
+  UPLOADS: '/plagiarism/uploads',
+  UPLOAD_DETAILS: (taskId: string) => `/plagiarism/uploads/${taskId}`,
+  UPDATE_UPLOAD: (taskId: string) => `/plagiarism/uploads/${taskId}`,
+  DELETE_UPLOAD: (taskId: string) => `/plagiarism/uploads/${taskId}`,
+  REANALYZE_UPLOAD: (taskId: string) => `/plagiarism/uploads/${taskId}/reanalyze`,
+  UPLOAD_FILES: (taskId: string) => `/plagiarism/uploads/${taskId}/files`,
+  DELETE_UPLOAD_FILE: (taskId: string, fileId: string) => `/plagiarism/uploads/${taskId}/files/${fileId}`,
+  UPDATE_UPLOAD_FILE: (taskId: string, fileId: string) => `/plagiarism/uploads/${taskId}/files/${fileId}`,
 
   // Results - Review workflow
   CONFIRM_PLAGIARISM: (resultId: string) => `/plagiarism/results/${resultId}/confirm`,
@@ -34,6 +44,10 @@ export const API_ENDPOINTS = {
   EXPORT_REVIEW: (assignmentId: string, threshold: number) =>
     `/plagiarism/assignments/${assignmentId}/export-review?threshold=${threshold}`,
 
+  // Global Review Queue (new)
+  GLOBAL_REVIEW_QUEUE: '/plagiarism/review-queue',
+  ASSIGNMENT_REVIEW_QUEUE: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/review-queue`,
+
   // PDF Export
   EXPORT_PDF: (assignmentId: string, resultId: string) =>
     `/plagiarism/assignments/${assignmentId}/reports/${resultId}/pdf`,
@@ -43,6 +57,11 @@ export const API_ENDPOINTS = {
   // File notes
   FILE_NOTES: (fileId: string) => `/plagiarism/files/${fileId}/notes`,
   DELETE_NOTE: (noteId: string) => `/plagiarism/notes/${noteId}`,
+
+  // File moves
+  FILE_MOVE: (fileId: string) => `/plagiarism/files/${fileId}/move`,
+  BULK_MOVE_FILES: '/plagiarism/files/bulk/move',
+  DELETE_FILE: (fileId: string) => `/plagiarism/files/${fileId}`,
 
   // Assignments
   ASSIGNMENTS: '/plagiarism/assignments',
@@ -64,6 +83,20 @@ export const API_ENDPOINTS = {
   // Health & version
   HEALTH: '/health',
   VERSION: '/version',
+
+  // Task lifecycle (legacy)
+  SOFT_DELETE_TASK: (taskId: string) => `/plagiarism/tasks/${taskId}/soft-delete`,
+  HARD_DELETE_TASK: (taskId: string) => `/plagiarism/tasks/${taskId}`,
+  REASSIGN_TASK: (taskId: string) => `/plagiarism/tasks/${taskId}/reassign`,
+  ORPHANED_TASKS: '/plagiarism/tasks/orphaned',
+  CLEANUP_ORPHANED_TASKS: '/plagiarism/tasks/orphaned/cleanup',
+
+  // Storage
+  STORAGE_USAGE: '/plagiarism/storage/usage',
+  ASSIGNMENT_STORAGE_USAGE: (assignmentId: string) => `/plagiarism/storage/usage/${assignmentId}`,
+
+  // Quick Check
+  QUICK_CHECK: '/plagiarism/quick-check',
 } as const;
 
 export default API_ENDPOINTS;

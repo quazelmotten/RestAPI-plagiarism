@@ -141,3 +141,94 @@ class TestCandidateService:
         assert result == service.find_candidate_pairs(
             [{"hash": "a"}], [{"hash": "b"}], "python", False
         )
+
+    # ── Pair-count math ────────────────────────────────────────────────────────
+
+    def test_intra_task_pair_count_n0(self, service, mock_index):
+        """N=0 intra-task → 0 pairs."""
+        pairs = service.find_candidate_pairs([], language="python")
+        assert pairs == []
+
+    def test_intra_task_pair_count_n1(self, service, mock_index):
+        """N=1 intra-task → 0 pairs (no partner)."""
+        files = [{"hash": "h0", "id": "0"}]
+        mock_index.get_file_fingerprints_batch.return_value = {"h0": ["fp0"]}
+        mock_index.find_candidates.return_value = {"h0": 1.0}
+        pairs = service.find_candidate_pairs(files, language="python", deduplicate=True)
+        assert len(pairs) == 0
+
+    @pytest.mark.parametrize("n,expected", [
+        (2, 1), (3, 3), (4, 6), (5, 10), (6, 15), (10, 45),
+    ])
+    def test_intra_task_pair_count_math(self, service, mock_index, n, expected):
+        """Intra-task N files → C(N,2) pairs with full connectivity."""
+        files = [{"hash": f"h{i}", "id": str(i)} for i in range(n)]
+        all_hashes = {f["hash"] for f in files}
+        mock_index.get_file_fingerprints_batch.side_effect = (
+            lambda hashes, lang: {h: ["fp"] for h in hashes}
+        )
+        mock_index.find_candidates.return_value = {h: 0.5 for h in all_hashes}
+        pairs = service.find_candidate_pairs(files, language="python", deduplicate=True)
+        assert len(pairs) == expected
+
+    def test_intra_task_pair_count_partial_indexed(self, service, mock_index):
+        """Only 3 of 5 files indexed → C(3,2)=3 pairs."""
+        files = [{"hash": f"h{i}", "id": str(i)} for i in range(5)]
+        indexed = {"h0", "h2", "h4"}
+        mock_index.get_file_fingerprints_batch.side_effect = (
+            lambda hashes, lang: {h: (["fp"] if h in indexed else None) for h in hashes}
+        )
+        mock_index.find_candidates.return_value = {"h0": 0.5, "h2": 0.5, "h4": 0.5}
+        pairs = service.find_candidate_pairs(files, language="python", deduplicate=True)
+        assert len(pairs) == 3  # C(3,2)
+
+    def test_intra_task_on_progress_called(self, service, mock_index):
+        """on_progress callback is invoked during intra-task."""
+        n = 10
+        files = [{"hash": f"h{i}", "id": str(i)} for i in range(n)]
+        all_hashes = {f["hash"] for f in files}
+        mock_index.get_file_fingerprints_batch.side_effect = (
+            lambda hashes, lang: {h: ["fp"] for h in hashes}
+        )
+        mock_index.find_candidates.return_value = {h: 0.5 for h in all_hashes}
+        calls = []
+        def on_progress(processed, total):
+            calls.append((processed, total))
+        pairs = service.find_candidate_pairs(
+            files, language="python", deduplicate=True, on_progress=on_progress,
+        )
+        assert len(calls) > 0
+        assert calls[-1] == (n, n)
+
+    def test_cross_task_pair_count_math(self, service, mock_index):
+        """Cross-task A=3, B=4 → 12 pairs."""
+        files_a = [{"hash": f"a{i}", "id": f"a{i}"} for i in range(3)]
+        files_b = [{"hash": f"b{j}", "id": f"b{j}"} for j in range(4)]
+        all_hashes = {f["hash"] for f in files_a + files_b}
+        mock_index.get_file_fingerprints_batch.side_effect = (
+            lambda hashes, lang: {h: ["fp"] for h in hashes}
+        )
+        mock_index.find_candidates.return_value = {h: 0.5 for h in all_hashes}
+        pairs = service.find_candidate_pairs(files_a, files_b, language="python", deduplicate=False)
+        assert len(pairs) == 12  # 3 * 4
+
+    def test_cross_task_pair_count_zero_b(self, service, mock_index):
+        """Cross-task with empty files_b → 0 pairs."""
+        files_a = [{"hash": f"a{i}", "id": f"a{i}"} for i in range(3)]
+        pairs = service.find_candidate_pairs(files_a, [], language="python", deduplicate=False)
+        assert pairs == []
+
+    @pytest.mark.parametrize("a,b,expected", [
+        (1, 1, 1), (2, 3, 6), (3, 5, 15), (1, 10, 10), (10, 1, 10),
+    ])
+    def test_cross_task_pair_count_parametrized(self, service, mock_index, a, b, expected):
+        """Cross-task A×B → A*B pairs for various sizes."""
+        files_a = [{"hash": f"a{i}", "id": f"a{i}"} for i in range(a)]
+        files_b = [{"hash": f"b{j}", "id": f"b{j}"} for j in range(b)]
+        all_hashes = {f["hash"] for f in files_a + files_b}
+        mock_index.get_file_fingerprints_batch.side_effect = (
+            lambda hashes, lang: {h: ["fp"] for h in hashes}
+        )
+        mock_index.find_candidates.return_value = {h: 0.5 for h in all_hashes}
+        pairs = service.find_candidate_pairs(files_a, files_b, language="python", deduplicate=False)
+        assert len(pairs) == expected

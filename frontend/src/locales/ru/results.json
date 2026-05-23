@@ -8,6 +8,8 @@
   "exportAllPDFs": "Экспорт всех PDF",
   "exportPdf": "Экспорт PDF",
   "noChecks": "Проверки на плагиат не найдены. Загрузите файлы чтобы начать!",
+  "noResultsYet": "Результатов пока нет",
+  "uploadFilesToSeeStats": "Загрузите файлы и запустите анализ, чтобы увидеть статистику",
   "selectTaskPrompt": "Выберите задачу",
   "failedToFetchTasks": "Не удалось загрузить задачи",
   "failedToFetchDetails": "Не удалось загрузить детали задачи",

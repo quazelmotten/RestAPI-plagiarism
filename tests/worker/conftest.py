@@ -28,7 +28,7 @@ class _MockLuaScript:
         lang = args[0]
         qcount = int(args[1])
         min_overlap = int(args[2])
-        query_hashes = [str(a) for a in args[3:]]
+        query_hashes = [str(a) for a in args[4:]]
 
         # Count how many query hashes each candidate file shares
         cands = {}

@@ -25,11 +25,8 @@ import {
   Text,
   Spinner,
   HStack,
-  Icon,
 } from '@chakra-ui/react';
-import { FiArrowLeft } from 'react-icons/fi';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
 import { getUsers, deleteUser, updateUserGlobalRole, adminChangePassword } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
@@ -46,11 +43,19 @@ const Users: React.FC = () => {
   const { user: currentUser } = useAuth();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const { t } = useTranslation();
+
+  if (!currentUser?.is_global_admin) {
+    return (
+      <Box p={8} textAlign="center">
+        <Text fontSize="lg" color="red.500">Access Denied</Text>
+        <Text color="gray.500" mt={2}>You must be an admin to view this page.</Text>
+      </Box>
+    );
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
@@ -151,19 +156,10 @@ const Users: React.FC = () => {
   const users = data?.users || [];
 
   return (
-    <Box p={8}>
-      <HStack mb={6} gap={4}>
-        <Button
-          variant="ghost"
-          leftIcon={<Icon as={FiArrowLeft} />}
-          onClick={() => navigate('/dashboard')}
-        >
-          {t('back')}
-        </Button>
-        <Text fontSize="2xl" fontWeight="bold">
-          {t('userManagement')}
-        </Text>
-      </HStack>
+    <Box>
+      <Text fontSize="2xl" fontWeight="bold" mb={4}>
+        {t('userManagement')}
+      </Text>
 
       <Table variant="simple">
         <Thead>

@@ -558,6 +558,7 @@ class ResultRepository:
             ast_similarity=sr.ast_similarity,
             matches=_normalize_matches(sr.matches),
             created_at=sr.created_at.isoformat() if sr.created_at else None,
+            review_disposition=sr.review_disposition,
         )
 
     async def _map_to_result_item_with_map(
@@ -579,4 +580,5 @@ class ResultRepository:
             ast_similarity=sr.ast_similarity,
             matches=_normalize_matches(sr.matches),
             created_at=sr.created_at.isoformat() if sr.created_at else None,
+            review_disposition=sr.review_disposition,
         )

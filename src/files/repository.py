@@ -2,7 +2,8 @@
 Files domain repository - data access for file operations using SQL-first approach.
 """
 
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime
 
 from shared.models import Assignment, File, PlagiarismTask, SimilarityResult, Subject
 from sqlalchemy import func, select, union_all
@@ -278,3 +279,33 @@ class FileRepository:
 
         items.sort(key=lambda x: x["similarity"], reverse=True)
         return PaginatedResponse(items=items, total=len(items), limit=len(items), offset=0)
+
+    async def exist(self, file_id: str) -> bool:
+        """Check if a file exists."""
+        file = await self.db.get(File, file_id)
+        return file is not None
+
+    async def move_file(self, file_id: str, target_task_id: uuid.UUID) -> File | None:
+        """Move a file to a different task (upload). Returns the updated file."""
+        file = await self.db.get(File, file_id)
+        if not file:
+            return None
+
+        target_task = await self.db.get(PlagiarismTask, target_task_id)
+        if not target_task:
+            return None
+
+        file.task_id = target_task_id
+        await self.db.commit()
+        await self.db.refresh(file)
+        return file
+
+    async def delete_file(self, file_id: str) -> bool:
+        """Soft-delete a file by setting deleted_at. Returns True if deleted."""
+        file = await self.db.get(File, file_id)
+        if not file:
+            return False
+
+        file.deleted_at = datetime.now(UTC)
+        await self.db.commit()
+        return True

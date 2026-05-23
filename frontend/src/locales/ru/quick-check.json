@@ -1,0 +1,23 @@
+{
+  "title": "Быстрая проверка",
+  "modeTwoFiles": "Сравнить 2 файла",
+  "modeVsAssignment": "Сравнить файл с заданием",
+  "fileA": "Файл для проверки",
+  "fileB": "Сравнить с",
+  "dropFile": "Перетащите файл сюда или нажмите для выбора",
+  "compareAgainst": "Сравнить с",
+  "selectAssignmentPlaceholder": "Выберите задание...",
+  "runAnalysis": "Запустить анализ",
+  "results": "Результаты",
+  "completed": "Завершено",
+  "maxSimilarity": "Макс. сходство",
+  "reviewPairs": "Проверить пары",
+  "viewUpload": "Просмотр загрузки",
+  "notSavedHint": "Эта проверка не сохраняется. Удалите её из Загрузок, когда закончите.",
+  "analysisStarted": "Анализ начат",
+  "analysisFailed": "Анализ не удался",
+  "selectBothFiles": "Выберите оба файла для сравнения",
+  "selectFile": "Выберите файл для проверки",
+  "selectAssignment": "Выберите задание для сравнения",
+  "fileTooLarge": "Файл слишком большой (макс. 1МБ)"
+}

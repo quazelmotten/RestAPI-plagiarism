@@ -21,17 +21,21 @@ from auth.router import router as auth_router
 from auth.service import decode_token
 from files.router import router as files_router
 from results.router import router as results_router
+from storage.router import router as storage_router
 from tasks.router import router as tasks_router
+from uploads.router import router as uploads_router
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 router.include_router(auth_router)
 router.include_router(tasks_router)
+router.include_router(uploads_router)
 router.include_router(files_router)
 router.include_router(results_router)
 router.include_router(assignments_router)
 router.include_router(assignments_subject_router)
+router.include_router(storage_router)
 
 
 @router.websocket("/plagiarism/ws/tasks/{task_id}")

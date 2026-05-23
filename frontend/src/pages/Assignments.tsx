@@ -31,6 +31,7 @@ import {
   FormControl,
   FormLabel,
   Textarea,
+  Checkbox,
   AlertDialog,
   AlertDialogBody,
   AlertDialogFooter,
@@ -90,6 +91,8 @@ interface Assignment {
   created_at: string | null;
   tasks_count: number;
   files_count: number;
+  uploads_count: number;
+  high_similarity_count: number;
 }
 
 interface AssignmentsResponse {
@@ -148,6 +151,11 @@ interface DraggableAssignmentRowProps {
         </Td>
         <Td isNumeric>
           <Badge colorScheme="green">{assignment.files_count}</Badge>
+        </Td>
+        <Td isNumeric>
+          <Badge colorScheme={assignment.high_similarity_count > 0 ? 'red' : 'gray'}>
+            {assignment.high_similarity_count}
+          </Badge>
         </Td>
         <Td fontSize="sm" color={mutedColor}>
           {assignment.created_at ? new Date(assignment.created_at).toLocaleDateString() : '—'}
@@ -228,6 +236,7 @@ const Assignments: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
   const [deletingAssignment, setDeletingAssignment] = useState<Assignment | null>(null);
+  const [deleteCascade, setDeleteCascade] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [managingSubject, setManagingSubject] = useState<Subject | null>(null);
   const [deletingSubject, setDeletingSubject] = useState<Subject | null>(null);
@@ -311,31 +320,41 @@ const Assignments: React.FC = () => {
     const restoreAssignmentMutation = useRestoreAssignment();
 
     const deleteMutation = useMutation({
-      mutationFn: async (assignment: Assignment) => {
-        await api.delete(`${API_ENDPOINTS.ASSIGNMENTS}/${assignment.id}`);
+      mutationFn: async ({ assignment, cascade }: { assignment: Assignment; cascade: boolean }) => {
+        await api.delete(`${API_ENDPOINTS.ASSIGNMENTS}/${assignment.id}?cascade=${cascade}`);
       },
-      onSuccess: (_, assignment) => {
-        toast({
-          title: t('toasts.deleted'),
-          description: (
-            <Button
-              size="sm"
-              colorScheme="blue"
-              mt={2}
-              onClick={() => {
-                restoreAssignmentMutation.mutate(assignment.id);
-              }}
-              width="100%"
-            >
-              {t('common:undo')}
-            </Button>
-          ),
-          status: 'warning',
-          duration: 8000,
-          isClosable: true,
-        });
+      onSuccess: (_, { assignment, cascade }) => {
+        if (cascade) {
+          toast({
+            title: t('toasts.deleted'),
+            description: t('toasts.deletedWithTasks'),
+            status: 'success',
+            duration: 3000,
+          });
+        } else {
+          toast({
+            title: t('toasts.deleted'),
+            description: (
+              <Button
+                size="sm"
+                colorScheme="blue"
+                mt={2}
+                onClick={() => {
+                  restoreAssignmentMutation.mutate(assignment.id);
+                }}
+                width="100%"
+              >
+                {t('common:undo')}
+              </Button>
+            ),
+            status: 'warning',
+            duration: 8000,
+            isClosable: true,
+          });
+        }
         queryClient.invalidateQueries({ queryKey: ['assignments'] });
         queryClient.invalidateQueries({ queryKey: ['subjects'] });
+        queryClient.invalidateQueries({ queryKey: ['tasks', 'sessions'] });
         setDeletingAssignment(null);
         onDeleteAssignmentClose();
       },
@@ -499,11 +518,11 @@ const Assignments: React.FC = () => {
     closeSubjectModal();
   }, [newName, newDescription, editingSubject, createSubjectMutation, updateSubjectMutation, toast]);
 
-   const handleDeleteAssignment = useCallback(() => {
-     if (deletingAssignment) {
-       deleteMutation.mutate(deletingAssignment);
-     }
-   }, [deletingAssignment, deleteMutation]);
+    const handleDeleteAssignment = useCallback(() => {
+      if (deletingAssignment) {
+        deleteMutation.mutate({ assignment: deletingAssignment, cascade: deleteCascade });
+      }
+    }, [deletingAssignment, deleteCascade, deleteMutation]);
 
    const handleDeleteSubject = useCallback(() => {
      if (!deletingSubject) return;
@@ -557,7 +576,7 @@ const Assignments: React.FC = () => {
     >
     <Box display="flex" flexDirection="column" flex={1} minH={0} overflow="hidden">
       {/* Header */}
-      <Flex justify="space-between" align="center" mb={4} flexShrink={0}>
+      <Flex justify="space-between" align="center" mb={4} flexShrink={0} wrap="wrap" gap={2}>
         <Text fontSize="2xl" fontWeight="bold">
           {t('title')}
         </Text>
@@ -573,7 +592,7 @@ const Assignments: React.FC = () => {
 
       {/* Search */}
       <Box mb={4} flexShrink={0}>
-        <InputGroup size="sm" maxW="300px">
+        <InputGroup size="sm" maxW={{ base: 'full', md: '300px' }}>
           <InputLeftElement pointerEvents="none">
             <Icon as={FiSearch} color={mutedColor} />
           </InputLeftElement>
@@ -660,7 +679,7 @@ const Assignments: React.FC = () => {
                               <Text fontWeight="medium">{t('noAssignmentsInSubject')}</Text>
                             </Flex>
                           ) : (
-                            <TableContainer>
+                            <TableContainer overflowX="auto">
                               <Table variant="simple" size="sm">
                                 <Thead>
                                   <Tr>
@@ -669,6 +688,7 @@ const Assignments: React.FC = () => {
                                     <Th>{t('table.description')}</Th>
                                     <Th isNumeric>{t('table.tasks')}</Th>
                                     <Th isNumeric>{t('table.files')}</Th>
+                                    <Th isNumeric>{t('table.highSim')}</Th>
                                     <Th>{t('table.created')}</Th>
                                     <Th>{t('table.actions')}</Th>
                                   </Tr>
@@ -748,21 +768,22 @@ const Assignments: React.FC = () => {
                            mt={2}
                            overflow="hidden"
                          >
-                           <TableContainer>
-                             <Table variant="simple" size="sm">
-                               <Thead>
-                                 <Tr>
-                                   <Th w="30px"></Th>
-                                   <Th>{t('table.name')}</Th>
-                                   <Th>{t('table.description')}</Th>
-                                   <Th isNumeric>{t('table.tasks')}</Th>
-                                   <Th isNumeric>{t('table.files')}</Th>
-                                   <Th>{t('table.created')}</Th>
-                                   <Th>{t('table.actions')}</Th>
-                                 </Tr>
-                               </Thead>
-                               <Tbody>
-                                 {uncategorized.map((a) => (
+                          <TableContainer overflowX="auto">
+                            <Table variant="simple" size="sm">
+                              <Thead>
+                                <Tr>
+                                  <Th w="30px"></Th>
+                                  <Th>{t('table.name')}</Th>
+                                  <Th>{t('table.description')}</Th>
+                                  <Th isNumeric>{t('table.tasks')}</Th>
+                                  <Th isNumeric>{t('table.files')}</Th>
+                                  <Th isNumeric>{t('table.highSim')}</Th>
+                                  <Th>{t('table.created')}</Th>
+                                  <Th>{t('table.actions')}</Th>
+                                </Tr>
+                              </Thead>
+                              <Tbody>
+                                {uncategorized.map((a) => (
                                    <DraggableAssignmentRow
                                      key={a.id}
                                      assignment={a}
@@ -849,6 +870,7 @@ const Assignments: React.FC = () => {
         leastDestructiveRef={cancelRef as React.RefObject<HTMLButtonElement>}
         onClose={() => {
           setDeletingAssignment(null);
+          setDeleteCascade(false);
           onDeleteAssignmentClose();
         }}
       >
@@ -858,7 +880,18 @@ const Assignments: React.FC = () => {
               {t('deleteConfirm.title')}
             </AlertDialogHeader>
             <AlertDialogBody>
-              {t('deleteConfirm.message', { name: deletingAssignment?.name })}
+              <Text mb={3}>
+                {t('deleteConfirm.message', { name: deletingAssignment?.name })}
+              </Text>
+              {deletingAssignment && deletingAssignment.tasks_count > 0 && (
+                <Checkbox
+                  isChecked={deleteCascade}
+                  onChange={(e) => setDeleteCascade(e.target.checked)}
+                  colorScheme="red"
+                >
+                  {t('deleteConfirm.deleteTasks', { count: deletingAssignment.tasks_count })}
+                </Checkbox>
+              )}
             </AlertDialogBody>
             <AlertDialogFooter>
               <Button ref={cancelRef} onClick={onDeleteAssignmentClose}>

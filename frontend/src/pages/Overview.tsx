@@ -228,7 +228,7 @@ const Overview: React.FC = () => {
               onClick={() => navigate(`/dashboard/results?task=${item.id}`)}
               cursor="pointer"
             >
-              <HStack justify="space-between" align="start">
+              <HStack justify="space-between" align="start" wrap="wrap" spacing={2}>
                 <VStack align="start" spacing={1} flex={1}>
                   <HStack spacing={2}>
                     {getStatusIcon(item.status)}

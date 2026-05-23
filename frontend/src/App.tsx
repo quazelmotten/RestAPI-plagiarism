@@ -135,14 +135,6 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
-                  <Route
-                    path="/dashboard/users"
-                    element={
-                      <AdminRoute>
-                        <Users />
-                      </AdminRoute>
-                    }
-                  />
                   <Route path="/" element={<Navigate to="/dashboard" replace />} />
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>

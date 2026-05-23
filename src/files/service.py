@@ -3,6 +3,7 @@ Files domain service - business logic for file management.
 """
 
 import logging
+import uuid
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -184,6 +185,45 @@ class FileService:
             content=note.content,
             created_at=note.created_at.isoformat() if note.created_at else "",
         )
+
+    async def move_file(self, file_id: str, target_task_id: uuid.UUID) -> FileResponse:
+        """Move a file to a different upload (task)."""
+        from exceptions.exceptions import NotFoundError
+
+        file = await self.repo.get_file(file_id)
+        if not file:
+            raise NotFoundError("File not found")
+
+        target_task = await self.db.get(PlagiarismTask, target_task_id)
+        if not target_task:
+            raise NotFoundError("Target upload not found")
+
+        moved_file = await self.repo.move_file(file_id, target_task_id)
+        if not moved_file:
+            raise NotFoundError("File not found")
+
+        return FileResponse(
+            id=str(moved_file.id),
+            filename=str(moved_file.filename),
+            language=str(moved_file.language),
+            created_at=moved_file.created_at.isoformat() if moved_file.created_at else None,
+            task_id=str(moved_file.task_id),
+            status=target_task.status,
+            similarity=float(moved_file.max_similarity) if moved_file.max_similarity is not None else None,
+            is_confirmed=bool(moved_file.is_confirmed),
+        )
+
+    async def exist(self, file_id: str) -> bool:
+        """Check if a file exists."""
+        return await self.repo.exist(file_id)
+
+    async def delete_file(self, file_id: str) -> None:
+        """Soft-delete a file by setting deleted_at."""
+        from exceptions.exceptions import NotFoundError
+
+        deleted = await self.repo.delete_file(file_id)
+        if not deleted:
+            raise NotFoundError("File not found")
 
     async def delete_note(self, note_id: str) -> None:
         from exceptions.exceptions import NotFoundError

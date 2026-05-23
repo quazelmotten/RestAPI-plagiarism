@@ -1,0 +1,21 @@
+{
+  "storageUsage": "Storage Usage",
+  "totalStorage": "Total Storage",
+  "byAssignment": "By Assignment",
+  "orphanedTasks": "Orphaned Tasks",
+  "redisCache": "Redis Cache",
+  "cleanupOrphaned": "Cleanup Orphaned",
+  "cleanupSuccess": "Cleaned up {{tasks}} tasks and {{files}} files",
+  "cleanupFailed": "Failed to cleanup orphaned tasks",
+  "noOrphanedTasks": "No orphaned tasks",
+  "orphanedTasksDesc": "All tasks are properly assigned to assignments",
+  "assignmentStorage": "Assignment Storage",
+  "filesCount": "{{count}} files",
+  "reassign": "Reassign",
+  "reassignTask": "Reassign Task",
+  "reassignDescription": "Select an assignment to reassign this orphaned task to. The task will be linked to the assignment and appear in its task list.",
+  "selectAssignment": "Select Assignment",
+  "selectAssignmentPlaceholder": "Choose an assignment...",
+  "reassignSuccess": "Task reassigned successfully",
+  "reassignFailed": "Failed to reassign task"
+}

@@ -53,7 +53,7 @@ export interface PlagiarismResult {
   file_a: {
     id: string;
     filename: string;
-    task_id?: string; // The task this file belongs to (may differ from selected task for cross-task)
+    task_id?: string;
     is_confirmed?: boolean;
   };
   file_b: {
@@ -63,10 +63,10 @@ export interface PlagiarismResult {
     is_confirmed?: boolean;
   };
   ast_similarity: number;
-  type_coverage?: Record<string, number>; // per-type fraction of total lines
+  type_coverage?: Record<string, number>;
   matches: PlagiarismMatch[];
   created_at: string;
-  review_disposition?: string; // 'plagiarism', 'clear', 'bulk_confirmed', or null
+  review_disposition?: string;
 }
 
 export interface PlagiarismNetwork {
@@ -216,6 +216,8 @@ export interface Assignment {
   created_at: string | null;
   tasks_count: number;
   files_count: number;
+  uploads_count: number;
+  high_similarity_count: number;
 }
 
 export interface ReviewQueueResponse {
@@ -242,4 +244,78 @@ export interface ReviewStatusSummary {
   confirmed: number;
   bulk_confirmed: number;
   cleared: number;
+}
+
+// Upload types (new API)
+export interface UploadListItem {
+  task_id: string;
+  name: string | null;
+  language: string | null;
+  status: TaskStatus;
+  similarity: number | null;
+  error: string | null;
+  created_at: string | null;
+  progress: {
+    completed: number;
+    total: number;
+    percentage: number;
+    display: string;
+  };
+  files_count: number;
+  high_similarity_count: number;
+  total_pairs: number;
+  avg_similarity: number;
+  assignment_id: string | null;
+  assignment_name: string | null;
+  subject_id: string | null;
+  subject_name: string | null;
+}
+
+export interface UploadDetails extends UploadListItem {
+  matches: Record<string, any> | null;
+}
+
+export interface UploadFile {
+  id: string;
+  task_id: string;
+  filename: string;
+  file_path: string;
+  file_hash: string;
+  language: string;
+  max_similarity: number | null;
+  is_confirmed: boolean;
+  created_at: string | null;
+}
+
+export interface FileListItem {
+  id: string;
+  filename: string;
+  language: string;
+  created_at: string | null;
+  task_id: string;
+  status: string;
+  similarity: number | null;
+  assignment_id: string | null;
+  assignment_name: string | null;
+  subject_id: string | null;
+  subject_name: string | null;
+  is_confirmed: boolean;
+  upload_name?: string | null;
+}
+
+export interface ReviewPair {
+  pair_id: string;
+  task_id: string;
+  file_a_id: string;
+  file_a_name: string;
+  file_b_id: string;
+  file_b_name: string;
+  ast_similarity: number | null;
+  embedding_similarity: number | null;
+  review_disposition: string | null;
+  reviewed_at: string | null;
+  assignment_id: string | null;
+  assignment_name: string | null;
+  upload_name: string | null;
+  created_at: string | null;
 }

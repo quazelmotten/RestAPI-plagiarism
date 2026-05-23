@@ -1,0 +1,21 @@
+{
+  "storageUsage": "Использование хранилища",
+  "totalStorage": "Общее хранилище",
+  "byAssignment": "По заданиям",
+  "orphanedTasks": "Осиротевшие задачи",
+  "redisCache": "Кэш Redis",
+  "cleanupOrphaned": "Очистить осиротевшие",
+  "cleanupSuccess": "Очищено {{tasks}} задач и {{files}} файлов",
+  "cleanupFailed": "Не удалось очистить осиротевшие задачи",
+  "noOrphanedTasks": "Нет осиротевших задач",
+  "orphanedTasksDesc": "Все задачи привязаны к заданиям",
+  "assignmentStorage": "Хранилище задания",
+  "filesCount": "{{count}} файлов",
+  "reassign": "Переназначить",
+  "reassignTask": "Переназначить задачу",
+  "reassignDescription": "Выберите задание, к которому будет привязана эта осиротевшая задача. Задача будет связана с заданием и появится в его списке задач.",
+  "selectAssignment": "Выберите задание",
+  "selectAssignmentPlaceholder": "Выберите задание...",
+  "reassignSuccess": "Задача успешно переназначена",
+  "reassignFailed": "Не удалось переназначить задачу"
+}

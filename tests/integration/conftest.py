@@ -162,6 +162,9 @@ class MockS3Storage:
     async def download_file(self, *args, **kwargs):
         return b"test content"
 
+    async def download_file_async(self, *args, **kwargs):
+        return b"test content"
+
     async def delete_file(self, *args, **kwargs):
         pass
 

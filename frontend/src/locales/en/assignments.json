@@ -27,8 +27,9 @@
   "table": {
     "name": "Name",
     "description": "Description",
-    "tasks": "Tasks",
+    "tasks": "Uploads",
     "files": "Files",
+    "highSim": "High Sim",
     "created": "Created",
     "actions": "Actions"
   },
@@ -36,12 +37,14 @@
     "created": "Assignment created",
     "updated": "Assignment updated",
     "deleted": "Assignment deleted",
+    "deletedWithTasks": "Assignment and all associated data deleted",
     "updateFailed": "Failed to update assignment",
     "deleteFailed": "Failed to delete assignment"
   },
   "deleteConfirm": {
     "title": "Delete Assignment",
-    "message": "Are you sure you want to delete \"{{name}}\"? Tasks associated with this assignment will not be deleted."
+    "message": "Are you sure you want to delete \"{{name}}\"?",
+    "deleteTasks": "Also delete all {{count}} associated tasks, files, and results (cannot be undone)"
   },
   "deleteSubjectConfirm": {
     "title": "Delete Subject",
@@ -62,5 +65,9 @@
   "filename": "Filename",
   "task": "Task",
   "maxSim": "Max Sim",
-  "allTasksAggregated": "All tasks (aggregated)"
+  "allTasksAggregated": "All tasks (aggregated)",
+  "noUploads": "No uploads yet",
+  "uploadFilesToStart": "Upload files to start analysis",
+  "uploadUnassigned": "Upload unassigned from assignment",
+  "unassignFailed": "Failed to unassign upload"
 }
