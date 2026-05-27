@@ -36,6 +36,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/dashboard/review': 'review',
   '/dashboard/quick-check': 'quickCheck',
   '/dashboard/assignments': 'assignments',
+  '/dashboard/events': 'events',
   '/dashboard/settings': 'settings',
   '/dashboard/admin/stats': 'adminStats',
 };
@@ -46,6 +47,7 @@ const BREADCRUMB_MAP: Record<string, { labelKey: string; to?: string }[]> = {
   '/dashboard/review': [{ labelKey: 'review', to: '/dashboard/review' }],
   '/dashboard/quick-check': [{ labelKey: 'quickCheck', to: '/dashboard/quick-check' }],
   '/dashboard/assignments': [{ labelKey: 'assignments', to: '/dashboard/assignments' }],
+  '/dashboard/events': [{ labelKey: 'events', to: '/dashboard/events' }],
   '/dashboard/settings': [{ labelKey: 'settings', to: '/dashboard/settings' }],
   '/dashboard/admin/stats': [{ labelKey: 'adminStats', to: '/dashboard/admin/stats' }],
 };

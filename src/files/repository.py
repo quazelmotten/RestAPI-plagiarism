@@ -5,7 +5,7 @@ Files domain repository - data access for file operations using SQL-first approa
 import uuid
 from datetime import UTC, datetime
 
-from shared.models import Assignment, File, PlagiarismTask, SimilarityResult, Subject
+from shared.models import Assignment, File, FileEvent, PlagiarismTask, SimilarityResult, Subject
 from sqlalchemy import func, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
@@ -44,6 +44,7 @@ class FileRepository:
                 File.is_confirmed,
                 PlagiarismTask.id.label("task_id"),
                 PlagiarismTask.status,
+                PlagiarismTask.name.label("upload_name"),
                 max_sim_subq.c.max_sim,
                 Assignment.id.label("assignment_id"),
                 Assignment.name.label("assignment_name"),
@@ -68,6 +69,7 @@ class FileRepository:
                 task_id=str(row.task_id),
                 status=row.status,
                 similarity=float(row.max_sim) if row.max_sim is not None else None,
+                upload_name=row.upload_name,
                 assignment_id=str(row.assignment_id) if row.assignment_id else None,
                 assignment_name=row.assignment_name,
                 subject_id=str(row.subject_id) if row.subject_id else None,
@@ -104,6 +106,7 @@ class FileRepository:
                 File.is_confirmed,
                 PlagiarismTask.id.label("task_id"),
                 PlagiarismTask.status,
+                PlagiarismTask.name.label("upload_name"),
                 max_sim_subq.c.max_sim,
                 Assignment.id.label("assignment_id"),
                 Assignment.name.label("assignment_name"),
@@ -166,11 +169,12 @@ class FileRepository:
                 task_id=str(row.task_id),
                 status=str(row.status),
                 similarity=float(row.max_sim) if row.max_sim is not None else None,
+                upload_name=row.upload_name,
                 assignment_id=str(row.assignment_id) if row.assignment_id else None,
                 assignment_name=row.assignment_name,
                 subject_id=str(row.subject_id) if row.subject_id else None,
                 subject_name=row.subject_name,
-                is_confirmed=bool(row.is_confirmed) if row.is_confirmed is not None else False,
+                is_confirmed=bool(row.is_confirmed) if row.is_confirmed is not None else None,
             )
             for row in rows
         ]
@@ -309,3 +313,241 @@ class FileRepository:
         file.deleted_at = datetime.now(UTC)
         await self.db.commit()
         return True
+
+    async def create_event(
+        self,
+        assignment_id: str | None,
+        task_id: str | None,
+        event_type: str,
+        event_metadata: dict | None = None,
+        user_id: str | None = None,
+    ) -> FileEvent:
+        event = FileEvent(
+            id=uuid.uuid4(),
+            assignment_id=assignment_id,
+            task_id=task_id,
+            user_id=user_id,
+            event_type=event_type,
+            event_metadata=event_metadata or {},
+        )
+        self.db.add(event)
+        await self.db.commit()
+        return event
+
+    async def get_all_file_ids(
+        self,
+        filename: str | None = None,
+        language: str | None = None,
+        status: str | None = None,
+        task_id: str | None = None,
+        assignment_id: str | None = None,
+        similarity_min: float | None = None,
+        similarity_max: float | None = None,
+    ) -> list[str]:
+        filters = [File.deleted_at.is_(None)]
+        if filename:
+            filters.append(File.filename.ilike(f"%{filename}%"))
+        if language:
+            filters.append(File.language == language)
+        if status:
+            filters.append(PlagiarismTask.status == status)
+        if task_id:
+            filters.append(File.task_id == uuid.UUID(task_id))
+        if assignment_id:
+            filters.append(PlagiarismTask.assignment_id == uuid.UUID(assignment_id))
+
+        query = (
+            select(File.id).join(PlagiarismTask, File.task_id == PlagiarismTask.id).where(*filters)
+        )
+
+        if similarity_min is not None or similarity_max is not None:
+            sim_filters = []
+            if similarity_min is not None:
+                sim_filters.append(File.max_similarity >= similarity_min)
+            if similarity_max is not None:
+                sim_filters.append(File.max_similarity <= similarity_max)
+            query = query.where(*sim_filters)
+
+        result = await self.db.execute(query)
+        return [str(row[0]) for row in result.all()]
+
+    async def create_upload_task(
+        self, assignment_id: str, language: str, name: str
+    ) -> PlagiarismTask:
+        """Create a new queued upload task in the target assignment."""
+        task = PlagiarismTask(
+            id=str(uuid.uuid4()),
+            name=name,
+            language=language,
+            status="queued",
+            assignment_id=assignment_id,
+        )
+        self.db.add(task)
+        await self.db.commit()
+        return task
+
+    async def rehome_files(self, file_ids: list[str], new_task_id: str) -> list[File]:
+        """Copy files to a new task and remove originals + similarity results."""
+        from sqlalchemy import delete
+
+        uuids = [uuid.UUID(fid) for fid in file_ids]
+
+        source_files = await self.db.execute(select(File).where(File.id.in_(uuids)))
+        source_files = source_files.scalars().all()
+
+        if not source_files:
+            return []
+
+        old_ids = [uuid.UUID(str(f.id)) for f in source_files]
+
+        new_files = []
+        for f in source_files:
+            new_file = File(
+                id=uuid.uuid4(),
+                task_id=new_task_id,
+                filename=f.filename,
+                file_path=f.file_path,
+                file_hash=f.file_hash,
+                language=f.language,
+            )
+            self.db.add(new_file)
+            new_files.append(new_file)
+
+        await self.db.flush()
+
+        await self.db.execute(
+            delete(SimilarityResult).where(
+                (SimilarityResult.file_a_id.in_(old_ids))
+                | (SimilarityResult.file_b_id.in_(old_ids))
+            )
+        )
+
+        await self.db.execute(delete(File).where(File.id.in_(old_ids)))
+
+        await self.db.commit()
+
+        for nf in new_files:
+            await self.db.refresh(nf)
+
+        return new_files
+
+    async def get_events(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        assignment_id: str | None = None,
+        task_id: str | None = None,
+        event_type: str | None = None,
+    ) -> PaginatedResponse:
+        filters = []
+        if assignment_id:
+            filters.append(FileEvent.assignment_id == uuid.UUID(assignment_id))
+        if task_id:
+            filters.append(FileEvent.task_id == uuid.UUID(task_id))
+        if event_type:
+            filters.append(FileEvent.event_type == event_type)
+
+        count_q = select(func.count()).select_from(FileEvent).where(*filters)
+        count_result = await self.db.execute(count_q)
+        total = count_result.scalar() or 0
+
+        from auth.models import User
+
+        query = (
+            select(FileEvent)
+            .outerjoin(User, FileEvent.user_id == User.id)
+            .where(*filters)
+            .order_by(FileEvent.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.db.execute(query)
+        rows = result.unique().scalars().all()
+
+        from files.schemas import FileEventResponse
+
+        items = []
+        for e in rows:
+            user_email = None
+            if e.user:
+                user_email = e.user.email
+            items.append(
+                FileEventResponse(
+                    id=str(e.id),
+                    assignment_id=str(e.assignment_id) if e.assignment_id else None,
+                    task_id=str(e.task_id) if e.task_id else None,
+                    user_id=str(e.user_id) if e.user_id else None,
+                    user_email=user_email,
+                    event_type=e.event_type,
+                    metadata=e.event_metadata,
+                    created_at=e.created_at.isoformat() if e.created_at else None,
+                )
+            )
+
+        return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
+
+    async def get_task_events(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        event_type: str | None = None,
+        assignment_id: str | None = None,
+        user_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> PaginatedResponse:
+        filters = []
+        if event_type:
+            filters.append(FileEvent.event_type == event_type)
+        if assignment_id:
+            filters.append(FileEvent.assignment_id == uuid.UUID(assignment_id))
+        if user_id:
+            filters.append(FileEvent.user_id == uuid.UUID(user_id))
+        if date_from:
+            filters.append(FileEvent.created_at >= datetime.fromisoformat(date_from))
+        if date_to:
+            filters.append(FileEvent.created_at <= datetime.fromisoformat(date_to))
+
+        count_q = select(func.count()).select_from(FileEvent).where(*filters)
+        count_result = await self.db.execute(count_q)
+        total = count_result.scalar() or 0
+
+        from shared.models import Assignment, PlagiarismTask
+
+        from auth.models import User
+
+        query = (
+            select(FileEvent, User.email, Assignment.name, PlagiarismTask.name)
+            .outerjoin(User, FileEvent.user_id == User.id)
+            .outerjoin(Assignment, FileEvent.assignment_id == Assignment.id)
+            .outerjoin(PlagiarismTask, FileEvent.task_id == PlagiarismTask.id)
+            .where(*filters)
+            .order_by(FileEvent.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.db.execute(query)
+        rows = result.all()
+
+        from files.schemas import TaskEventResponse
+
+        items = []
+        for e, user_email, assignment_name, task_name in rows:
+            files_count = (e.event_metadata or {}).get("files_count")
+            items.append(
+                TaskEventResponse(
+                    id=str(e.id),
+                    event_type=e.event_type,
+                    assignment_id=str(e.assignment_id) if e.assignment_id else None,
+                    assignment_name=assignment_name,
+                    task_id=str(e.task_id) if e.task_id else None,
+                    task_name=task_name,
+                    user_id=str(e.user_id) if e.user_id else None,
+                    user_email=user_email,
+                    metadata=e.event_metadata,
+                    files_count=files_count,
+                    created_at=e.created_at.isoformat() if e.created_at else None,
+                )
+            )
+
+        return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)

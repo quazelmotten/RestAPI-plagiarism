@@ -278,6 +278,10 @@ class Settings(BaseSettings):
         return self.rabbitmq.dead_letter_queue_name
 
     @property
+    def rmq_file_events_exchange(self) -> str:
+        return self.rabbitmq.file_events_exchange
+
+    @property
     def storage_local_path(self) -> str:
         return self.storage.local_path
 

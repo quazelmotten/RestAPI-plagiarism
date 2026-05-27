@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     rmq_queue_dead_letter_name: str = Field(
         default="plagiarism_dead", validation_alias="RMQ_QUEUE_DEAD_LETTER_NAME"
     )
+    rmq_file_events_exchange: str = Field(
+        default="file_events", validation_alias="RMQ_FILE_EVENTS_EXCHANGE"
+    )
+    rmq_file_events_queue: str = Field(
+        default="file_events_queue", validation_alias="RMQ_FILE_EVENTS_QUEUE"
+    )
 
     # Plagiarism detection
     default_plagiarism_threshold: float = Field(

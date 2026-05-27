@@ -69,5 +69,16 @@
   "noUploads": "No uploads yet",
   "uploadFilesToStart": "Upload files to start analysis",
   "uploadUnassigned": "Upload unassigned from assignment",
-  "unassignFailed": "Failed to unassign upload"
+  "unassignFailed": "Failed to unassign upload",
+  "events": "Events",
+  "eventTypes": {
+    "upload_queued": "Upload queued",
+    "upload_completed": "Analysis completed",
+    "upload_failed": "Analysis failed",
+    "file_uploaded": "File uploaded",
+    "file_deleted": "File deleted",
+    "file_moved": "File moved",
+    "reanalysis_triggered": "Re-analysis triggered"
+  },
+  "noEvents": "No events yet"
 }

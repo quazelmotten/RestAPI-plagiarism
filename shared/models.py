@@ -189,9 +189,7 @@ class ReviewNote(SharedBase):
     __tablename__ = "review_notes"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    file_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("files.id"), nullable=False
-    )
+    file_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("files.id"), nullable=False)
     assignment_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True), ForeignKey("assignments.id"), nullable=False
     )
@@ -228,3 +226,23 @@ class SubjectAccess(SharedBase):
     )
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     granted_by: Mapped[str | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class FileEvent(SharedBase):
+    """Audit log for file/upload lifecycle events."""
+
+    __tablename__ = "file_events"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    assignment_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("assignments.id"), nullable=True, index=True
+    )
+    task_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("plagiarism_tasks.id"), nullable=True, index=True
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    event_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

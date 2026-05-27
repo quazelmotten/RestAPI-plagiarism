@@ -15,6 +15,7 @@ class FileResponse(CustomBaseModel):
     task_id: str
     status: str
     similarity: float | None = None
+    upload_name: str | None = None
     assignment_id: str | None = None
     assignment_name: str | None = None
     subject_id: str | None = None
@@ -74,3 +75,33 @@ class FileMoveRequest(CustomBaseModel):
 class BulkFileMoveRequest(CustomBaseModel):
     file_ids: list[uuid.UUID]
     target_task_id: uuid.UUID
+
+
+class FileEventResponse(CustomBaseModel):
+    id: str
+    assignment_id: str | None = None
+    task_id: str | None = None
+    user_id: str | None = None
+    user_email: str | None = None
+    event_type: str
+    metadata: dict | None = None
+    created_at: str | None = None
+
+
+class TaskEventResponse(CustomBaseModel):
+    id: str
+    event_type: str
+    assignment_id: str | None = None
+    assignment_name: str | None = None
+    task_id: str | None = None
+    task_name: str | None = None
+    user_id: str | None = None
+    user_email: str | None = None
+    metadata: dict | None = None
+    files_count: int | None = None
+    created_at: str | None = None
+
+
+class BulkMoveByAssignmentRequest(CustomBaseModel):
+    file_ids: list[uuid.UUID]
+    target_assignment_id: uuid.UUID

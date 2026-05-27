@@ -23,15 +23,21 @@ class AsyncWorker:
     """Asynchronous worker using Pika SelectConnection with auto-reconnect."""
 
     def __init__(
-        self, message_handler, worker_concurrency: int | None = None, log_level: int | None = None
+        self,
+        message_handler,
+        file_event_handler=None,
+        worker_concurrency: int | None = None,
+        log_level: int | None = None,
     ):
         self.message_handler = message_handler
+        self.file_event_handler = file_event_handler
         self.worker_concurrency = worker_concurrency or getattr(settings, "worker_concurrency", 4)
         self.log_level = log_level or self._parse_log_level(getattr(settings, "log_level", "INFO"))
 
         self._connection: pika.SelectConnection | None = None
         self._channel: pika.channel.Channel | None = None
         self._consumer_tag: str | None = None
+        self._file_events_consumer_tag: str | None = None
         self._closing = False
         self._stopping = False
         self._consuming = False
@@ -148,6 +154,7 @@ class AsyncWorker:
         log.info(f"Connection closed: {reason}")
         self._channel = None
         self._consumer_tag = None
+        self._file_events_consumer_tag = None
         self._consuming = False
 
         if self._closing:
@@ -235,12 +242,57 @@ class AsyncWorker:
             queue=settings.rmq_queue_dead_letter_name,
             exchange=settings.rmq_queue_dead_letter_exchange,
             routing_key=settings.rmq_queue_routing_key_dead_letter,
-            callback=lambda _: log.info("DLQ bound"),
+            callback=self._on_dlx_bindok,
         )
-        self._set_qos()
+
+    def _on_dlx_bindok(self, _unused_frame):
+        log.info("DLQ bound")
+        if self.file_event_handler:
+            self._setup_file_events()
+        else:
+            self._set_qos()
 
     def _on_bindok(self, _unused_frame):
         log.info("Queue bound")
+        self._set_qos()
+
+    def _setup_file_events(self):
+        if not self._channel:
+            return
+        log.info("Setting up file_events exchange and queue...")
+        self._channel.exchange_declare(
+            exchange=settings.rmq_file_events_exchange,
+            exchange_type="topic",
+            durable=True,
+            callback=functools.partial(
+                self._on_file_events_exchange_declareok,
+                exchange=settings.rmq_file_events_exchange,
+            ),
+        )
+
+    def _on_file_events_exchange_declareok(self, _unused_frame, exchange: str):
+        log.info(f"File events exchange declared: {exchange}")
+        if not self._channel:
+            return
+        self._channel.queue_declare(
+            queue=settings.rmq_file_events_queue,
+            durable=True,
+            callback=self._on_file_events_queue_declareok,
+        )
+
+    def _on_file_events_queue_declareok(self, _unused_frame):
+        log.info(f"File events queue declared: {settings.rmq_file_events_queue}")
+        if not self._channel:
+            return
+        self._channel.queue_bind(
+            queue=settings.rmq_file_events_queue,
+            exchange=settings.rmq_file_events_exchange,
+            routing_key="#",
+            callback=self._on_file_events_bindok,
+        )
+
+    def _on_file_events_bindok(self, _unused_frame):
+        log.info("File events queue bound")
         self._set_qos()
 
     def _set_qos(self):
@@ -262,8 +314,16 @@ class AsyncWorker:
         self._consumer_tag = self._channel.basic_consume(
             queue=settings.rmq_queue_name, on_message_callback=self._on_message_wrapper
         )
+        log.info(f"Plagiarism consumer started with tag: {self._consumer_tag}")
+
+        if self.file_event_handler:
+            self._file_events_consumer_tag = self._channel.basic_consume(
+                queue=settings.rmq_file_events_queue,
+                on_message_callback=self._on_file_event_wrapper,
+            )
+            log.info(f"File events consumer started with tag: {self._file_events_consumer_tag}")
+
         self._consuming = True
-        log.info(f"Consumer started with tag: {self._consumer_tag}")
 
     def _on_consumer_cancelled(self, method_frame):
         log.info(f"Consumer cancelled: {method_frame}")
@@ -293,6 +353,29 @@ class AsyncWorker:
                     functools.partial(channel.basic_nack, method.delivery_tag, False)
                 )
 
+    def _on_file_event_wrapper(self, channel, method, properties, body):
+        """Submit file event processing to thread pool."""
+        if self.executor:
+            self.executor.submit(self._process_file_event_thread, channel, method, properties, body)
+        else:
+            log.error("Thread pool executor not initialized!")
+
+    def _process_file_event_thread(self, channel, method, properties, body):
+        """Process file event and ack/nack on the IOLoop thread."""
+        try:
+            if self.file_event_handler:
+                self.file_event_handler.on_message(channel, method, properties, body)
+            if self._connection and not self._connection.is_closed:
+                self._connection.ioloop.add_callback_threadsafe(
+                    functools.partial(channel.basic_ack, method.delivery_tag)
+                )
+        except Exception as e:
+            log.error(f"Error processing file event: {e}")
+            if channel.is_open and self._connection and not self._connection.is_closed:
+                self._connection.ioloop.add_callback_threadsafe(
+                    functools.partial(channel.basic_nack, method.delivery_tag, False)
+                )
+
     def stop(self):
         if self._stopping:
             return
@@ -313,11 +396,27 @@ class AsyncWorker:
     def _stop_consuming(self):
         if not self._channel or not self._consuming:
             return
-        log.info("Sending Basic.Cancel")
+        log.info("Sending Basic.Cancel for plagiarism consumer")
         self._channel.basic_cancel(consumer_tag=self._consumer_tag, callback=self._on_cancelok)
+        if self._file_events_consumer_tag:
+            log.info("Sending Basic.Cancel for file events consumer")
+            self._channel.basic_cancel(
+                consumer_tag=self._file_events_consumer_tag, callback=self._on_file_events_cancelok
+            )
 
     def _on_cancelok(self, _unused_frame):
-        log.info("Consumer cancelled successfully")
+        log.info("Plagiarism consumer cancelled successfully")
+        self._consumer_tag = None
+        self._maybe_close_channel()
+
+    def _on_file_events_cancelok(self, _unused_frame):
+        log.info("File events consumer cancelled successfully")
+        self._file_events_consumer_tag = None
+        self._maybe_close_channel()
+
+    def _maybe_close_channel(self):
+        if self._consumer_tag is not None or self._file_events_consumer_tag is not None:
+            return
         self._consuming = False
         if self._channel:
             self._channel.close()

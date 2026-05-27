@@ -2,6 +2,7 @@
   "dashboard": "Проверка на плагиат",
   "overview": "Главная страница",
   "uploads": "Загрузки",
+  "files": "Файлы",
   "review": "Проверка",
   "assignments": "Задания студентам",
   "submissions": "Таблица файлов",
@@ -19,6 +20,7 @@
   "uncategorized": "Без категории",
   "viewAllAssignments": "Все задания",
   "users": "Пользователи",
+  "events": "События",
   "recent": "Недавние",
   "detail": "Детали",
   "recentNoTasks": "Нет недавних задач"

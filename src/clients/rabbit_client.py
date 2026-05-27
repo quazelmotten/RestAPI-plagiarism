@@ -22,6 +22,7 @@ class RabbitMQ:
         self._connection: aio_pika.abc.AbstractRobustConnection | None = None
         self._channel: aio_pika.abc.AbstractChannel | None = None
         self._exchange: aio_pika.abc.AbstractExchange | None = None
+        self._file_events_exchange: aio_pika.abc.AbstractExchange | None = None
 
     async def connect(self):
         """Establish RabbitMQ connection, channel, and exchange."""
@@ -34,6 +35,11 @@ class RabbitMQ:
             aio_pika.ExchangeType.DIRECT,
             durable=True,
         )
+        self._file_events_exchange = await self._channel.declare_exchange(
+            settings.rmq_file_events_exchange,
+            aio_pika.ExchangeType.TOPIC,
+            durable=True,
+        )
         logger.info("RabbitMQ connection established")
 
     async def disconnect(self):
@@ -43,6 +49,7 @@ class RabbitMQ:
         self._connection = None
         self._channel = None
         self._exchange = None
+        self._file_events_exchange = None
         logger.info("RabbitMQ connection closed")
 
     async def publish_message(self, queue: str, message: dict):
@@ -52,6 +59,15 @@ class RabbitMQ:
         await self._exchange.publish(
             aio_pika.Message(body=json.dumps(message).encode()),
             routing_key=settings.rmq_queue_routing_key,
+        )
+
+    async def publish_file_event(self, event_type: str, event: dict):
+        """Publish a file event to the file_events exchange."""
+        if self._file_events_exchange is None or (self._connection and self._connection.is_closed):
+            await self.connect()
+        await self._file_events_exchange.publish(
+            aio_pika.Message(body=json.dumps(event).encode()),
+            routing_key=event_type,
         )
 
     async def get_async_channel(self) -> aio_pika.Channel:

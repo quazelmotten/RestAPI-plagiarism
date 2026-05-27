@@ -34,6 +34,12 @@ async def get_publisher(request: Request):
     return rabbitmq.publish_message
 
 
+async def get_file_event_publisher(request: Request):
+    """Get the RabbitMQ publish_file_event method."""
+    rabbitmq: RabbitMQ = request.app.state.rabbitmq
+    return rabbitmq.publish_file_event
+
+
 async def get_ws_connection_manager(request: Request) -> ConnectionManager:
     """Get the WebSocket connection manager instance."""
     return request.app.state.ws_manager

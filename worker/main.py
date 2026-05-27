@@ -14,6 +14,7 @@ if project_root not in sys.path:
 
 from worker.config import settings  # noqa: E402
 from worker.dependencies import get_task_service, shutdown_dependencies  # noqa: E402
+from worker.file_event_handler import FileEventHandler  # noqa: E402
 from worker.message_handler import MessageHandler  # noqa: E402
 from worker.worker_lifecycle import AsyncWorker  # noqa: E402
 
@@ -22,9 +23,12 @@ def main():
     """Initialize and run the worker."""
     task_service = get_task_service()
     message_handler = MessageHandler(task_service)
+    file_event_handler = FileEventHandler()
 
     worker = AsyncWorker(
-        message_handler=message_handler, worker_concurrency=settings.worker_concurrency
+        message_handler=message_handler,
+        file_event_handler=file_event_handler,
+        worker_concurrency=settings.worker_concurrency,
     )
 
     try:

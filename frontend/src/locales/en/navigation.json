@@ -2,6 +2,7 @@
   "dashboard": "Plagiarism Detection",
   "overview": "Overview",
   "uploads": "Uploads",
+  "files": "Files",
   "review": "Review",
   "assignments": "Assignments",
   "quiz/submissions": "Submissions",
@@ -20,6 +21,7 @@
   "uncategorized": "Uncategorized",
   "viewAllAssignments": "View All Assignments",
   "users": "Users",
+  "events": "Events",
   "recent": "Recent",
   "detail": "Detail",
   "recentNoTasks": "No recent tasks"

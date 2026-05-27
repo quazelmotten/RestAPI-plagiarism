@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api, { API_ENDPOINTS } from '../services/api';
-import type { UploadListItem, UploadDetails, UploadFile, ReviewPair, TaskListItem } from '../types';
+import type { UploadListItem, UploadDetails, UploadFile, ReviewPair } from '../types';
 
 interface PaginatedResponse<T> {
   items: T[];
@@ -139,21 +139,6 @@ export function useUploadFiles(taskId: string | undefined) {
   });
 }
 
-export function useMoveFile() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ fileId, targetTaskId }: { fileId: string; targetTaskId: string }) => {
-      const response = await api.post(API_ENDPOINTS.FILE_MOVE(fileId), { target_task_id: targetTaskId });
-      return response.data;
-    },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['uploads'] });
-      queryClient.invalidateQueries({ queryKey: ['uploads', 'files', variables.targetTaskId] });
-    },
-  });
-}
-
 export function useDeleteUploadFile() {
   const queryClient = useQueryClient();
 
@@ -207,17 +192,4 @@ export function useReviewQueue(params?: ReviewQueueParams) {
   });
 }
 
-// --- Legacy Compatibility ---
 
-export function useTasksListCompat() {
-  return useQuery<PaginatedResponse<TaskListItem>>({
-    queryKey: ['tasks-compat'],
-    queryFn: async () => {
-      const response = await api.get<PaginatedResponse<TaskListItem>>(API_ENDPOINTS.TASKS);
-      return response.data;
-    },
-    staleTime: 10_000,
-    gcTime: 5 * 60_000,
-    refetchInterval: 5000,
-  });
-}

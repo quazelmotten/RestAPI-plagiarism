@@ -16,12 +16,13 @@ import AssignmentDetail from './AssignmentDetail';
 import PairComparison from './PairComparison';
 import Settings from './Settings';
 import Storage from './Storage';
-import Uploads from './Uploads';
+import Files from './Files';
 import UploadDetail from './UploadDetail';
 import Review from './Review';
 import QuickCheck from './QuickCheck';
 import Users from './Users';
 import Admin from './Admin';
+import Events from './Events';
 
 const Dashboard: React.FC = () => {
   return (
@@ -34,7 +35,7 @@ const Dashboard: React.FC = () => {
             <Box as="main" p={8} pt={24} flex="1" overflow="hidden" minH={0} display="flex" flexDirection="column">
                 <Routes>
                   <Route path="/" element={<Overview />} />
-                  <Route path="uploads" element={<Uploads />} />
+                  <Route path="files" element={<Files />} />
                   <Route path="uploads/:uploadId" element={<UploadDetail />} />
                   <Route path="review" element={<Review />} />
                   <Route path="quick-check" element={<QuickCheck />} />
@@ -47,6 +48,7 @@ const Dashboard: React.FC = () => {
                   <Route path="admin/stats" element={<Admin />} />
                   <Route path="admin/storage" element={<Admin initialTab={1} />} />
                   <Route path="admin/users" element={<Admin initialTab={2} />} />
+                  <Route path="events" element={<Events />} />
                 </Routes>
             </Box>
           </Box>

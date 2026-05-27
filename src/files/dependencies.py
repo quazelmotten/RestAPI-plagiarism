@@ -9,6 +9,7 @@ from fastapi import Depends, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_async_session
+from dependencies import get_file_event_publisher
 from exceptions.exceptions import NotFoundError
 from files.repository import FileRepository
 from files.schemas import FileResponse
@@ -24,9 +25,10 @@ async def get_file_repository(
 
 async def get_file_service(
     db: Annotated[AsyncSession, Depends(get_async_session)],
+    publish_file_event=Depends(get_file_event_publisher),
 ) -> FileService:
     """Get a FileService instance."""
-    return FileService(db)
+    return FileService(db, publish_file_event=publish_file_event)
 
 
 async def valid_file_id(

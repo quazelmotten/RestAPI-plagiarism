@@ -21,9 +21,28 @@ logger = logging.getLogger(__name__)
 
 
 class FileService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, publish_file_event=None):
         self.db = db
         self.repo = FileRepository(db)
+        self._publish_file_event = publish_file_event
+
+    async def _publish_event(self, event, user_id: str | None = None) -> None:
+        if not self._publish_file_event:
+            return
+        try:
+            await self._publish_file_event(
+                event.event_type,
+                {
+                    "event_id": str(event.id),
+                    "event_type": event.event_type,
+                    "assignment_id": str(event.assignment_id) if event.assignment_id else None,
+                    "task_id": str(event.task_id) if event.task_id else None,
+                    "metadata": event.event_metadata,
+                    "created_at": event.created_at.isoformat() if event.created_at else None,
+                },
+            )
+        except Exception:
+            logger.warning("Failed to publish file event %s", event.id, exc_info=True)
 
     async def get_all_files(self) -> list[FileResponse]:
         return await self.repo.get_all_files()
@@ -186,13 +205,21 @@ class FileService:
             created_at=note.created_at.isoformat() if note.created_at else "",
         )
 
-    async def move_file(self, file_id: str, target_task_id: uuid.UUID) -> FileResponse:
+    async def move_file(
+        self, file_id: str, target_task_id: uuid.UUID, user_id: str | None = None
+    ) -> FileResponse:
         """Move a file to a different upload (task)."""
         from exceptions.exceptions import NotFoundError
 
         file = await self.repo.get_file(file_id)
         if not file:
             raise NotFoundError("File not found")
+
+        source_task_id = str(file.task_id)
+        source_task = await self.db.get(PlagiarismTask, file.task_id)
+        source_assignment_id = (
+            str(source_task.assignment_id) if source_task and source_task.assignment_id else None
+        )
 
         target_task = await self.db.get(PlagiarismTask, target_task_id)
         if not target_task:
@@ -202,6 +229,22 @@ class FileService:
         if not moved_file:
             raise NotFoundError("File not found")
 
+        event = await self.repo.create_event(
+            assignment_id=source_assignment_id,
+            task_id=source_task_id,
+            event_type="file_moved",
+            event_metadata={
+                "filename": moved_file.filename,
+                "source_task_id": source_task_id,
+                "target_task_id": str(target_task_id),
+                "target_assignment_id": str(target_task.assignment_id)
+                if target_task.assignment_id
+                else None,
+            },
+            user_id=user_id,
+        )
+        await self._publish_event(event, user_id=user_id)
+
         return FileResponse(
             id=str(moved_file.id),
             filename=str(moved_file.filename),
@@ -209,7 +252,9 @@ class FileService:
             created_at=moved_file.created_at.isoformat() if moved_file.created_at else None,
             task_id=str(moved_file.task_id),
             status=target_task.status,
-            similarity=float(moved_file.max_similarity) if moved_file.max_similarity is not None else None,
+            similarity=float(moved_file.max_similarity)
+            if moved_file.max_similarity is not None
+            else None,
             is_confirmed=bool(moved_file.is_confirmed),
         )
 
@@ -217,13 +262,168 @@ class FileService:
         """Check if a file exists."""
         return await self.repo.exist(file_id)
 
-    async def delete_file(self, file_id: str) -> None:
+    async def get_events(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        assignment_id: str | None = None,
+        task_id: str | None = None,
+        event_type: str | None = None,
+    ) -> PaginatedResponse:
+        return await self.repo.get_events(
+            limit=limit,
+            offset=offset,
+            assignment_id=assignment_id,
+            task_id=task_id,
+            event_type=event_type,
+        )
+
+    async def get_file_ids(
+        self,
+        filename: str | None = None,
+        language: str | None = None,
+        status: str | None = None,
+        task_id: str | None = None,
+        assignment_id: str | None = None,
+        similarity_min: float | None = None,
+        similarity_max: float | None = None,
+    ) -> list[str]:
+        return await self.repo.get_all_file_ids(
+            filename=filename,
+            language=language,
+            status=status,
+            task_id=task_id,
+            assignment_id=assignment_id,
+            similarity_min=similarity_min,
+            similarity_max=similarity_max,
+        )
+
+    async def bulk_move_by_assignment(
+        self,
+        file_ids: list[str],
+        target_assignment_id: str,
+        publish_message,
+        publish_file_event=None,
+        user_id: str | None = None,
+    ) -> list[FileResponse]:
+        """Move files to a target assignment: creates a new upload with the files and removes originals."""
+        from exceptions.exceptions import NotFoundError
+
+        uuids = [uuid.UUID(fid) for fid in file_ids]
+        result = await self.db.execute(select(FileModel).where(FileModel.id.in_(uuids)))
+        source_files = result.scalars().all()
+
+        if not source_files:
+            raise NotFoundError("No files found to move")
+
+        language = source_files[0].language
+
+        new_task = await self.repo.create_upload_task(
+            assignment_id=target_assignment_id,
+            language=language,
+            name=f"Upload {datetime.now(UTC).strftime('%Y-%m-%d %H:%M')}",
+        )
+        new_task_id_str = str(new_task.id)
+
+        event = await self.repo.create_event(
+            assignment_id=target_assignment_id,
+            task_id=new_task_id_str,
+            event_type="upload_queued",
+            event_metadata={"name": new_task.name, "files_count": len(file_ids)},
+            user_id=user_id,
+        )
+        await self._publish_event(event, user_id=user_id)
+
+        new_files = await self.repo.rehome_files(file_ids, new_task_id_str)
+
+        for nf in new_files:
+            file_event = await self.repo.create_event(
+                assignment_id=target_assignment_id,
+                task_id=new_task_id_str,
+                event_type="file_transferred",
+                event_metadata={"filename": nf.filename, "file_id": str(nf.id)},
+                user_id=user_id,
+            )
+            await self._publish_event(file_event, user_id=user_id)
+
+        message = {
+            "task_id": new_task_id_str,
+            "files": [
+                {
+                    "id": str(nf.id),
+                    "path": nf.file_path,
+                    "hash": nf.file_hash,
+                    "filename": nf.filename,
+                }
+                for nf in new_files
+            ],
+            "language": language,
+        }
+        if target_assignment_id:
+            message["assignment_id"] = target_assignment_id
+
+        await publish_message(queue="plagiarism_queue", message=message)
+
+        return [
+            FileResponse(
+                id=str(nf.id),
+                filename=str(nf.filename),
+                language=str(nf.language),
+                created_at=nf.created_at.isoformat() if nf.created_at else None,
+                task_id=str(nf.task_id),
+                status="queued",
+                similarity=None,
+                is_confirmed=False,
+            )
+            for nf in new_files
+        ]
+
+    async def delete_file(self, file_id: str, user_id: str | None = None) -> None:
         """Soft-delete a file by setting deleted_at."""
         from exceptions.exceptions import NotFoundError
+
+        file = await self.repo.get_file(file_id)
+        if not file:
+            raise NotFoundError("File not found")
+
+        source_task = await self.db.get(PlagiarismTask, file.task_id)
+        assignment_id = (
+            str(source_task.assignment_id) if source_task and source_task.assignment_id else None
+        )
+        task_id = str(file.task_id)
 
         deleted = await self.repo.delete_file(file_id)
         if not deleted:
             raise NotFoundError("File not found")
+
+        event = await self.repo.create_event(
+            assignment_id=assignment_id,
+            task_id=task_id,
+            event_type="file_deleted",
+            event_metadata={"filename": file.filename},
+            user_id=user_id,
+        )
+        await self._publish_event(event, user_id=user_id)
+
+    async def get_task_events(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        event_type: str | None = None,
+        assignment_id: str | None = None,
+        user_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> PaginatedResponse:
+        return await self.repo.get_task_events(
+            limit=limit,
+            offset=offset,
+            event_type=event_type,
+            assignment_id=assignment_id,
+            user_id=user_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
 
     async def delete_note(self, note_id: str) -> None:
         from exceptions.exceptions import NotFoundError

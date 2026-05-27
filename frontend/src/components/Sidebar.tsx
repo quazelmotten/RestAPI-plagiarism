@@ -33,6 +33,7 @@ import {
   FiBookOpen,
   FiChevronDown,
   FiChevronRight,
+  FiClock,
   FiFolder,
   FiGlobe,
 } from 'react-icons/fi';
@@ -98,9 +99,10 @@ interface SubjectGroup {
 const SIDEBAR_LOCAL_STORAGE_KEY = 'sidebar-subjects-collapsed';
 
 const navItems = [
-  { path: '/dashboard/uploads', label: 'uploads', icon: FiFileText },
+  { path: '/dashboard/files', label: 'files', icon: FiFileText },
   { path: '/dashboard/review', label: 'review', icon: FiCheckCircle },
   { path: '/dashboard/assignments', label: 'assignments', icon: FiBookOpen },
+  { path: '/dashboard/events', label: 'events', icon: FiClock },
 ];
 
 const SortableAssignment: React.FC<{
@@ -222,7 +224,7 @@ const Sidebar: React.FC = () => {
   const isLoading = assignmentsLoading || subjectsLoading;
 
   const isActive = (path: string) => {
-    if (path === '/dashboard/uploads' || path === '/dashboard/assignments') {
+    if (path === '/dashboard/files' || path === '/dashboard/assignments') {
       return location.pathname.startsWith(path);
     }
     return location.pathname === path || location.pathname === `${path}/`;

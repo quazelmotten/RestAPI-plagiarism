@@ -10,7 +10,9 @@ import time
 from typing import Any
 
 from shared.interfaces import TaskRepository
-from shared.models import File, PlagiarismTask, SimilarityResult
+from uuid import uuid4 as uuid4_gen
+
+from shared.models import File, FileEvent, PlagiarismTask, SimilarityResult
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -108,6 +110,26 @@ class PostgresRepository(TaskRepository):
 
             stmt = update(PlagiarismTask).where(PlagiarismTask.id == task_id).values(**values)
             session.execute(stmt)
+
+            # Create file event for completion/failure
+            if status in ("completed", "failed"):
+                task = session.get(PlagiarismTask, task_id)
+                if task:
+                    assignment_id = str(task.assignment_id) if task.assignment_id else None
+                    event = FileEvent(
+                        id=str(uuid4_gen()),
+                        assignment_id=assignment_id,
+                        task_id=task_id,
+                        event_type=f"upload_{status}",
+                        event_metadata={
+                            "similarity": similarity,
+                            "total_pairs": total_pairs,
+                            "processed_pairs": processed_pairs,
+                            "error": error,
+                        },
+                    )
+                    session.add(event)
+
             session.commit()
 
         # Publish progress to Redis for WebSocket subscribers (non-blocking)

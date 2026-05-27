@@ -39,5 +39,16 @@ async def create_queues_and_exchanges():
         dlx_queue = await channel.declare_queue(settings.rmq_queue_dead_letter_name, durable=True)
         await dlx_queue.bind(dlx_exchange, routing_key=settings.rmq_queue_routing_key_dead_letter)
 
+        file_events_exchange = await channel.declare_exchange(
+            settings.rmq_file_events_exchange,
+            ExchangeType.TOPIC,
+            durable=True,
+        )
+        file_events_queue = await channel.declare_queue(
+            "file_events_queue",
+            durable=True,
+        )
+        await file_events_queue.bind(file_events_exchange, routing_key="#")
+
         logger.info("Successfully connected to RabbitMQ and created exchanges/queues")
         return

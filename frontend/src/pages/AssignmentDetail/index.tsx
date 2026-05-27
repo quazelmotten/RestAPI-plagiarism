@@ -72,12 +72,12 @@ import PairComparisonModal from '../../components/PairComparisonModal';
 import { useAssignmentInfo } from '../../contexts/AssignmentContext';
 import { useExportAllPdf } from '../../hooks/useGrading';
 import {
-  AssignmentUploadsTab,
   AssignmentReviewTab,
   AssignmentStatsTab,
   AssignmentFilesTab,
   AssignmentSettingsTab,
 } from './tabs';
+import EventsTab from './tabs/EventsTab';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024;
 const MAX_FILES = 1000;
@@ -456,10 +456,10 @@ const AssignmentDetail: React.FC = () => {
   const selectedTask = selectedTaskId ? assignmentData.tasks.find(t => t.task_id === selectedTaskId) : null;
 
   const tabLabels = [
-    t('assignments:uploads'),
+    t('assignments:files'),
     t('assignments:review'),
     t('results:distribution.title'),
-    t('assignments:files'),
+    t('assignments:events'),
     t('common:settings'),
   ];
 
@@ -491,243 +491,119 @@ const AssignmentDetail: React.FC = () => {
         </Card>
       )}
 
-      {/* Combined Tasks + Upload section */}
-      <Box bg={cardBg} borderRadius="lg" borderWidth="1px" borderColor={borderColor} mb={3} flexShrink={0} overflow="hidden">
-        {/* Expanded view: upload + task table */}
-        {!collapsed && (
-          <>
-            {/* Upload area */}
-            <Box p={3} pb={2}>
-              <Flex direction={{ base: 'column', md: 'row' }} gap={3} align="flex-start">
-                <HStack spacing={3} flexShrink={0}>
-                  <Box>
-                    <Text fontSize="xs" color={mutedColor} mb={1}>
-                      {t('language')}
-                      {detectedLanguage && <Badge ml={1} colorScheme="green" fontSize="xs">{t('languages:autoDetected')}</Badge>}
-                    </Text>
-                    <Select
-                      value={detectedLanguage || language}
-                      onChange={(e) => {
-                        const lang = e.target.value;
-                        setLanguage(lang);
-                        if (lang !== 'auto') {
-                          setDetectedLanguage(null);
-                        }
-                        localStorage.setItem(LANG_STORAGE_KEY, lang);
-                      }}
-                      size="sm" maxW="130px"
-                    >
-                      {languageOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {detectedLanguage && opt.value === 'auto' ? `${t(`languages:${detectedLanguage}`)} (${t('languages:auto')})` : t(`languages:${opt.key}`)}
-                        </option>
-                      ))}
-                    </Select>
-                  </Box>
-                </HStack>
-                <Box
-                  {...getRootProps()}
-                  border="2px dashed" borderColor={isDragActive ? 'brand.500' : borderColor}
-                  borderRadius="lg" p={2} flex={1} w="100%"
-                  display="flex" alignItems="center" justifyContent="center"
-                  textAlign="center" cursor="pointer"
-                  bg={isDragActive ? dropzoneHoverBg : subtleBg}
-                  transition="all 0.2s" minH="48px"
-                  _hover={{ borderColor: 'brand.400', bg: dropzoneHoverBg }}
-                >
-                  <input {...getInputProps()} />
-                  <HStack spacing={2}>
-                    <Icon as={FiUploadCloud} boxSize={4} color="brand.400" />
-                    <Text fontSize="xs" fontWeight="medium">
-                      {files.length > 0 ? `${files.length} file(s) (${formatFileSize(totalSize)})` : t('dragAndDrop')}
-                    </Text>
-                  </HStack>
-                </Box>
-                {files.length > 0 && (
-                  <HStack flexShrink={0}>
-                    {isUploading && (
-                      <Box w="120px">
-                        <Progress value={uploadProgress} size="sm" colorScheme="brand" borderRadius="full" hasStripe isAnimated />
-                        <Text fontSize="xs" textAlign="center" mt={1}>{uploadProgress}%</Text>
-                      </Box>
-                    )}
-                    <Button colorScheme="brand" size="xs" onClick={handleUpload} isLoading={isUploading} loadingText={t('uploading')} leftIcon={<FiCheckCircle />}>
-                      {t('upload', { count: files.length, size: formatFileSize(totalSize) })}
-                    </Button>
-                    <IconButton aria-label={t('common:aria.clearFiles')} icon={<FiX />} size="xs" variant="ghost" colorScheme="red" onClick={() => setFiles([])} isDisabled={isUploading} />
-                  </HStack>
-                )}
-              </Flex>
-            </Box>
-
-            {/* Task table */}
-            {assignmentData.tasks.length > 0 && (
-              <Box overflowX="auto">
-                <Table size="sm" variant="simple">
-                  <Thead>
-                     <Tr>
-                       <Th fontSize="xs" w="30px"></Th>
-                       <Th fontSize="xs">{t('assignments:taskId')}</Th>
-                       <Th fontSize="xs">{t('assignments:status')}</Th>
-                       <Th fontSize="xs" isNumeric>{t('assignments:files')}</Th>
-                       <Th fontSize="xs" isNumeric>{t('assignments:pairs')}</Th>
-                       <Th fontSize="xs" isNumeric>{t('assignments:high')}</Th>
-                        <Th fontSize="xs" isNumeric>{t('assignments:avgSim')}</Th>
-                        <Th fontSize="xs" isNumeric>{t('results:exportPdf')}</Th>
-                        <Th fontSize="xs" w="40px"></Th>
-                      </Tr>
-                  </Thead>
-                  <Tbody>
-                     <Tr
-                       bg={selectedTaskId === '' ? selectedRowBg : undefined}
-                       cursor="pointer"
-                       onClick={() => setSelectedTaskId('')}
-                       _hover={{ bg: selectedTaskId === '' ? selectedRowHoverBg : hoverBg }}
-                       fontWeight={selectedTaskId === '' ? 'semibold' : 'normal'}
-                     >
-                        <Td px={2}>{selectedTaskId === '' && <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />}</Td>
-                        <Td fontSize="sm">{t('assignments:allTasksAggregated')}</Td>
-                        <Td><Badge colorScheme="blue" fontSize="xs">{t(`status:combined`)}</Badge></Td>
-                       <Td fontSize="sm" isNumeric>{aggFilesCount}</Td>
-                       <Td fontSize="sm" isNumeric>{assignmentData.total_pairs}</Td>
-                       <Td fontSize="sm" isNumeric color={aggHighCount > 0 ? 'red.500' : undefined}>{aggHighCount}</Td>
-                       <Td fontSize="sm" isNumeric>
-                         <Badge colorScheme={getSimilarityColor(aggAvgSim)} fontSize="xs">{(aggAvgSim * 100).toFixed(1)}%</Badge>
-                       </Td>
-                       <Td isNumeric>
-                         <IconButton
-                           aria-label={t('results:exportPdf')}
-                           icon={<FiDownload />}
-                           size="xs"
-                           variant="ghost"
-                           colorScheme="blue"
-                           isLoading={exportAllPdfMutation.isPending}
-                           isDisabled={assignmentData.total_pairs === 0}
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             exportAllPdfMutation.mutate({ assignmentId: assignmentId! });
-                           }}
-                         />
-                       </Td>
-                     </Tr>
-                    {assignmentData.tasks.map((task) => (
-                      <Tr
-                        key={task.task_id}
-                        bg={selectedTaskId === task.task_id ? selectedRowBg : undefined}
-                        cursor="pointer"
-                        onClick={() => setSelectedTaskId(task.task_id)}
-                        _hover={{ bg: selectedTaskId === task.task_id ? selectedRowHoverBg : hoverBg }}
-                        fontWeight={selectedTaskId === task.task_id ? 'semibold' : 'normal'}
-                      >
-                        <Td px={2}>{selectedTaskId === task.task_id && <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />}</Td>
-                        <Td fontSize="xs" fontFamily="monospace">{task.task_id.substring(0, 12)}...</Td>
-                         <Td>
-                           <HStack spacing={1}>
-                             {getStatusIcon(task.status)}
-                             <Badge colorScheme={getStatusColorScheme(task.status)} fontSize="xs">{t(`status:${task.status}`)}</Badge>
-                           </HStack>
-                         </Td>
-                        <Td fontSize="sm" isNumeric>{task.files_count ?? '-'}</Td>
-                        <Td fontSize="sm" isNumeric>{task.total_pairs ?? 0}</Td>
-                        <Td fontSize="sm" isNumeric color={(task.high_similarity_count ?? 0) > 0 ? 'red.500' : undefined}>
-                          {task.high_similarity_count ?? 0}
-                        </Td>
-                        <Td fontSize="sm" isNumeric>
-                          <Badge colorScheme={getSimilarityColor(task.avg_similarity ?? 0)} fontSize="xs">
-                            {((task.avg_similarity ?? 0) * 100).toFixed(1)}%
-                          </Badge>
-                        </Td>
-                        <Td isNumeric>
-                          <IconButton
-                            aria-label={t('results:exportPdf')}
-                            icon={<FiDownload />}
-                            size="xs"
-                            variant="ghost"
-                            colorScheme="blue"
-                            isLoading={exportAllPdfMutation.isPending}
-                            isDisabled={(task.total_pairs ?? 0) === 0}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              exportAllPdfMutation.mutate({ assignmentId: assignmentId!, taskId: task.task_id });
-                            }}
-                          />
-                        </Td>
-                        <Td>
-                          <IconButton
-                            aria-label="Delete task"
-                            icon={<FiTrash2 />}
-                            size="xs"
-                            variant="ghost"
-                            colorScheme="red"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteTask(task.task_id);
-                            }}
-                          />
-                        </Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </Box>
-            )}
-          </>
-        )}
-
-        {/* Collapsed view: just the selected task summary + upload toggle */}
-        {collapsed && (
-          <Box px={3} py={2}>
-            <HStack justify="space-between" spacing={3} wrap="wrap">
-              <HStack spacing={3}>
-                <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />
-                {selectedTaskId === '' ? (
-                  <>
-                    <Text fontSize="sm" fontWeight="semibold">{t('common:all')} {t('common:tasks')}</Text>
-                    <Badge colorScheme="blue" fontSize="xs">{aggFilesCount} {t('common:files')}</Badge>
-                    <Badge fontSize="xs">{assignmentData.total_pairs} {t('common:pairs')}</Badge>
-                    {aggHighCount > 0 && <Badge colorScheme="red" fontSize="xs">{aggHighCount} {t('common:labels.high')}</Badge>}
-                    <Badge colorScheme={getSimilarityColor(aggAvgSim)} fontSize="xs">{(aggAvgSim * 100).toFixed(1)}% avg</Badge>
-                  </>
-                ) : (
-                  <>
-                    <Text fontSize="xs" fontFamily="monospace" fontWeight="medium">{selectedTaskId.substring(0, 12)}...</Text>
-                    {selectedTask && (
-                      <>
-                        <Badge colorScheme={getStatusColorScheme(selectedTask.status)} fontSize="xs">{t(`status:${selectedTask.status}`)}</Badge>
-                        <Badge fontSize="xs">{selectedTask.files_count ?? '-'} {t('common:files')}</Badge>
-                        <Badge fontSize="xs">{selectedTask.total_pairs ?? 0} {t('common:pairs')}</Badge>
-                        {(selectedTask.high_similarity_count ?? 0) > 0 && (
-                          <Badge colorScheme="red" fontSize="xs">{selectedTask.high_similarity_count} {t('assignments:high')}</Badge>
-                        )}
-                        <Badge colorScheme={getSimilarityColor(selectedTask.avg_similarity ?? 0)} fontSize="xs">
-                          {((selectedTask.avg_similarity ?? 0) * 100).toFixed(1)}% {t('assignments:avgSim')}
-                        </Badge>
-                      </>
-                    )}
-                  </>
-                )}
-              </HStack>
-              <Button
-                size="xs"
-                variant="outline"
-                leftIcon={<FiUploadCloud />}
-                onClick={() => setCollapsed(false)}
-              >
-                {t('upload:addFiles')}
-              </Button>
-            </HStack>
+      {/* Task selection table */}
+      {assignmentData.tasks.length > 0 && (
+        <Box bg={cardBg} borderRadius="lg" borderWidth="1px" borderColor={borderColor} mb={3} flexShrink={0} overflow="hidden">
+          <Box overflowX="auto">
+            <Table size="sm" variant="simple">
+              <Thead>
+                 <Tr>
+                   <Th fontSize="xs" w="30px"></Th>
+                   <Th fontSize="xs">{t('assignments:taskId')}</Th>
+                   <Th fontSize="xs">{t('assignments:status')}</Th>
+                   <Th fontSize="xs" isNumeric>{t('assignments:files')}</Th>
+                   <Th fontSize="xs" isNumeric>{t('assignments:pairs')}</Th>
+                   <Th fontSize="xs" isNumeric>{t('assignments:high')}</Th>
+                    <Th fontSize="xs" isNumeric>{t('assignments:avgSim')}</Th>
+                    <Th fontSize="xs" isNumeric>{t('results:exportPdf')}</Th>
+                    <Th fontSize="xs" w="40px"></Th>
+                  </Tr>
+              </Thead>
+              <Tbody>
+                 <Tr
+                   bg={selectedTaskId === '' ? selectedRowBg : undefined}
+                   cursor="pointer"
+                   onClick={() => setSelectedTaskId('')}
+                   _hover={{ bg: selectedTaskId === '' ? selectedRowHoverBg : hoverBg }}
+                   fontWeight={selectedTaskId === '' ? 'semibold' : 'normal'}
+                 >
+                    <Td px={2}>{selectedTaskId === '' && <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />}</Td>
+                    <Td fontSize="sm">{t('assignments:allTasksAggregated')}</Td>
+                    <Td><Badge colorScheme="blue" fontSize="xs">{t(`status:combined`)}</Badge></Td>
+                   <Td fontSize="sm" isNumeric>{aggFilesCount}</Td>
+                   <Td fontSize="sm" isNumeric>{assignmentData.total_pairs}</Td>
+                   <Td fontSize="sm" isNumeric color={aggHighCount > 0 ? 'red.500' : undefined}>{aggHighCount}</Td>
+                   <Td fontSize="sm" isNumeric>
+                     <Badge colorScheme={getSimilarityColor(aggAvgSim)} fontSize="xs">{(aggAvgSim * 100).toFixed(1)}%</Badge>
+                   </Td>
+                   <Td isNumeric>
+                     <IconButton
+                       aria-label={t('results:exportPdf')}
+                       icon={<FiDownload />}
+                       size="xs"
+                       variant="ghost"
+                       colorScheme="blue"
+                       isLoading={exportAllPdfMutation.isPending}
+                       isDisabled={assignmentData.total_pairs === 0}
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         exportAllPdfMutation.mutate({ assignmentId: assignmentId! });
+                       }}
+                     />
+                   </Td>
+                 </Tr>
+                {assignmentData.tasks.map((task) => (
+                  <Tr
+                    key={task.task_id}
+                    bg={selectedTaskId === task.task_id ? selectedRowBg : undefined}
+                    cursor="pointer"
+                    onClick={() => setSelectedTaskId(task.task_id)}
+                    _hover={{ bg: selectedTaskId === task.task_id ? selectedRowHoverBg : hoverBg }}
+                    fontWeight={selectedTaskId === task.task_id ? 'semibold' : 'normal'}
+                  >
+                    <Td px={2}>{selectedTaskId === task.task_id && <Icon as={FiCheckCircle} color="brand.500" boxSize={3} />}</Td>
+                    <Td fontSize="xs" fontFamily="monospace">{task.task_id.substring(0, 12)}...</Td>
+                     <Td>
+                       <HStack spacing={1}>
+                         {getStatusIcon(task.status)}
+                         <Badge colorScheme={getStatusColorScheme(task.status)} fontSize="xs">{t(`status:${task.status}`)}</Badge>
+                       </HStack>
+                     </Td>
+                    <Td fontSize="sm" isNumeric>{task.files_count ?? '-'}</Td>
+                    <Td fontSize="sm" isNumeric>{task.total_pairs ?? 0}</Td>
+                    <Td fontSize="sm" isNumeric color={(task.high_similarity_count ?? 0) > 0 ? 'red.500' : undefined}>
+                      {task.high_similarity_count ?? 0}
+                    </Td>
+                    <Td fontSize="sm" isNumeric>
+                      <Badge colorScheme={getSimilarityColor(task.avg_similarity ?? 0)} fontSize="xs">
+                        {((task.avg_similarity ?? 0) * 100).toFixed(1)}%
+                      </Badge>
+                    </Td>
+                    <Td isNumeric>
+                      <IconButton
+                        aria-label={t('results:exportPdf')}
+                        icon={<FiDownload />}
+                        size="xs"
+                        variant="ghost"
+                        colorScheme="blue"
+                        isLoading={exportAllPdfMutation.isPending}
+                        isDisabled={(task.total_pairs ?? 0) === 0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          exportAllPdfMutation.mutate({ assignmentId: assignmentId!, taskId: task.task_id });
+                        }}
+                      />
+                    </Td>
+                    <Td>
+                      <IconButton
+                        aria-label="Delete task"
+                        icon={<FiTrash2 />}
+                        size="xs"
+                        variant="ghost"
+                        colorScheme="red"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteTask(task.task_id);
+                        }}
+                      />
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
           </Box>
-        )}
-
-        {/* Toggle */}
-        <Flex
-          justify="center" py={0.5} cursor="pointer"
-          onClick={() => setCollapsed(!collapsed)}
-          _hover={{ bg: subtleBg }} transition="background 0.15s"
-        >
-          <Icon as={collapsed ? FiChevronDown : FiChevronUp} color={mutedColor} boxSize={3} opacity={0.5} />
-        </Flex>
-      </Box>
+        </Box>
+      )}
 
       {/* Task progress */}
       {activeTask && (
@@ -750,16 +626,104 @@ const AssignmentDetail: React.FC = () => {
 
           {/* Tab content */}
           <Box flex={1} minH={0} display="flex" flexDirection="column" overflow="hidden">
-            {/* Uploads Tab */}
+            {/* Files Tab (with upload form) */}
             {activeTab === 0 && (
-              <AssignmentUploadsTab
-                tasks={assignmentData.tasks}
-                selectedTaskId={selectedTaskId}
-                onTaskSelect={setSelectedTaskId}
-                onExportPdf={(aid, tid) => exportAllPdfMutation.mutate({ assignmentId: aid, taskId: tid })}
-                isExporting={exportAllPdfMutation.isPending}
-                assignmentId={assignmentId!}
-              />
+              <Box flex={1} display="flex" flexDirection="column" minH={0} overflow="hidden">
+                {/* Collapsible upload form */}
+                <Box
+                  bg={cardBg}
+                  borderRadius="lg"
+                  borderWidth="1px"
+                  borderColor={borderColor}
+                  mb={3}
+                  flexShrink={0}
+                  overflow="hidden"
+                >
+                  {!collapsed && (
+                    <Box p={3} pb={2}>
+                      <Flex direction={{ base: 'column', md: 'row' }} gap={3} align="flex-start">
+                        <HStack spacing={3} flexShrink={0}>
+                          <Box>
+                            <Text fontSize="xs" color={mutedColor} mb={1}>
+                              {t('language')}
+                              {detectedLanguage && <Badge ml={1} colorScheme="green" fontSize="xs">{t('languages:autoDetected')}</Badge>}
+                            </Text>
+                            <Select
+                              value={detectedLanguage || language}
+                              onChange={(e) => {
+                                const lang = e.target.value;
+                                setLanguage(lang);
+                                if (lang !== 'auto') {
+                                  setDetectedLanguage(null);
+                                }
+                                localStorage.setItem(LANG_STORAGE_KEY, lang);
+                              }}
+                              size="sm" maxW="130px"
+                            >
+                              {languageOptions.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {detectedLanguage && opt.value === 'auto' ? `${t(`languages:${detectedLanguage}`)} (${t('languages:auto')})` : t(`languages:${opt.key}`)}
+                                </option>
+                              ))}
+                            </Select>
+                          </Box>
+                        </HStack>
+                        <Box
+                          {...getRootProps()}
+                          border="2px dashed" borderColor={isDragActive ? 'brand.500' : borderColor}
+                          borderRadius="lg" p={2} flex={1} w="100%"
+                          display="flex" alignItems="center" justifyContent="center"
+                          textAlign="center" cursor="pointer"
+                          bg={isDragActive ? dropzoneHoverBg : subtleBg}
+                          transition="all 0.2s" minH="48px"
+                          _hover={{ borderColor: 'brand.400', bg: dropzoneHoverBg }}
+                        >
+                          <input {...getInputProps()} />
+                          <HStack spacing={2}>
+                            <Icon as={FiUploadCloud} boxSize={4} color="brand.400" />
+                            <Text fontSize="xs" fontWeight="medium">
+                              {files.length > 0 ? `${files.length} file(s) (${formatFileSize(totalSize)})` : t('dragAndDrop')}
+                            </Text>
+                          </HStack>
+                        </Box>
+                        {files.length > 0 && (
+                          <HStack flexShrink={0}>
+                            {isUploading && (
+                              <Box w="120px">
+                                <Progress value={uploadProgress} size="sm" colorScheme="brand" borderRadius="full" hasStripe isAnimated />
+                                <Text fontSize="xs" textAlign="center" mt={1}>{uploadProgress}%</Text>
+                              </Box>
+                            )}
+                            <Button colorScheme="brand" size="xs" onClick={handleUpload} isLoading={isUploading} loadingText={t('uploading')} leftIcon={<FiCheckCircle />}>
+                              {t('upload', { count: files.length, size: formatFileSize(totalSize) })}
+                            </Button>
+                            <IconButton aria-label={t('common:aria.clearFiles')} icon={<FiX />} size="xs" variant="ghost" colorScheme="red" onClick={() => setFiles([])} isDisabled={isUploading} />
+                          </HStack>
+                        )}
+                      </Flex>
+                    </Box>
+                  )}
+                  <Flex
+                    justify="center" py={0.5} cursor="pointer"
+                    onClick={() => setCollapsed(!collapsed)}
+                    _hover={{ bg: subtleBg }} transition="background 0.15s"
+                  >
+                    <Icon as={collapsed ? FiChevronDown : FiChevronUp} color={mutedColor} boxSize={3} opacity={0.5} />
+                  </Flex>
+                </Box>
+
+                <AssignmentFilesTab
+                  files={assignmentData.files ?? []}
+                  totalFiles={totalFiles}
+                  tasks={assignmentData.tasks}
+                  isLoading={isLoading}
+                  isFetching={isFetching}
+                  page={filesPage}
+                  onPageChange={setFilesPage}
+                  filesPerPage={FILES_PER_PAGE}
+                  onViewFile={handleViewFile}
+                />
+              </Box>
             )}
 
             {/* Review Tab */}
@@ -785,20 +749,8 @@ const AssignmentDetail: React.FC = () => {
               />
             )}
 
-            {/* Files Tab */}
-            {activeTab === 3 && (
-              <AssignmentFilesTab
-                files={assignmentData.files ?? []}
-                totalFiles={totalFiles}
-                tasks={assignmentData.tasks}
-                isLoading={isLoading}
-                isFetching={isFetching}
-                page={filesPage}
-                onPageChange={setFilesPage}
-                filesPerPage={FILES_PER_PAGE}
-                onViewFile={handleViewFile}
-              />
-            )}
+            {/* Events Tab */}
+            {activeTab === 3 && <EventsTab />}
 
             {/* Settings Tab */}
             {activeTab === 4 && (

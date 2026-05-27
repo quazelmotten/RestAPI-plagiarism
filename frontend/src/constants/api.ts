@@ -97,6 +97,9 @@ export const API_ENDPOINTS = {
 
   // Quick Check
   QUICK_CHECK: '/plagiarism/quick-check',
+
+  // Events
+  TASK_EVENTS: '/plagiarism/task-events',
 } as const;
 
 export default API_ENDPOINTS;

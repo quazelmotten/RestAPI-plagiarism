@@ -37,6 +37,11 @@ class RabbitMQConfig(BaseSettings):
         default="plagiarism_dead", validation_alias="RMQ_QUEUE_DEAD_LETTER_NAME"
     )
 
+    # File events exchange
+    file_events_exchange: str = Field(
+        default="file_events", validation_alias="RMQ_FILE_EVENTS_EXCHANGE"
+    )
+
     @property
     def url(self) -> str:
         """Generate RabbitMQ AMQP URL."""

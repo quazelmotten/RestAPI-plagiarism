@@ -9,11 +9,12 @@ from fastapi import APIRouter, Depends, Path, Query, status
 
 from auth.dependencies import get_current_user
 from auth.models import User
-from dependencies import get_s3_storage
+from dependencies import get_file_event_publisher, get_publisher, get_s3_storage
 from exceptions.exceptions import NotFoundError
 from files.dependencies import get_file_service, valid_file_id
 from files.schemas import (
     BulkFileMoveRequest,
+    BulkMoveByAssignmentRequest,
     FileContentResponse,
     FileMoveRequest,
     FileResponse,
@@ -41,7 +42,7 @@ logger = logging.getLogger(__name__)
 )
 async def get_files(
     file_service: FileService = Depends(get_file_service),
-    limit: int = Query(default=50, ge=1, le=500, description="Number of files to return (1-500)"),
+    limit: int = Query(default=50, ge=1, le=2000, description="Number of files to return (1-2000)"),
     offset: int = Query(default=0, ge=0, description="Number of files to skip for pagination"),
     filename: str | None = Query(default=None, description="Filter by filename (partial match)"),
     language: str | None = Query(default=None, description="Filter by programming language"),
@@ -94,7 +95,7 @@ async def get_files(
 )
 async def get_file_list(
     file_service: FileService = Depends(get_file_service),
-    limit: int = Query(default=50, ge=1, le=500, description="Number of files to return"),
+    limit: int = Query(default=50, ge=1, le=2000, description="Number of files to return"),
     offset: int = Query(default=0, ge=0, description="Number of files to skip"),
     current_user: User = Depends(get_current_user),
 ):
@@ -206,7 +207,9 @@ async def move_file(
     current_user: User = Depends(get_current_user),
 ):
     """Move a file to a different upload. Requires reviewer or higher role."""
-    return await file_service.move_file(str(file_id), request.target_task_id)
+    return await file_service.move_file(
+        str(file_id), request.target_task_id, user_id=str(current_user.id)
+    )
 
 
 @router.delete(
@@ -230,7 +233,7 @@ async def delete_file(
     current_user: User = Depends(get_current_user),
 ):
     """Soft-delete a file. Requires reviewer or higher role."""
-    await file_service.delete_file(str(file_id))
+    await file_service.delete_file(str(file_id), user_id=str(current_user.id))
 
 
 @router.post(
@@ -254,9 +257,12 @@ async def bulk_move_files(
     moved = []
     failed = []
 
+    user_id = str(current_user.id)
     for file_id in request.file_ids:
         try:
-            result = await file_service.move_file(str(file_id), str(request.target_task_id))
+            result = await file_service.move_file(
+                str(file_id), str(request.target_task_id), user_id=user_id
+            )
             if result:
                 moved.append(result)
             else:
@@ -269,6 +275,118 @@ async def bulk_move_files(
         total=len(moved),
         limit=len(moved),
         offset=0,
+    )
+
+
+@router.post(
+    "/files/bulk/move-by-assignment",
+    response_model=PaginatedResponse,
+    summary="Bulk move files to another assignment",
+    description="Move multiple files to the first completed upload in a target assignment.",
+)
+async def bulk_move_files_by_assignment(
+    request: BulkMoveByAssignmentRequest,
+    file_service: FileService = Depends(get_file_service),
+    publish=Depends(get_publisher),
+    publish_file_event=Depends(get_file_event_publisher),
+    current_user: User = Depends(get_current_user),
+):
+    """Move files to a target assignment by creating a new upload and removing originals."""
+    result = await file_service.bulk_move_by_assignment(
+        file_ids=[str(fid) for fid in request.file_ids],
+        target_assignment_id=str(request.target_assignment_id),
+        publish_message=publish,
+        publish_file_event=publish_file_event,
+        user_id=str(current_user.id),
+    )
+    return PaginatedResponse(
+        items=result,
+        total=len(result),
+        limit=len(result),
+        offset=0,
+    )
+
+
+@router.get(
+    "/files/ids",
+    response_model=list[str],
+    summary="Get all matching file IDs",
+    description="Returns all file IDs matching the given filters (for select-all across pages).",
+)
+async def get_file_ids(
+    file_service: FileService = Depends(get_file_service),
+    filename: str | None = Query(default=None, description="Filter by filename (partial match)"),
+    language: str | None = Query(default=None, description="Filter by programming language"),
+    status: str | None = Query(default=None, description="Filter by file status"),
+    task_id: uuid.UUID | None = Query(default=None, description="Filter by task ID"),
+    assignment_id: uuid.UUID | None = Query(default=None, description="Filter by assignment ID"),
+    similarity_min: float | None = Query(default=None, ge=0.0, le=1.0),
+    similarity_max: float | None = Query(default=None, ge=0.0, le=1.0),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all file IDs matching filters for cross-page selection."""
+    return await file_service.get_file_ids(
+        filename=filename,
+        language=language,
+        status=status,
+        task_id=str(task_id) if task_id else None,
+        assignment_id=str(assignment_id) if assignment_id else None,
+        similarity_min=similarity_min,
+        similarity_max=similarity_max,
+    )
+
+
+@router.get(
+    "/events",
+    response_model=PaginatedResponse,
+    summary="List file events",
+    description="Retrieve a paginated list of file/upload lifecycle events.",
+)
+async def get_events(
+    file_service: FileService = Depends(get_file_service),
+    limit: int = Query(default=50, ge=1, le=500, description="Number of events to return"),
+    offset: int = Query(default=0, ge=0, description="Number of events to skip"),
+    assignment_id: uuid.UUID | None = Query(default=None, description="Filter by assignment ID"),
+    task_id: uuid.UUID | None = Query(default=None, description="Filter by task ID"),
+    event_type: str | None = Query(default=None, description="Filter by event type"),
+    current_user: User = Depends(get_current_user),
+):
+    """Get paginated list of events with optional filters."""
+    return await file_service.get_events(
+        limit=limit,
+        offset=offset,
+        assignment_id=str(assignment_id) if assignment_id else None,
+        task_id=str(task_id) if task_id else None,
+        event_type=event_type,
+    )
+
+
+@router.get(
+    "/task-events",
+    response_model=PaginatedResponse,
+    summary="List task events with user and assignment info",
+    description="Retrieve a paginated list of file/upload lifecycle events enriched with user email and assignment name.",
+)
+async def get_task_events(
+    file_service: FileService = Depends(get_file_service),
+    limit: int = Query(default=50, ge=1, le=500, description="Number of events to return"),
+    offset: int = Query(default=0, ge=0, description="Number of events to skip"),
+    event_type: str | None = Query(default=None, description="Filter by event type"),
+    assignment_id: uuid.UUID | None = Query(default=None, description="Filter by assignment ID"),
+    user_id: uuid.UUID | None = Query(default=None, description="Filter by user ID"),
+    date_from: str | None = Query(default=None, description="Filter by start date (ISO 8601)"),
+    date_to: str | None = Query(default=None, description="Filter by end date (ISO 8601)"),
+    current_user: User = Depends(get_current_user),
+):
+    """Get paginated task events with user and assignment enrichment."""
+    return await file_service.get_task_events(
+        limit=limit,
+        offset=offset,
+        event_type=event_type,
+        assignment_id=str(assignment_id) if assignment_id else None,
+        user_id=str(user_id) if user_id else None,
+        date_from=date_from,
+        date_to=date_to,
     )
 
 

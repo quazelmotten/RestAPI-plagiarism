@@ -65,5 +65,16 @@
   "maxSim": "Макс. % плагиата",
   "allTasksAggregated": "Все задачи",
   "noUploads": "Загрузок пока нет",
-  "uploadFilesToStart": "Загрузите файлы, чтобы начать анализ"
+  "uploadFilesToStart": "Загрузите файлы, чтобы начать анализ",
+  "events": "События",
+  "eventTypes": {
+    "upload_queued": "Загрузка поставлена в очередь",
+    "upload_completed": "Анализ завершён",
+    "upload_failed": "Анализ не удался",
+    "file_uploaded": "Файл загружен",
+    "file_deleted": "Файл удалён",
+    "file_moved": "Файл перемещён",
+    "reanalysis_triggered": "Запущен повторный анализ"
+  },
+  "noEvents": "Событий пока нет"
 }
