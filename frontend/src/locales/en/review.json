@@ -77,5 +77,7 @@
   "clear": "Clear",
   "reviewInDetail": "Review in Detail",
   "topSimilarities": "Top Similarities",
-  "vs": "vs"
+  "vs": "vs",
+  "pairsToReview": "{{count}} pairs to review",
+  "startReview": "Start Review"
 }

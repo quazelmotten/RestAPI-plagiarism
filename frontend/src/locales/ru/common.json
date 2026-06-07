@@ -135,7 +135,8 @@
     "failedToLoad": "Не удалось загрузить содержимое файла",
     "failedToLoadComparison": "Не удалось загрузить сравнение",
     "pairIdMissing": "ID пары отсутствует",
-    "assignmentNotFound": "Задание не найдено"
+    "assignmentNotFound": "Задание не найдено",
+    "assignmentNameExists": "Задание с таким именем уже существует"
   },
   "keyboardShortcuts": {
     "nextPair": "Следующая пара",

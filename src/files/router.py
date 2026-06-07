@@ -46,7 +46,7 @@ async def get_files(
     offset: int = Query(default=0, ge=0, description="Number of files to skip for pagination"),
     filename: str | None = Query(default=None, description="Filter by filename (partial match)"),
     language: str | None = Query(default=None, description="Filter by programming language"),
-    status: str | None = Query(default=None, description="Filter by file status"),
+    file_status: str | None = Query(default=None, description="Filter by file status"),
     task_id: uuid.UUID | None = Query(default=None, description="Filter by task ID"),
     assignment_id: uuid.UUID | None = Query(default=None, description="Filter by assignment ID"),
     subject_id: uuid.UUID | None = Query(default=None, description="Filter by subject ID"),
@@ -70,7 +70,7 @@ async def get_files(
         offset=offset,
         filename=filename,
         language=language,
-        status=status,
+        status=file_status,
         task_id=str(task_id) if task_id else None,
         assignment_id=str(assignment_id) if assignment_id else None,
         subject_id=str(subject_id) if subject_id else None,
@@ -317,7 +317,7 @@ async def get_file_ids(
     file_service: FileService = Depends(get_file_service),
     filename: str | None = Query(default=None, description="Filter by filename (partial match)"),
     language: str | None = Query(default=None, description="Filter by programming language"),
-    status: str | None = Query(default=None, description="Filter by file status"),
+    file_status: str | None = Query(default=None, description="Filter by file status"),
     task_id: uuid.UUID | None = Query(default=None, description="Filter by task ID"),
     assignment_id: uuid.UUID | None = Query(default=None, description="Filter by assignment ID"),
     similarity_min: float | None = Query(default=None, ge=0.0, le=1.0),
@@ -328,7 +328,7 @@ async def get_file_ids(
     return await file_service.get_file_ids(
         filename=filename,
         language=language,
-        status=status,
+        status=file_status,
         task_id=str(task_id) if task_id else None,
         assignment_id=str(assignment_id) if assignment_id else None,
         similarity_min=similarity_min,
@@ -387,6 +387,7 @@ async def get_task_events(
         user_id=str(user_id) if user_id else None,
         date_from=date_from,
         date_to=date_to,
+        current_user=current_user,
     )
 
 

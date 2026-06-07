@@ -1,9 +1,10 @@
 import logging
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 
 from exceptions.exceptions import (
+    ConflictError,
     ForbiddenError,
     NoAccessError,
     NotFoundError,
@@ -14,6 +15,16 @@ logger = logging.getLogger(__name__)
 
 
 def add_exception_handler(app: FastAPI) -> None:
+    @app.exception_handler(ValueError)
+    async def value_error_exception_handler(request: Request, err: ValueError):
+        logger.error(
+            "Value error on %s %s: %s", request.method, request.url.path, err, exc_info=True
+        )
+        return JSONResponse(
+            status_code=422,
+            content={"status": "error", "error_details": str(err)},
+        )
+
     @app.exception_handler(Exception)
     async def generic_exception_handler(request: Request, err: Exception):
         logger.error(
@@ -50,5 +61,12 @@ def add_exception_handler(app: FastAPI) -> None:
     async def no_access_exception_handler(request: Request, err: NoAccessError):
         return JSONResponse(
             status_code=403,
+            content={"status": "error", "error_details": err.message},
+        )
+
+    @app.exception_handler(ConflictError)
+    async def conflict_exception_handler(request: Request, err: ConflictError):
+        return JSONResponse(
+            status_code=409,
             content={"status": "error", "error_details": err.message},
         )

@@ -21,6 +21,8 @@ from auth.models import User
 from config import settings
 from dependencies import get_publisher, get_redis_client, get_s3_storage
 from exceptions.exceptions import PlagiarismValidationError
+from files.dependencies import get_file_service
+from files.service import FileService
 from schemas.common import PaginatedResponse
 from tasks.dependencies import get_task_service, valid_task_id
 from tasks.schemas import TaskCreateResponse, TaskResponse
@@ -65,7 +67,12 @@ async def check_plagiarism(
         None,
         description="Assignment UUID to scope analysis. Omit or set to empty for full DB scan.",
     ),
+    name: str | None = Form(
+        None,
+        description="Optional display name for this upload. Auto-generated if omitted.",
+    ),
     task_service: TaskService = Depends(get_task_service),
+    file_service: FileService = Depends(get_file_service),
     storage=Depends(get_s3_storage),
     publish=Depends(get_publisher),
     current_user: User = Depends(get_current_user),
@@ -102,9 +109,29 @@ async def check_plagiarism(
     else:
         files_data = [(f, language) for f in files]
 
-    return await task_service.create_task(
-        files_data, storage, publish, assignment_id=validated_assignment_id
+    response = await task_service.create_task(
+        files_data,
+        storage,
+        publish,
+        assignment_id=validated_assignment_id,
+        name=name,
+        user_id=str(current_user.id),
     )
+
+    try:
+        await file_service.create_event(
+            assignment_id=validated_assignment_id,
+            task_id=response.task_id,
+            event_type="upload_queued",
+            event_metadata={"files_count": response.files_count},
+            user_id=str(current_user.id),
+        )
+    except Exception:
+        logger.warning(
+            "Failed to create upload_queued event for task %s", response.task_id, exc_info=True
+        )
+
+    return response
 
 
 @router.get(

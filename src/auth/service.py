@@ -25,8 +25,6 @@ logger = logging.getLogger(__name__)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-ALGORITHM = "HS256"
-
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a hashed password."""
@@ -51,7 +49,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "jti": jti, "type": "access"})
 
-    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.jwt_algorithm)
     return encoded_jwt
 
 
@@ -62,7 +60,7 @@ def create_refresh_token(user_id: str, email: str, session_version: int = 1) -> 
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "jti": jti})
 
-    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.jwt_algorithm)
     return encoded_jwt
 
 
@@ -73,14 +71,14 @@ def create_password_reset_token(user_id: str, email: str) -> str:
     jti = str(uuid.uuid4())
     to_encode.update({"exp": expire, "jti": jti})
 
-    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.jwt_algorithm)
     return encoded_jwt
 
 
 def decode_token(token: str) -> dict | None:
     """Decode and validate a JWT token."""
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
         return payload
     except JWTError as e:
         logger.warning("JWT decode error: %s", e)
@@ -91,7 +89,7 @@ def get_token_expiry(token: str) -> datetime | None:
     """Extract expiration time from token."""
     try:
         payload = jwt.decode(
-            token, settings.secret_key, algorithms=[ALGORITHM], options={"verify_exp": False}
+            token, settings.secret_key, algorithms=[settings.jwt_algorithm], options={"verify_exp": False}
         )
         exp_timestamp = payload.get("exp")
         if exp_timestamp:

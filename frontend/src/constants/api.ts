@@ -34,6 +34,8 @@ export const API_ENDPOINTS = {
   UNDO_REVIEW: (resultId: string) => `/plagiarism/results/${resultId}/undo`,
   BULK_CONFIRM: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/bulk-confirm`,
   BULK_CLEAR: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/bulk-clear`,
+  GLOBAL_BULK_CONFIRM: '/plagiarism/bulk-confirm',
+  GLOBAL_BULK_CLEAR: '/plagiarism/bulk-clear',
   REVIEW_QUEUE: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/review-queue`,
   REVIEW_STATUS: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/review-status`,
   PAIRS_BY_STATUS: (assignmentId: string, status: string, limit?: number, offset?: number) => 
@@ -46,6 +48,7 @@ export const API_ENDPOINTS = {
 
   // Global Review Queue (new)
   GLOBAL_REVIEW_QUEUE: '/plagiarism/review-queue',
+  REVIEW_QUEUE_COUNT: '/plagiarism/review-queue/count',
   ASSIGNMENT_REVIEW_QUEUE: (assignmentId: string) => `/plagiarism/assignments/${assignmentId}/review-queue`,
 
   // PDF Export

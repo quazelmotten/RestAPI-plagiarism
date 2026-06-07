@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 
 from shared.models import Assignment, File, FileEvent, PlagiarismTask, SimilarityResult, Subject
-from sqlalchemy import func, select, union_all
+from sqlalchemy import false, func, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
@@ -289,6 +289,43 @@ class FileRepository:
         file = await self.db.get(File, file_id)
         return file is not None
 
+    async def count_files_in_task(self, task_id: uuid.UUID) -> int:
+        """Count non-deleted files in a task."""
+        result = await self.db.execute(
+            select(func.count(File.id))
+            .where(File.task_id == task_id, File.deleted_at.is_(None))
+        )
+        return int(result.scalar_one())
+
+    async def delete_similarity_results_for_file(self, file_id: uuid.UUID) -> int:
+        """Hard-delete SimilarityResult rows referencing this file (as file_a or file_b)."""
+        from sqlalchemy import delete
+
+        result = await self.db.execute(
+            delete(SimilarityResult).where(
+                (SimilarityResult.file_a_id == file_id)
+                | (SimilarityResult.file_b_id == file_id)
+            )
+        )
+        return result.rowcount
+
+    async def reset_task_pair_counts_if_empty(self, task_id: uuid.UUID) -> bool:
+        """If the task has 0 non-deleted files, zero out total_pairs/processed_pairs/progress.
+
+        Returns True if the task was reset.
+        """
+        remaining = await self.count_files_in_task(task_id)
+        if remaining > 0:
+            return False
+        task = await self.db.get(PlagiarismTask, task_id)
+        if not task:
+            return False
+        task.total_pairs = 0
+        task.processed_pairs = 0
+        task.progress = 0.0
+        await self.db.commit()
+        return True
+
     async def move_file(self, file_id: str, target_task_id: uuid.UUID) -> File | None:
         """Move a file to a different task (upload). Returns the updated file."""
         file = await self.db.get(File, file_id)
@@ -299,9 +336,15 @@ class FileRepository:
         if not target_task:
             return None
 
+        source_task_id = file.task_id
+        await self.delete_similarity_results_for_file(file.id)
         file.task_id = target_task_id
         await self.db.commit()
         await self.db.refresh(file)
+        try:
+            await self.reset_task_pair_counts_if_empty(source_task_id)
+        except Exception:
+            pass
         return file
 
     async def delete_file(self, file_id: str) -> bool:
@@ -492,6 +535,7 @@ class FileRepository:
         offset: int = 0,
         event_type: str | None = None,
         assignment_id: str | None = None,
+        assignment_ids: list[str] | None = None,
         user_id: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
@@ -501,6 +545,13 @@ class FileRepository:
             filters.append(FileEvent.event_type == event_type)
         if assignment_id:
             filters.append(FileEvent.assignment_id == uuid.UUID(assignment_id))
+        if assignment_ids is not None:
+            if not assignment_ids:
+                filters.append(false())
+            else:
+                filters.append(
+                    FileEvent.assignment_id.in_([uuid.UUID(a) for a in assignment_ids])
+                )
         if user_id:
             filters.append(FileEvent.user_id == uuid.UUID(user_id))
         if date_from:

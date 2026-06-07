@@ -112,6 +112,7 @@ async def client():
             class DummyRabbitMQ:
                 is_connected = False
                 publish_message = AsyncMock()
+                publish_file_event = AsyncMock()
             app.state.rabbitmq = DummyRabbitMQ()
         if not hasattr(app.state, "ws_manager"):
             class DummyWSManager:

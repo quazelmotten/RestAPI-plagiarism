@@ -23,6 +23,7 @@ interface ReviewQueueParams {
   assignment_id?: string;
   status?: string;
   min_similarity?: number;
+  search?: string;
 }
 
 // --- Uploads ---
@@ -43,7 +44,6 @@ export function useUploads(params?: UploadsListParams) {
     },
     staleTime: 10_000,
     gcTime: 5 * 60_000,
-    refetchInterval: 5000,
   });
 }
 
@@ -175,7 +175,7 @@ export function useReviewQueue(params?: ReviewQueueParams) {
   return useQuery<PaginatedResponse<ReviewPair>>({
     queryKey: ['review-queue', params],
     queryFn: async () => {
-      const response = await api.get<PaginatedResponse<ReviewPair>>(API_ENDPOINTS.GLOBAL_REVIEW_QUEUE, {
+      const response = await api.get(API_ENDPOINTS.GLOBAL_REVIEW_QUEUE, {
         params: {
           limit: params?.limit ?? 50,
           offset: params?.offset ?? 0,
@@ -183,9 +183,34 @@ export function useReviewQueue(params?: ReviewQueueParams) {
           ...(params?.assignment_id && { assignment_id: params.assignment_id }),
           ...(params?.status && { status: params.status }),
           ...(params?.min_similarity !== undefined && { min_similarity: params.min_similarity }),
+          ...(params?.search && { search: params.search }),
         },
       });
-      return response.data;
+      
+      // Transform backend ResultItems to frontend ReviewPairs
+      const { items, total, ...rest } = response.data;
+      const transformedItems = items.map((item: any) => ({
+        pair_id: item.id,
+        task_id: item.file_a.task_id || item.file_b.task_id || '',
+        file_a_id: item.file_a.id,
+        file_a_name: item.file_a.filename,
+        file_b_id: item.file_b.id,
+        file_b_name: item.file_b.filename,
+        ast_similarity: item.ast_similarity,
+        embedding_similarity: item.embedding_similarity,
+        review_disposition: item.review_disposition,
+        reviewed_at: item.reviewed_at || null,
+        assignment_id: null, // Will be populated by component if needed
+        assignment_name: null, // Will be populated by component if needed
+        upload_name: null, // Will be populated by component if needed
+        created_at: item.created_at,
+      }));
+      
+      return {
+        ...rest,
+        total,
+        items: transformedItems,
+      };
     },
     staleTime: 10_000,
     gcTime: 5 * 60_000,

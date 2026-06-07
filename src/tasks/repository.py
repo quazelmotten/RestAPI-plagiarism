@@ -5,7 +5,7 @@ Tasks domain repository - data access for plagiarism tasks.
 import uuid
 from datetime import UTC, datetime
 
-from shared.models import Assignment, File, PlagiarismTask, SimilarityResult, Subject
+from shared.models import Assignment, File, PlagiarismTask
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -40,9 +40,7 @@ class TaskRepository:
                 total=task.total_pairs or 0,
                 percentage=round((task.progress or 0) * 100, 1),
                 display=f"{task.processed_pairs or 0}/{task.total_pairs or 0}",
-            )
-            if task
-            else None,
+            ),
         )
 
     async def get_all_tasks(
@@ -300,7 +298,6 @@ class TaskRepository:
 
     async def get_task_storage_size(self, task_id: str) -> int:
         """Get total storage size for a task's files in bytes."""
-        from constants import BUCKET_NAME
 
         query = (
             select(File.file_path)

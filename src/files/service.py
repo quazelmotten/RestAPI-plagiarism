@@ -7,11 +7,13 @@ import uuid
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from shared.models import Assignment, PlagiarismTask, ReviewNote
 from shared.models import File as FileModel
-from shared.models import PlagiarismTask, ReviewNote
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from assignments.subject_access import SubjectAccessService
+from auth.models import User
 from constants import BUCKET_NAME
 from files.repository import FileRepository
 from files.schemas import FileContentResponse, FileResponse, ReviewNoteResponse
@@ -26,7 +28,7 @@ class FileService:
         self.repo = FileRepository(db)
         self._publish_file_event = publish_file_event
 
-    async def _publish_event(self, event, user_id: str | None = None) -> None:
+    async def _publish_event(self, event) -> None:
         if not self._publish_file_event:
             return
         try:
@@ -43,6 +45,24 @@ class FileService:
             )
         except Exception:
             logger.warning("Failed to publish file event %s", event.id, exc_info=True)
+
+    async def create_event(
+        self,
+        assignment_id: str | None,
+        task_id: str | None,
+        event_type: str,
+        event_metadata: dict | None = None,
+        user_id: str | None = None,
+    ):
+        event = await self.repo.create_event(
+            assignment_id=assignment_id,
+            task_id=task_id,
+            event_type=event_type,
+            event_metadata=event_metadata,
+            user_id=user_id,
+        )
+        await self._publish_event(event)
+        return event
 
     async def get_all_files(self) -> list[FileResponse]:
         return await self.repo.get_all_files()
@@ -243,7 +263,7 @@ class FileService:
             },
             user_id=user_id,
         )
-        await self._publish_event(event, user_id=user_id)
+        await self._publish_event(event)
 
         return FileResponse(
             id=str(moved_file.id),
@@ -332,9 +352,16 @@ class FileService:
             event_metadata={"name": new_task.name, "files_count": len(file_ids)},
             user_id=user_id,
         )
-        await self._publish_event(event, user_id=user_id)
+        await self._publish_event(event)
 
         new_files = await self.repo.rehome_files(file_ids, new_task_id_str)
+
+        source_task_ids = {str(sf.task_id) for sf in source_files}
+        for stid in source_task_ids:
+            try:
+                await self.repo.reset_task_pair_counts_if_empty(uuid.UUID(stid))
+            except Exception:
+                pass
 
         for nf in new_files:
             file_event = await self.repo.create_event(
@@ -344,7 +371,7 @@ class FileService:
                 event_metadata={"filename": nf.filename, "file_id": str(nf.id)},
                 user_id=user_id,
             )
-            await self._publish_event(file_event, user_id=user_id)
+            await self._publish_event(file_event)
 
         message = {
             "task_id": new_task_id_str,
@@ -403,7 +430,7 @@ class FileService:
             event_metadata={"filename": file.filename},
             user_id=user_id,
         )
-        await self._publish_event(event, user_id=user_id)
+        await self._publish_event(event)
 
     async def get_task_events(
         self,
@@ -414,12 +441,26 @@ class FileService:
         user_id: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        current_user: User | None = None,
     ) -> PaginatedResponse:
+        accessible_assignment_ids: list[str] | None = None
+        if current_user is not None and not current_user.is_global_admin:
+            subject_ids = await SubjectAccessService.get_user_subjects(str(current_user.id))
+            if subject_ids:
+                subject_uuids = [uuid.UUID(s) for s in subject_ids]
+                result = await self.db.execute(
+                    select(Assignment.id).where(Assignment.subject_id.in_(subject_uuids))
+                )
+                accessible_assignment_ids = [str(row[0]) for row in result.all()]
+            else:
+                accessible_assignment_ids = []
+
         return await self.repo.get_task_events(
             limit=limit,
             offset=offset,
             event_type=event_type,
             assignment_id=assignment_id,
+            assignment_ids=accessible_assignment_ids,
             user_id=user_id,
             date_from=date_from,
             date_to=date_to,

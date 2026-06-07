@@ -158,6 +158,7 @@ const AssignmentDetail: React.FC = () => {
   const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadName, setUploadName] = useState('');
 
   // Task state
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
@@ -350,12 +351,14 @@ const AssignmentDetail: React.FC = () => {
       files.forEach((file) => formData.append('files', file));
       formData.append('language', languageToSubmit);
       if (assignmentId) formData.append('assignment_id', assignmentId);
+      if (uploadName.trim()) formData.append('name', uploadName.trim());
       await api.post(API_ENDPOINTS.CHECK, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (e) => { setUploadProgress(Math.round((e.loaded / (e.total || 1)) * 100)); },
       });
       toast({ title: t('toasts.success'), status: 'success', duration: 3000 });
       setFiles([]);
+      setUploadName('');
       setTimeout(refreshData, 2000);
     } catch (err: unknown) {
       let msg = t('common:error');
@@ -666,6 +669,18 @@ const AssignmentDetail: React.FC = () => {
                                 </option>
                               ))}
                             </Select>
+                          </Box>
+                          <Box>
+                            <Text fontSize="xs" color={mutedColor} mb={1}>
+                              {t('uploadName')}
+                            </Text>
+                            <Input
+                              value={uploadName}
+                              onChange={(e) => setUploadName(e.target.value)}
+                              size="sm"
+                              maxW="200px"
+                              placeholder={t('uploadNamePlaceholder')}
+                            />
                           </Box>
                         </HStack>
                         <Box

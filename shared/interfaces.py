@@ -93,7 +93,8 @@ class TaskRepository(Protocol):
         matches: dict[str, Any] | None = None,
         error: str | None = None,
         total_pairs: int | None = None,
-        processed_pairs: int | None = None
+        processed_pairs: int | None = None,
+        user_id: str | None = None,
     ) -> None: ...
 
     def bulk_insert_results(

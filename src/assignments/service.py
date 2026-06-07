@@ -4,6 +4,7 @@ Assignments domain service - business logic for assignment management.
 
 import uuid
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from assignments.repository import AssignmentRepository, SubjectRepository
@@ -18,6 +19,7 @@ from assignments.schemas import (
     SubjectWithAssignments,
 )
 from assignments.subject_access import SubjectAccessService
+from exceptions.exceptions import ConflictError
 from schemas.common import PaginatedResponse
 
 
@@ -29,6 +31,12 @@ class SubjectService:
     async def create_subject(self, data: SubjectCreate, user_id: str | None = None) -> SubjectResponse:
         existing = await self.repo.get_subject_by_name(data.name)
         if existing:
+            if user_id:
+                has_access = await SubjectAccessService.has_access(user_id, str(existing.id))
+                if not has_access:
+                    await SubjectAccessService.grant_access(
+                        user_id, str(existing.id), granted_by=None
+                    )
             return existing
         subject_id = str(uuid.uuid4())
         subject = await self.repo.create_subject(
@@ -94,13 +102,28 @@ class AssignmentService:
     async def create_assignment(
         self, data: AssignmentCreate, user_id: str | None = None
     ) -> AssignmentResponse:
+        existing = await self.repo.get_assignment_by_name(data.name)
+        if existing is not None:
+            raise ConflictError(
+                f"Assignment with name '{data.name}' already exists"
+            )
         assignment_id = str(uuid.uuid4())
-        assignment = await self.repo.create_assignment(
-            assignment_id=assignment_id,
-            name=data.name,
-            description=data.description,
-            subject_id=data.subject_id,
-        )
+        try:
+            assignment = await self.repo.create_assignment(
+                assignment_id=assignment_id,
+                name=data.name,
+                description=data.description,
+                subject_id=data.subject_id,
+            )
+        except IntegrityError:
+            # Lost a race against a concurrent create with the same name.
+            await self.db.rollback()
+            winner = await self.repo.get_assignment_by_name(data.name)
+            if winner is not None:
+                raise ConflictError(
+                    f"Assignment with name '{data.name}' already exists"
+                ) from None
+            raise
         if user_id and data.subject_id:
             await SubjectAccessService.grant_access(user_id, data.subject_id, granted_by=user_id)
         return assignment

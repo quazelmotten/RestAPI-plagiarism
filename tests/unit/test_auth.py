@@ -53,6 +53,7 @@ class TestJWT:
     def test_create_access_token(self, mock_settings):
         """Test JWT token creation."""
         mock_settings.secret_key = "test_secret_key"
+        mock_settings.jwt_algorithm = "HS256"
         mock_settings.access_token_expire_minutes = 480
 
         token = create_access_token({"sub": "user123", "email": "test@example.com"})
@@ -64,6 +65,7 @@ class TestJWT:
     def test_decode_valid_token(self, mock_settings):
         """Test decoding a valid token."""
         mock_settings.secret_key = "test_secret_key"
+        mock_settings.jwt_algorithm = "HS256"
         mock_settings.access_token_expire_minutes = 480
 
         token = create_access_token({"sub": "user123", "email": "test@example.com"})
@@ -77,6 +79,7 @@ class TestJWT:
     def test_decode_invalid_token(self, mock_settings):
         """Test decoding an invalid token."""
         mock_settings.secret_key = "test_secret_key"
+        mock_settings.jwt_algorithm = "HS256"
 
         payload = decode_token("invalid_token_string")
 
@@ -127,6 +130,7 @@ class TestAuthService:
     def test_authenticate_user_success(self, mock_settings, mock_session_maker):
         """Test successful user authentication."""
         mock_settings.secret_key = "test_secret_key"
+        mock_settings.jwt_algorithm = "HS256"
         mock_settings.access_token_expire_minutes = 480
 
         mock_user = MagicMock()
@@ -159,6 +163,7 @@ class TestAuthService:
     def test_authenticate_user_not_found(self, mock_settings, mock_session_maker):
         """Test authentication with non-existent user."""
         mock_settings.secret_key = "test_secret_key"
+        mock_settings.jwt_algorithm = "HS256"
         mock_settings.access_token_expire_minutes = 480
 
         mock_session = AsyncMock()
@@ -180,6 +185,7 @@ class TestAuthService:
     def test_create_token_response(self, mock_settings):
         """Test token response creation."""
         mock_settings.secret_key = "test_secret_key"
+        mock_settings.jwt_algorithm = "HS256"
         mock_settings.access_token_expire_minutes = 480
         mock_settings.refresh_token_expire_days = 7
 
@@ -314,6 +320,7 @@ class TestTokenUtilities:
         from auth.service import create_access_token, get_token_expiry
 
         mock_settings.secret_key = "test_secret_key"
+        mock_settings.jwt_algorithm = "HS256"
         mock_settings.access_token_expire_minutes = 480
 
         token = create_access_token({"sub": "user123"})
@@ -330,6 +337,7 @@ class TestTokenUtilities:
         from auth.service import create_access_token, get_token_jti
 
         mock_settings.secret_key = "test_secret_key"
+        mock_settings.jwt_algorithm = "HS256"
         mock_settings.access_token_expire_minutes = 480
 
         token = create_access_token({"sub": "user123"})
@@ -345,6 +353,7 @@ class TestTokenUtilities:
         from auth.service import create_password_reset_token, decode_token
 
         mock_settings.secret_key = "test_secret_key"
+        mock_settings.jwt_algorithm = "HS256"
         mock_settings.access_token_expire_minutes = 480
 
         token = create_password_reset_token("user123", "test@example.com")
@@ -364,6 +373,7 @@ class TestTokenUtilities:
         from auth.service import create_refresh_token, decode_token
 
         mock_settings.secret_key = "test_secret_key"
+        mock_settings.jwt_algorithm = "HS256"
         mock_settings.refresh_token_expire_days = 7
 
         token = create_refresh_token("user123", "test@example.com", 2)
@@ -717,6 +727,7 @@ class TestAuthServiceRefreshToken:
     ):
         """Test successful token refresh with rotation."""
         mock_settings.secret_key = "test_secret_key"
+        mock_settings.jwt_algorithm = "HS256"
         mock_settings.access_token_expire_minutes = 480
         mock_settings.refresh_token_expire_days = 7
 

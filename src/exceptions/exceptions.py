@@ -32,3 +32,12 @@ class NoAccessError(Exception):
 
     def __str__(self):
         return self.message
+
+
+class ConflictError(Exception):
+    def __init__(self, message: str = "Resource already exists"):
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        return self.message

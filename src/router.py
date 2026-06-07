@@ -17,8 +17,9 @@ from assignments.router import (
 from assignments.router import (
     subject_router as assignments_subject_router,
 )
+from auth.blacklist_service import blacklist_service
 from auth.router import router as auth_router
-from auth.service import decode_token
+from auth.service import AuthService, decode_token
 from files.router import router as files_router
 from results.router import router as results_router
 from storage.router import router as storage_router
@@ -30,12 +31,54 @@ logger = logging.getLogger(__name__)
 
 router.include_router(auth_router)
 router.include_router(tasks_router)
-router.include_router(uploads_router)
 router.include_router(files_router)
 router.include_router(results_router)
+router.include_router(uploads_router)
 router.include_router(assignments_router)
 router.include_router(assignments_subject_router)
 router.include_router(storage_router)
+
+
+async def _authenticate_websocket(token: str, websocket: WebSocket) -> str | None:
+    """Validate a WebSocket JWT and return the user_id, or close the socket and return None.
+
+    Performs the same checks as the HTTP `get_current_user` dependency:
+      * JWT signature + expiration
+      * Token type is ``access``
+      * JTI is not on the blacklist
+      * Token session_version matches the user's current session_version
+      * User actually exists
+    """
+    payload = decode_token(token)
+    if not payload:
+        await websocket.close(code=4001, reason="Invalid or expired token")
+        return None
+
+    if payload.get("type") != "access":
+        await websocket.close(code=4001, reason="Invalid token type")
+        return None
+
+    user_id = payload.get("sub")
+    if not user_id:
+        await websocket.close(code=4001, reason="Invalid token payload")
+        return None
+
+    jti = payload.get("jti")
+    if jti and await blacklist_service.is_token_blacklisted(jti):
+        await websocket.close(code=4001, reason="Token revoked")
+        return None
+
+    user = await AuthService.get_user_by_id(user_id)
+    if not user:
+        await websocket.close(code=4001, reason="User not found")
+        return None
+
+    token_session_version = payload.get("sv", 0)
+    if token_session_version < user.session_version:
+        await websocket.close(code=4001, reason="Token superseded")
+        return None
+
+    return user_id
 
 
 @router.websocket("/plagiarism/ws/tasks/{task_id}")
@@ -61,14 +104,8 @@ async def websocket_task_progress(
     Clients should send periodic pings to keep connection alive.
     Connection auto-closes when task completes or on error.
     """
-    payload = decode_token(token)
-    if not payload:
-        await websocket.close(code=4001, reason="Invalid or expired token")
-        return
-
-    user_id = payload.get("sub")
-    if not user_id:
-        await websocket.close(code=4001, reason="Invalid token payload")
+    user_id = await _authenticate_websocket(token, websocket)
+    if user_id is None:
         return
 
     logger.info("WebSocket authenticated connection for task %s by user %s", task_id, user_id)

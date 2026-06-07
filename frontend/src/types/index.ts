@@ -303,6 +303,28 @@ export interface FileListItem {
   upload_name?: string | null;
 }
 
+export interface BackendFileInfo {
+  id: string;
+  filename: string;
+  task_id: string | null;
+  max_similarity: number | null;
+  is_confirmed: boolean;
+}
+
+export interface ResultItem {
+  id: string | null;
+  file_a: BackendFileInfo;
+  file_b: BackendFileInfo;
+  ast_similarity: number | null;
+  embedding_similarity: number | null;
+  type_confidence: Record<string, any> | null;
+  type_coverage: Record<number, number> | null;
+  matches: Array<any> | null;
+  created_at: string | null;
+  review_disposition: string | null;
+  reviewed_at: string | null;
+}
+
 export interface ReviewPair {
   pair_id: string;
   task_id: string;

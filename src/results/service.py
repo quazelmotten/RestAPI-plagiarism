@@ -3,15 +3,19 @@ Results domain service - business logic for similarity results.
 """
 
 import html
+import logging
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
+from fastapi import HTTPException
 from shared.models import Assignment, PlagiarismTask, ReviewNote, SimilarityResult
 from shared.models import File as FileModel
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import alias, case, false, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from assignments.subject_access import SubjectAccessService
 from exceptions.exceptions import NotFoundError
 from results.repository import ResultRepository
 from results.schemas import (
@@ -24,11 +28,64 @@ from results.schemas import (
 )
 from schemas.common import PaginatedResponse
 
+logger = logging.getLogger(__name__)
+
 
 class ResultService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.repo = ResultRepository(db)
+
+    async def _get_accessible_assignment_ids(self, current_user: Any | None) -> list[str] | None:
+        """
+        Resolve accessible assignment IDs for a user.
+
+        Returns:
+            None for global admins (no filter applied).
+            Empty list for non-admin users with no subject access (zero results).
+            list[str] of assignment IDs for non-admin users with subject access.
+        """
+        if current_user is None:
+            return None
+        if getattr(current_user, "is_global_admin", False):
+            return None
+        return await SubjectAccessService.get_accessible_assignment_ids(
+            self.db, str(current_user.id)
+        )
+
+    @staticmethod
+    def _apply_assignment_filter(
+        query: Any, accessible_ids: list[str] | None, assignment_id: UUID | None = None
+    ) -> Any:
+        """
+        Apply subject-access assignment filter to a query that joins through
+        PlagiarismTask -> Assignment (or one of them).
+
+        - accessible_ids is None: no filter (global admin).
+        - accessible_ids is []: impossible filter (return false()).
+        - accessible_ids is list: filter to those assignment IDs.
+        - assignment_id is not None: also restrict to that specific assignment.
+        """
+        if accessible_ids is None:
+            if assignment_id is not None:
+                query = query.where(PlagiarismTask.assignment_id == assignment_id)
+            return query
+
+        if accessible_ids:
+            try:
+                uuid_ids = [UUID(aid) for aid in accessible_ids]
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid UUID format in accessible_ids")
+        else:
+            return query.where(false())
+
+        if assignment_id is not None:
+            try:
+                assignment_uuid = UUID(str(assignment_id))
+                uuid_ids = [assignment_uuid] + [uid for uid in uuid_ids if uid != assignment_uuid]
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid UUID format for assignment_id")
+        return query.where(PlagiarismTask.assignment_id.in_(uuid_ids))
 
     async def get_all_results(
         self,
@@ -136,11 +193,15 @@ class ResultService:
 
                 # Count types
                 ptype = m.get("plagiarism_type", 0)
-                type_conf["type_counts"][str(ptype)] = type_conf["type_counts"].get(str(ptype), 0) + 1
+                type_conf["type_counts"][str(ptype)] = (
+                    type_conf["type_counts"].get(str(ptype), 0) + 1
+                )
 
                 # Count detection methods
                 method = details.get("detection_method", "ast")
-                type_conf["detection_methods"][method] = type_conf["detection_methods"].get(method, 0) + 1
+                type_conf["detection_methods"][method] = (
+                    type_conf["detection_methods"].get(method, 0) + 1
+                )
 
             if emb_sims:
                 embedding_sim = sum(emb_sims) / len(emb_sims)
@@ -191,7 +252,11 @@ class ResultService:
         """Confirm plagiarism for a pair - marks disposition and both files as confirmed."""
         from uuid import UUID
 
-        result = await self.db.get(SimilarityResult, UUID(result_id))
+        try:
+            result = await self.db.get(SimilarityResult, UUID(result_id))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid UUID format for result_id")
+
         if not result:
             raise NotFoundError("Result not found")
 
@@ -215,7 +280,11 @@ class ResultService:
 
     async def clear_pair(self, result_id: str, current_user) -> ResultItem:
         """Clear a pair - marks as reviewed but not plagiarism."""
-        result = await self.db.get(SimilarityResult, UUID(result_id))
+        try:
+            result = await self.db.get(SimilarityResult, UUID(result_id))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid UUID format for result_id")
+
         if not result:
             raise NotFoundError("Result not found")
 
@@ -231,7 +300,10 @@ class ResultService:
 
     async def undo_review(self, result_id: str, current_user) -> ResultItem:
         """Undo review - resets disposition to unreviewed."""
-        result = await self.db.get(SimilarityResult, UUID(result_id))
+        try:
+            result = await self.db.get(SimilarityResult, UUID(result_id))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid UUID format for result_id")
         if not result:
             raise NotFoundError("Result not found")
 
@@ -260,16 +332,39 @@ class ResultService:
         """Skip a pair - marks as reviewed but not confirmed (alias for clear_pair)."""
         return await self.clear_pair(result_id, current_user)
 
-    async def bulk_confirm(self, assignment_id: str, threshold: float, current_user) -> BulkConfirmResponse:
+    async def bulk_confirm(
+        self, assignment_id: str, threshold: float, current_user
+    ) -> BulkConfirmResponse:
         """Bulk confirm all pairs above threshold using optimized single UPDATE."""
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+        if accessible_ids is not None and not accessible_ids:
+            return BulkConfirmResponse(
+                assignment_id=assignment_id,
+                threshold=threshold,
+                confirmed_pairs=0,
+                confirmed_files=0,
+                skipped_pairs=0,
+            )
+
+        try:
+            assignment_uuid = UUID(assignment_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid UUID format for assignment_id")
+
+        # Build task-id subquery with subject access filter
+        task_subq = select(PlagiarismTask.id).where(PlagiarismTask.assignment_id == assignment_uuid)
+        if accessible_ids is not None:
+            try:
+                task_subq = task_subq.where(
+                    PlagiarismTask.assignment_id.in_([UUID(aid) for aid in accessible_ids])
+                )
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid UUID format in accessible_ids")
+
         # Update similarity_results in a single query
         update_stmt = (
             update(SimilarityResult)
-            .where(
-                SimilarityResult.task_id.in_(
-                    select(PlagiarismTask.id).where(PlagiarismTask.assignment_id == UUID(assignment_id))
-                )
-            )
+            .where(SimilarityResult.task_id.in_(task_subq))
             .where(SimilarityResult.ast_similarity > threshold)
             .where(SimilarityResult.review_disposition.is_(None))
             .values(
@@ -286,9 +381,7 @@ class ResultService:
             # Get updated rows to update file statuses
             updated = await self.db.execute(
                 select(SimilarityResult.file_a_id, SimilarityResult.file_b_id)
-                .where(SimilarityResult.task_id.in_(
-                    select(PlagiarismTask.id).where(PlagiarismTask.assignment_id == UUID(assignment_id))
-                ))
+                .where(SimilarityResult.task_id.in_(task_subq))
                 .where(SimilarityResult.review_disposition == "bulk_confirmed")
                 .where(SimilarityResult.reviewed_at >= datetime.now(UTC).replace(microsecond=0))
             )
@@ -319,13 +412,37 @@ class ResultService:
             skipped_pairs=0,
         )
 
-    async def bulk_clear(self, assignment_id: str, threshold: float, current_user) -> BulkConfirmResponse:
+    async def bulk_clear(
+        self, assignment_id: str, threshold: float, current_user
+    ) -> BulkConfirmResponse:
         """Clear all unreviewed pairs below threshold using optimized single UPDATE."""
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+        if accessible_ids is not None and not accessible_ids:
+            return BulkConfirmResponse(
+                assignment_id=assignment_id,
+                threshold=threshold,
+                confirmed_pairs=0,
+                confirmed_files=0,
+                skipped_pairs=0,
+            )
+
+        try:
+            assignment_uuid = UUID(assignment_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid UUID format for assignment_id")
+
+        task_subq = select(PlagiarismTask.id).where(PlagiarismTask.assignment_id == assignment_uuid)
+        if accessible_ids is not None:
+            try:
+                task_subq = task_subq.where(
+                    PlagiarismTask.assignment_id.in_([UUID(aid) for aid in accessible_ids])
+                )
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid UUID format in accessible_ids")
+
         # Build the WHERE clause
         where_conditions = [
-            SimilarityResult.task_id.in_(
-                select(PlagiarismTask.id).where(PlagiarismTask.assignment_id == UUID(assignment_id))
-            ),
+            SimilarityResult.task_id.in_(task_subq),
             SimilarityResult.review_disposition.is_(None),
         ]
         if threshold > 0:
@@ -355,12 +472,189 @@ class ResultService:
             skipped_pairs=0,
         )
 
-    async def get_review_queue(self, assignment_id: str, limit: int, offset: int = 0) -> ReviewQueueResponse:
+    async def global_bulk_confirm(
+        self, threshold: float, current_user, assignment_id: str | None = None
+    ) -> BulkConfirmResponse:
+        """Bulk confirm all pairs above threshold across all accessible assignments."""
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+        if accessible_ids is not None and not accessible_ids:
+            return BulkConfirmResponse(
+                assignment_id="global",
+                threshold=threshold,
+                confirmed_pairs=0,
+                confirmed_files=0,
+                skipped_pairs=0,
+            )
+
+        # Build task-id subquery across all accessible assignments
+        task_subq = select(PlagiarismTask.id)
+        if accessible_ids is not None:
+            try:
+                task_subq = task_subq.where(
+                    PlagiarismTask.assignment_id.in_([UUID(aid) for aid in accessible_ids])
+                )
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid UUID format in accessible_ids")
+
+        if assignment_id is not None:
+            try:
+                task_subq = task_subq.where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid UUID format for assignment_id")
+
+        # Update similarity_results in a single query
+        update_stmt = (
+            update(SimilarityResult)
+            .where(SimilarityResult.task_id.in_(task_subq))
+            .where(SimilarityResult.ast_similarity > threshold)
+            .where(SimilarityResult.review_disposition.is_(None))
+            .values(
+                review_disposition="bulk_confirmed",
+                reviewed_at=datetime.now(UTC),
+                reviewed_by=current_user.id,
+                detection_source="manual",
+            )
+        )
+        result = await self.db.execute(update_stmt)
+        confirmed_pairs = result.rowcount
+
+        if confirmed_pairs > 0:
+            # Get updated rows to update file statuses
+            updated = await self.db.execute(
+                select(SimilarityResult.file_a_id, SimilarityResult.file_b_id)
+                .where(SimilarityResult.task_id.in_(task_subq))
+                .where(SimilarityResult.review_disposition == "bulk_confirmed")
+                .where(SimilarityResult.reviewed_at >= datetime.now(UTC).replace(microsecond=0))
+            )
+            updated_rows = updated.fetchall()
+
+            # Collect unique file IDs that need to be marked as confirmed
+            file_ids = set()
+            for row in updated_rows:
+                file_ids.add(row.file_a_id)
+                file_ids.add(row.file_b_id)
+
+            # Update files table in a single query
+            if file_ids:
+                await self.db.execute(
+                    update(FileModel)
+                    .where(FileModel.id.in_(file_ids))
+                    .where(FileModel.is_confirmed.is_(False))
+                    .values(is_confirmed=True)
+                )
+
+        await self.db.commit()
+
+        return BulkConfirmResponse(
+            assignment_id="global",
+            threshold=threshold,
+            confirmed_pairs=confirmed_pairs,
+            confirmed_files=0,
+            skipped_pairs=0,
+        )
+
+    async def global_bulk_clear(
+        self, threshold: float, current_user, assignment_id: str | None = None
+    ) -> BulkConfirmResponse:
+        """Bulk clear all pairs across all accessible assignments."""
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+        if accessible_ids is not None and not accessible_ids:
+            return BulkConfirmResponse(
+                assignment_id="global",
+                threshold=threshold,
+                confirmed_pairs=0,
+                confirmed_files=0,
+                skipped_pairs=0,
+            )
+
+        # Build task-id subquery across all accessible assignments
+        task_subq = select(PlagiarismTask.id)
+        if accessible_ids is not None:
+            try:
+                task_subq = task_subq.where(
+                    PlagiarismTask.assignment_id.in_([UUID(aid) for aid in accessible_ids])
+                )
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid UUID format in accessible_ids")
+
+        if assignment_id is not None:
+            try:
+                task_subq = task_subq.where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid UUID format for assignment_id")
+
+        # Build the WHERE clause
+        where_conditions = [
+            SimilarityResult.task_id.in_(task_subq),
+            SimilarityResult.review_disposition.is_(None),
+        ]
+        if threshold > 0:
+            where_conditions.append(SimilarityResult.ast_similarity <= threshold)
+
+        # Update in a single query
+        update_stmt = (
+            update(SimilarityResult)
+            .where(*where_conditions)
+            .values(
+                review_disposition="clear",
+                reviewed_at=datetime.now(UTC),
+                reviewed_by=current_user.id,
+                detection_source="manual",
+            )
+        )
+        result = await self.db.execute(update_stmt)
+        cleared_pairs = result.rowcount
+
+        await self.db.commit()
+
+        return BulkConfirmResponse(
+            assignment_id="global",
+            threshold=threshold,
+            confirmed_pairs=cleared_pairs,
+            confirmed_files=0,
+            skipped_pairs=0,
+        )
+
+    async def get_review_queue(
+        self,
+        assignment_id: str,
+        limit: int,
+        offset: int = 0,
+        current_user: Any | None = None,
+    ) -> ReviewQueueResponse:
         """Get smart review queue prioritized by unconfirmed and unreviewed files."""
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+        try:
+            assignment_uuid = UUID(assignment_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid UUID format for assignment_id")
+
+        # If non-admin with no access, return empty queue
+        if accessible_ids is not None and not accessible_ids:
+            return ReviewQueueResponse(
+                assignment_id=assignment_id,
+                total_files=0,
+                confirmed_files=0,
+                remaining_files=0,
+                queue=[],
+                estimated_reviews=0,
+            )
+
+        # If non-admin, verify the requested assignment is accessible
+        if accessible_ids is not None and str(assignment_uuid) not in accessible_ids:
+            return ReviewQueueResponse(
+                assignment_id=assignment_id,
+                total_files=0,
+                confirmed_files=0,
+                remaining_files=0,
+                queue=[],
+                estimated_reviews=0,
+            )
+
         files_query = (
             select(FileModel)
             .join(PlagiarismTask, FileModel.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(PlagiarismTask.assignment_id == assignment_uuid)
             .where(FileModel.deleted_at.is_(None))
         )
         result = await self.db.execute(files_query)
@@ -373,10 +667,12 @@ class ResultService:
         results_query = (
             select(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(PlagiarismTask.assignment_id == assignment_uuid)
             .where(SimilarityResult.review_disposition.is_(None))
             .order_by(SimilarityResult.ast_similarity.desc())
-            .limit(limit * 2 + offset)  # Get enough to ensure we have at least `limit` after filtering
+            .limit(
+                limit * 2 + offset
+            )  # Get enough to ensure we have at least `limit` after filtering
         )
         result = await self.db.execute(results_query)
         all_results = result.scalars().all()
@@ -431,7 +727,7 @@ class ResultService:
             select(func.count())
             .select_from(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(PlagiarismTask.assignment_id == assignment_uuid)
             .where(SimilarityResult.review_disposition == "clear")
         )
         cleared_result = await self.db.execute(cleared_count_query)
@@ -441,7 +737,7 @@ class ResultService:
             select(func.count())
             .select_from(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
-            .where(PlagiarismTask.assignment_id == UUID(assignment_id))
+            .where(PlagiarismTask.assignment_id == assignment_uuid)
             .where(SimilarityResult.review_disposition == "plagiarism")
         )
         plagiarism_result = await self.db.execute(plagiarism_count_query)
@@ -457,9 +753,17 @@ class ResultService:
         )
 
     async def get_cleared_pairs(
-        self, assignment_id: str, limit: int = 100, offset: int = 0
+        self,
+        assignment_id: str,
+        limit: int = 100,
+        offset: int = 0,
+        current_user: Any | None = None,
     ) -> PaginatedResponse:
         """Get all cleared pairs for an assignment."""
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+        if accessible_ids is not None and str(UUID(assignment_id)) not in accessible_ids:
+            return PaginatedResponse(items=[], total=0, limit=limit, offset=offset)
+
         query = (
             select(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
@@ -481,9 +785,17 @@ class ResultService:
         )
 
     async def get_plagiarism_pairs(
-        self, assignment_id: str, limit: int = 100, offset: int = 0
+        self,
+        assignment_id: str,
+        limit: int = 100,
+        offset: int = 0,
+        current_user: Any | None = None,
     ) -> PaginatedResponse:
         """Get all confirmed plagiarism pairs for an assignment."""
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+        if accessible_ids is not None and str(UUID(assignment_id)) not in accessible_ids:
+            return PaginatedResponse(items=[], total=0, limit=limit, offset=offset)
+
         query = (
             select(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
@@ -504,9 +816,22 @@ class ResultService:
             offset=offset,
         )
 
-    async def get_review_status(self, assignment_id: str) -> ReviewStatusSummary:
+    async def get_review_status(
+        self, assignment_id: str, current_user: Any | None = None
+    ) -> ReviewStatusSummary:
         """Get summary of review status for an assignment."""
         assignment_uuid = UUID(assignment_id)
+
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+        if accessible_ids is not None and str(assignment_uuid) not in accessible_ids:
+            return ReviewStatusSummary(
+                assignment_id=assignment_id,
+                total_pairs=0,
+                unreviewed=0,
+                confirmed=0,
+                bulk_confirmed=0,
+                cleared=0,
+            )
 
         # Use SQL aggregation to get counts directly in database (no rows fetched)
         status_query = (
@@ -542,10 +867,20 @@ class ResultService:
         )
 
     async def get_pairs_by_status(
-        self, assignment_id: str, status: str, limit: int = 100, offset: int = 0
+        self,
+        assignment_id: str,
+        status: str,
+        limit: int = 100,
+        offset: int = 0,
+        current_user: Any | None = None,
     ) -> PaginatedResponse:
         """Get all pairs for an assignment filtered by review status."""
         assignment_uuid = UUID(assignment_id)
+
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+        if accessible_ids is not None and str(assignment_uuid) not in accessible_ids:
+            return PaginatedResponse(items=[], total=0, limit=limit, offset=offset)
+
         base_query = (
             select(SimilarityResult)
             .join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
@@ -605,6 +940,272 @@ class ResultService:
             offset=offset,
         )
 
+    async def get_global_review_queue(
+        self,
+        current_user: Any | None,
+        limit: int = 50,
+        offset: int = 0,
+        assignment_id: UUID | None = None,
+        status: str | None = None,
+        min_similarity: float | None = None,
+        search: str | None = None,
+    ) -> PaginatedResponse:
+        """Get review queue across all accessible assignments.
+
+        If ``assignment_id`` is provided, scope to that assignment (must be accessible).
+        If ``status`` is provided, filter by review disposition.
+        If ``min_similarity`` is provided, filter by minimum AST similarity.
+        If ``search`` is provided, filter by filename (case-insensitive) on either file in the pair.
+        All filters are subject to the user's accessible-assignment scope.
+        """
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+
+        # Non-admin without access: empty result
+        if accessible_ids is not None and not accessible_ids:
+            return PaginatedResponse(items=[], total=0, limit=limit, offset=offset)
+
+        # Non-admin requesting a non-accessible assignment: empty result
+        if (
+            assignment_id is not None
+            and accessible_ids is not None
+            and str(assignment_id) not in accessible_ids
+        ):
+            return PaginatedResponse(items=[], total=0, limit=limit, offset=offset)
+
+        # Build base query: SimilarityResult -> PlagiarismTask -> Assignment
+        base_query = select(SimilarityResult).join(
+            PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id
+        )
+
+        # Apply assignment scope filter
+        if accessible_ids is not None:
+            try:
+                base_query = base_query.where(
+                    PlagiarismTask.assignment_id.in_([UUID(aid) for aid in accessible_ids])
+                )
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid UUID format in accessible_ids")
+
+        if assignment_id is not None:
+            base_query = base_query.where(PlagiarismTask.assignment_id == assignment_id)
+
+        # Apply status filter
+        if status and status not in ("all", "unreviewed"):
+            if status in ("confirmed", "plagiarism"):
+                base_query = base_query.where(SimilarityResult.review_disposition == "plagiarism")
+            elif status == "bulk_confirmed":
+                base_query = base_query.where(
+                    SimilarityResult.review_disposition == "bulk_confirmed"
+                )
+            elif status in ("cleared", "clear"):
+                base_query = base_query.where(SimilarityResult.review_disposition == "clear")
+        elif status == "unreviewed":
+            base_query = base_query.where(SimilarityResult.review_disposition.is_(None))
+
+        if min_similarity is not None:
+            base_query = base_query.where(SimilarityResult.ast_similarity >= min_similarity)
+
+        if search:
+            search_term = f"%{search}%"
+            file_a = alias(FileModel.__table__, name="file_a_search")
+            file_b = alias(FileModel.__table__, name="file_b_search")
+            base_query = base_query.join(
+                file_a, file_a.c.id == SimilarityResult.file_a_id
+            ).join(
+                file_b, file_b.c.id == SimilarityResult.file_b_id
+            ).where(
+                or_(
+                    file_a.c.filename.ilike(search_term),
+                    file_b.c.filename.ilike(search_term),
+                )
+            )
+
+        # Count total (over the same base filter, before pagination)
+        count_query = select(func.count()).select_from(base_query.subquery())
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar_one()
+
+        # Apply ordering + pagination
+        base_query = base_query.order_by(SimilarityResult.ast_similarity.desc())
+        base_query = base_query.limit(limit).offset(offset)
+        result = await self.db.execute(base_query)
+        paginated_results = result.scalars().all()
+
+        # Pre-fetch file info for all results in one query
+        file_ids = set()
+        for r in paginated_results:
+            file_ids.add(r.file_a_id)
+            file_ids.add(r.file_b_id)
+
+        file_map = {}
+        if file_ids:
+            files_result = await self.db.execute(
+                select(FileModel.id, FileModel.filename, FileModel.is_confirmed).where(
+                    FileModel.id.in_(file_ids)
+                )
+            )
+            for row in files_result.all():
+                file_map[str(row.id)] = {
+                    "filename": row.filename,
+                    "is_confirmed": bool(row.is_confirmed) if row.is_confirmed else False,
+                }
+
+        mapped_results = [
+            await self.repo._map_to_result_item_with_map(r, file_map) for r in paginated_results
+        ]
+
+        return PaginatedResponse(
+            items=mapped_results,
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def get_review_queue_count(
+        self,
+        current_user: Any | None,
+        assignment_id: UUID | None = None,
+        status: str | None = None,
+        min_similarity: float | None = None,
+        search: str | None = None,
+    ) -> int:
+        """Return the number of pairs matching the given filters (no pagination)."""
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+
+        if accessible_ids is not None and not accessible_ids:
+            return 0
+
+        if (
+            assignment_id is not None
+            and accessible_ids is not None
+            and str(assignment_id) not in accessible_ids
+        ):
+            return 0
+
+        base_query = select(SimilarityResult).join(
+            PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id
+        )
+
+        if accessible_ids is not None:
+            try:
+                base_query = base_query.where(
+                    PlagiarismTask.assignment_id.in_([UUID(aid) for aid in accessible_ids])
+                )
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid UUID format in accessible_ids")
+
+        if assignment_id is not None:
+            base_query = base_query.where(PlagiarismTask.assignment_id == assignment_id)
+
+        if status and status not in ("all", "unreviewed"):
+            if status in ("confirmed", "plagiarism"):
+                base_query = base_query.where(SimilarityResult.review_disposition == "plagiarism")
+            elif status == "bulk_confirmed":
+                base_query = base_query.where(
+                    SimilarityResult.review_disposition == "bulk_confirmed"
+                )
+            elif status in ("cleared", "clear"):
+                base_query = base_query.where(SimilarityResult.review_disposition == "clear")
+        elif status == "unreviewed":
+            base_query = base_query.where(SimilarityResult.review_disposition.is_(None))
+
+        if min_similarity is not None:
+            base_query = base_query.where(SimilarityResult.ast_similarity >= min_similarity)
+
+        if search:
+            search_term = f"%{search}%"
+            file_a = alias(FileModel.__table__, name="file_a_search")
+            file_b = alias(FileModel.__table__, name="file_b_search")
+            base_query = base_query.join(
+                file_a, file_a.c.id == SimilarityResult.file_a_id
+            ).join(
+                file_b, file_b.c.id == SimilarityResult.file_b_id
+            ).where(
+                or_(
+                    file_a.c.filename.ilike(search_term),
+                    file_b.c.filename.ilike(search_term),
+                )
+            )
+
+        count_query = select(func.count()).select_from(base_query.subquery())
+        result = await self.db.execute(count_query)
+        return result.scalar_one() or 0
+
+    async def get_global_review_status(
+        self,
+        current_user: Any | None,
+        assignment_id: UUID | None = None,
+    ) -> ReviewStatusSummary:
+        """Get aggregated review status counts across accessible assignments.
+
+        If ``assignment_id`` is provided, scope to that assignment.
+        Otherwise aggregate across all accessible assignments.
+        """
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+
+        # Non-admin without access: empty status
+        if accessible_ids is not None and not accessible_ids:
+            return ReviewStatusSummary(
+                assignment_id=str(assignment_id) if assignment_id else "global",
+                total_pairs=0,
+                unreviewed=0,
+                confirmed=0,
+                bulk_confirmed=0,
+                cleared=0,
+            )
+
+        # Non-admin requesting a non-accessible assignment: empty status
+        if (
+            assignment_id is not None
+            and accessible_ids is not None
+            and str(assignment_id) not in accessible_ids
+        ):
+            return ReviewStatusSummary(
+                assignment_id=str(assignment_id),
+                total_pairs=0,
+                unreviewed=0,
+                confirmed=0,
+                bulk_confirmed=0,
+                cleared=0,
+            )
+
+        status_query = select(
+            func.count().label("total"),
+            func.sum(case((SimilarityResult.review_disposition.is_(None), 1), else_=0)).label(
+                "unreviewed"
+            ),
+            func.sum(case((SimilarityResult.review_disposition == "plagiarism", 1), else_=0)).label(
+                "confirmed"
+            ),
+            func.sum(
+                case((SimilarityResult.review_disposition == "bulk_confirmed", 1), else_=0)
+            ).label("bulk_confirmed"),
+            func.sum(case((SimilarityResult.review_disposition == "clear", 1), else_=0)).label(
+                "cleared"
+            ),
+        ).join(PlagiarismTask, SimilarityResult.task_id == PlagiarismTask.id)
+
+        # Apply assignment scope filter
+        if accessible_ids is not None:
+            status_query = status_query.where(
+                PlagiarismTask.assignment_id.in_([UUID(aid) for aid in accessible_ids])
+            )
+
+        if assignment_id is not None:
+            status_query = status_query.where(PlagiarismTask.assignment_id == assignment_id)
+
+        result = await self.db.execute(status_query)
+        row = result.first()
+
+        return ReviewStatusSummary(
+            assignment_id=str(assignment_id) if assignment_id else "global",
+            total_pairs=row.total or 0,
+            unreviewed=row.unreviewed or 0,
+            confirmed=row.confirmed or 0,
+            bulk_confirmed=row.bulk_confirmed or 0,
+            cleared=row.cleared or 0,
+        )
+
     async def get_top_similar_pairs(self, file_id: str, limit: int) -> PaginatedResponse:
         """Get top similar pairs for a file."""
         query = (
@@ -627,11 +1228,15 @@ class ResultService:
         )
 
     async def export_review_html(
-        self, assignment_id: str, threshold: float
+        self, assignment_id: str, threshold: float, current_user: Any | None = None
     ) -> ReviewExportResponse:
         """Generate HTML export with file status, notes, and pair comparisons."""
         from clients.s3_client import S3Storage
         from constants import BUCKET_NAME
+
+        accessible_ids = await self._get_accessible_assignment_ids(current_user)
+        if accessible_ids is not None and str(UUID(assignment_id)) not in accessible_ids:
+            raise NotFoundError("Assignment not found")
 
         assignment = await self.db.get(Assignment, UUID(assignment_id))
         if not assignment:
@@ -940,6 +1545,7 @@ class ResultService:
             file_b: Optional pre-loaded file_b (to avoid re-query)
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         from uuid import UUID
@@ -960,7 +1566,9 @@ class ResultService:
         if file_b is None:
             file_b = await self.db.get(FileModel, result.file_b_id)
         if not file_a or not file_b:
-            logger.error(f"Files not found for result {result_id}: file_a={file_a}, file_b={file_b}")
+            logger.error(
+                f"Files not found for result {result_id}: file_a={file_a}, file_b={file_b}"
+            )
             raise NotFoundError("File not found")
 
         reviewer_email = None
@@ -972,9 +1580,13 @@ class ResultService:
                     reviewer_email = reviewer.email
 
         matches = result.matches or []
-        logger.info(f"build_report_payload: matches type={type(matches)}, len={len(matches) if isinstance(matches, list) else 'N/A'}")
+        logger.info(
+            f"build_report_payload: matches type={type(matches)}, len={len(matches) if isinstance(matches, list) else 'N/A'}"
+        )
         if matches and len(matches) > 0:
-            logger.info(f"build_report_payload: first match type={type(matches[0])}, value={str(matches[0])[:200]}")
+            logger.info(
+                f"build_report_payload: first match type={type(matches[0])}, value={str(matches[0])[:200]}"
+            )
 
         assignment_data = {
             "id": str(assignment.id),
@@ -1040,6 +1652,7 @@ class ResultService:
     ) -> AsyncGenerator[tuple[dict, str], None]:
         """Yield payload dicts for all confirmed pairs in an assignment."""
         import logging
+
         logger = logging.getLogger(__name__)
 
         query = (

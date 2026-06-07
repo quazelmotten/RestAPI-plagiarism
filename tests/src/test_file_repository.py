@@ -72,11 +72,13 @@ class TestFileRepository:
         mock_row.created_at = sample_file.created_at
         mock_row.task_id = sample_task.id
         mock_row.status = sample_task.status
+        mock_row.upload_name = None
         mock_row.max_sim = 0.95
         mock_row.assignment_id = None
         mock_row.assignment_name = None
         mock_row.subject_id = None
         mock_row.subject_name = None
+        mock_row.is_confirmed = False
 
         mock_db.execute.return_value.all.return_value = [mock_row]
 
@@ -100,11 +102,13 @@ class TestFileRepository:
         mock_row.created_at = sample_file.created_at
         mock_row.task_id = sample_task.id
         mock_row.status = sample_task.status
+        mock_row.upload_name = None
         mock_row.max_sim = None
         mock_row.assignment_id = None
         mock_row.assignment_name = None
         mock_row.subject_id = None
         mock_row.subject_name = None
+        mock_row.is_confirmed = False
 
         # Mock count query
         mock_db.execute.return_value.scalar.return_value = 10
@@ -288,6 +292,10 @@ class TestFileRepository:
     async def test_move_file_moves_file_and_commits(self, repo, mock_db, sample_file, sample_task):
         """Happy path: file found, target task found, task_id updated, commit + refresh."""
         target_task_id = str(uuid.uuid4())
+        # Configure count_files_in_task to return > 0 so reset is skipped
+        count_result = MagicMock()
+        count_result.scalar_one = MagicMock(return_value=5)
+        mock_db.execute = AsyncMock(return_value=count_result)
         mock_db.get.side_effect = [sample_file, sample_task]
         mock_db.commit = AsyncMock()
         mock_db.refresh = AsyncMock()
@@ -315,6 +323,72 @@ class TestFileRepository:
 
         assert result is None
         mock_db.commit.assert_not_called()
+
+    async def test_move_file_deletes_similarity_results_before_reparenting(
+        self, repo, mock_db, sample_file, sample_task
+    ):
+        """The moved file's SimilarityResult rows are removed during the move."""
+        target_task_id = str(uuid.uuid4())
+        count_result = MagicMock()
+        count_result.scalar_one = MagicMock(return_value=5)
+        delete_result = MagicMock()
+        delete_result.rowcount = 7
+        mock_db.execute = AsyncMock(side_effect=[delete_result, count_result])
+        mock_db.get.side_effect = [sample_file, sample_task]
+        mock_db.commit = AsyncMock()
+        mock_db.refresh = AsyncMock()
+
+        await repo.move_file(sample_file.id, target_task_id)
+
+        # First execute = delete similarity results; second = count files in source
+        assert mock_db.execute.call_count == 2
+        assert sample_file.task_id == target_task_id
+
+    async def test_move_file_resets_source_counts_when_source_is_empty(
+        self, repo, mock_db, sample_file, sample_task
+    ):
+        """If the source task is now empty, total_pairs/processed_pairs/progress are zeroed."""
+        target_task_id = str(uuid.uuid4())
+        count_result = MagicMock()
+        count_result.scalar_one = MagicMock(return_value=0)
+        delete_result = MagicMock()
+        delete_result.rowcount = 3
+        mock_db.execute = AsyncMock(side_effect=[delete_result, count_result])
+        mock_db.get.side_effect = [sample_file, sample_task, sample_task]
+        mock_db.commit = AsyncMock()
+        mock_db.refresh = AsyncMock()
+
+        await repo.move_file(sample_file.id, target_task_id)
+
+        assert sample_task.total_pairs == 0
+        assert sample_task.processed_pairs == 0
+        assert sample_task.progress == 0.0
+        # commit called twice: once for the move, once for the count reset
+        assert mock_db.commit.call_count == 2
+
+    async def test_move_file_does_not_reset_when_other_files_remain(
+        self, repo, mock_db, sample_file, sample_task
+    ):
+        """If the source task still has files, counts are not touched."""
+        target_task_id = str(uuid.uuid4())
+        count_result = MagicMock()
+        count_result.scalar_one = MagicMock(return_value=3)
+        delete_result = MagicMock()
+        delete_result.rowcount = 2
+        mock_db.execute = AsyncMock(side_effect=[delete_result, count_result])
+        sample_task.total_pairs = 18447
+        sample_task.processed_pairs = 18447
+        sample_task.progress = 1.0
+        mock_db.get.side_effect = [sample_file, sample_task]
+        mock_db.commit = AsyncMock()
+        mock_db.refresh = AsyncMock()
+
+        await repo.move_file(sample_file.id, target_task_id)
+
+        assert sample_task.total_pairs == 18447
+        assert sample_task.processed_pairs == 18447
+        assert sample_task.progress == 1.0
+        mock_db.commit.assert_called_once()
 
     # ------------------------------------------------------------------
     # exist
@@ -358,3 +432,79 @@ class TestFileRepository:
         result = await repo.delete_file("nonexistent")
 
         assert result is False
+
+    # ------------------------------------------------------------------
+    # count_files_in_task
+    # ------------------------------------------------------------------
+
+    async def test_count_files_in_task_returns_int(self, repo, mock_db):
+        count_result = MagicMock()
+        count_result.scalar_one = MagicMock(return_value=12)
+        mock_db.execute = AsyncMock(return_value=count_result)
+
+        result = await repo.count_files_in_task(uuid.uuid4())
+
+        assert result == 12
+
+    # ------------------------------------------------------------------
+    # delete_similarity_results_for_file
+    # ------------------------------------------------------------------
+
+    async def test_delete_similarity_results_for_file_returns_rowcount(self, repo, mock_db):
+        delete_result = MagicMock()
+        delete_result.rowcount = 9
+        mock_db.execute = AsyncMock(return_value=delete_result)
+
+        result = await repo.delete_similarity_results_for_file(uuid.uuid4())
+
+        assert result == 9
+        mock_db.execute.assert_called_once()
+
+    # ------------------------------------------------------------------
+    # reset_task_pair_counts_if_empty
+    # ------------------------------------------------------------------
+
+    async def test_reset_task_pair_counts_returns_false_when_files_remain(
+        self, repo, mock_db, sample_task
+    ):
+        count_result = MagicMock()
+        count_result.scalar_one = MagicMock(return_value=4)
+        mock_db.execute = AsyncMock(return_value=count_result)
+
+        result = await repo.reset_task_pair_counts_if_empty(sample_task.id)
+
+        assert result is False
+        mock_db.get.assert_not_called()
+        mock_db.commit.assert_not_called()
+
+    async def test_reset_task_pair_counts_zeroes_fields_when_empty(
+        self, repo, mock_db, sample_task
+    ):
+        sample_task.total_pairs = 18447
+        sample_task.processed_pairs = 18447
+        sample_task.progress = 1.0
+        count_result = MagicMock()
+        count_result.scalar_one = MagicMock(return_value=0)
+        mock_db.execute = AsyncMock(return_value=count_result)
+        mock_db.get = AsyncMock(return_value=sample_task)
+        mock_db.commit = AsyncMock()
+
+        result = await repo.reset_task_pair_counts_if_empty(sample_task.id)
+
+        assert result is True
+        assert sample_task.total_pairs == 0
+        assert sample_task.processed_pairs == 0
+        assert sample_task.progress == 0.0
+        mock_db.commit.assert_called_once()
+
+    async def test_reset_task_pair_counts_noop_when_task_missing(self, repo, mock_db):
+        count_result = MagicMock()
+        count_result.scalar_one = MagicMock(return_value=0)
+        mock_db.execute = AsyncMock(return_value=count_result)
+        mock_db.get = AsyncMock(return_value=None)
+        mock_db.commit = AsyncMock()
+
+        result = await repo.reset_task_pair_counts_if_empty(uuid.uuid4())
+
+        assert result is False
+        mock_db.commit.assert_not_called()

@@ -82,6 +82,7 @@ import { useTranslation } from 'react-i18next';
 import api, { API_ENDPOINTS } from '../services/api';
 import { useSubjects, useUncategorizedAssignments, useCreateSubject, useUpdateSubject, useDeleteSubject, useRestoreSubject, useRestoreAssignment } from '../hooks/useSubjects';
 import { SubjectMembersDialog } from '../components/SubjectMembersDialog';
+import { formatAssignmentCreateError } from '../utils/errorMessages';
 
 interface Assignment {
   id: string;
@@ -293,10 +294,12 @@ const Assignments: React.FC = () => {
         closeAssignmentModal();
       },
        onError: (err: unknown) => {
-         const msg = err && typeof err === 'object' && 'response' in err
-           ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-           : t('common:error');
-         toast({ title: t('common:error'), description: msg, status: 'error', duration: 5000 });
+         toast({
+           title: t('common:errors.generic'),
+           description: formatAssignmentCreateError(err, t),
+           status: 'error',
+           duration: 5000,
+         });
        },
     });
 

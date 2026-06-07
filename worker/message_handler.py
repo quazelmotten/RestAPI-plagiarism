@@ -58,7 +58,10 @@ class MessageHandler:
 
             log.info(f"[Task {task_id}] Processing {len(files)} files, language={language}")
             assignment_id = message.get("assignment_id")
-            self.task_service.process_task(task_id, files, language, assignment_id=assignment_id)
+            user_id = message.get("user_id")
+            self.task_service.process_task(
+                task_id, files, language, assignment_id=assignment_id, user_id=user_id
+            )
 
         except json.JSONDecodeError as e:
             log.error(f"Invalid JSON in message: {e}")

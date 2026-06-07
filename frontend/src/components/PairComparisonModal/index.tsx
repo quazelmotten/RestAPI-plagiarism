@@ -208,8 +208,8 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
   const navigateToIndex = useCallback((idx: number) => {
     if (idx < 0 || idx >= pairs.length) return;
     const pair = pairs[idx];
-    setSelectedFileA({ id: pair.file_a.id, filename: pair.file_a.filename, language: '', task_id: '', status: '' });
-    setSelectedFileB({ id: pair.file_b.id, filename: pair.file_b.filename, language: '', task_id: '', status: '' });
+    setSelectedFileA({ id: pair.file_a.id, filename: pair.file_a.filename, language: '', task_id: '', status: '', similarity: undefined });
+    setSelectedFileB({ id: pair.file_b.id, filename: pair.file_b.filename, language: '', task_id: '', status: '', similarity: undefined });
     setHoveredMatchIndex(null);
     fileALineRefs.current.clear();
     fileBLineRefs.current.clear();
@@ -218,8 +218,8 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
   // Initialize from props
   useEffect(() => {
     if (isOpen && initialFileA && initialFileB) {
-      setSelectedFileA({ id: initialFileA.id, filename: initialFileA.filename, language: '', task_id: '', status: '' });
-      setSelectedFileB({ id: initialFileB.id, filename: initialFileB.filename, language: '', task_id: '', status: '' });
+      setSelectedFileA({ id: initialFileA.id, filename: initialFileA.filename, language: '', task_id: '', status: '', similarity: undefined });
+      setSelectedFileB({ id: initialFileB.id, filename: initialFileB.filename, language: '', task_id: '', status: '', similarity: undefined });
       setHoveredMatchIndex(null);
       setCurrentPair(null);
       setFileAContent(null);

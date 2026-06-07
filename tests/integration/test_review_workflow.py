@@ -171,3 +171,63 @@ class TestEndpointConsistency:
         assert total == unreviewed + confirmed + bulk_confirmed + cleared, (
             f"Total {total} != {unreviewed} + {confirmed} + {bulk_confirmed} + {cleared}"
         )
+
+
+class TestGlobalBulkConfirmEndpoint:
+    """Test global bulk-confirm endpoint with optional assignment_id."""
+
+    async def test_global_bulk_confirm_without_assignment_id(self, client, seeded_assignment):
+        """Global bulk confirm without assignment_id returns 200."""
+        response = await client.post(
+            "/plagitype/plagiarism/bulk-confirm?threshold=0.9"
+        )
+        assert response.status_code == 200, f"Failed: {response.text}"
+        data = response.json()
+        assert "confirmed_pairs" in data
+
+    async def test_global_bulk_confirm_with_assignment_id(self, client, seeded_assignment):
+        """Global bulk confirm scoped to a specific assignment returns 200."""
+        assignment_id = seeded_assignment["id"]
+        response = await client.post(
+            f"/plagitype/plagiarism/bulk-confirm?threshold=0.9&assignment_id={assignment_id}"
+        )
+        assert response.status_code == 200, f"Failed: {response.text}"
+        data = response.json()
+        assert "confirmed_pairs" in data
+
+    async def test_global_bulk_confirm_with_invalid_assignment_id(self, client):
+        """Global bulk confirm with invalid assignment_id returns 422."""
+        response = await client.post(
+            "/plagitype/plagiarism/bulk-confirm?threshold=0.9&assignment_id=not-a-uuid"
+        )
+        assert response.status_code == 422
+
+
+class TestGlobalBulkClearEndpoint:
+    """Test global bulk-clear endpoint with optional assignment_id."""
+
+    async def test_global_bulk_clear_without_assignment_id(self, client, seeded_assignment):
+        """Global bulk clear without assignment_id returns 200."""
+        response = await client.post(
+            "/plagitype/plagiarism/bulk-clear?threshold=0.0"
+        )
+        assert response.status_code == 200, f"Failed: {response.text}"
+        data = response.json()
+        assert "confirmed_pairs" in data
+
+    async def test_global_bulk_clear_with_assignment_id(self, client, seeded_assignment):
+        """Global bulk clear scoped to a specific assignment returns 200."""
+        assignment_id = seeded_assignment["id"]
+        response = await client.post(
+            f"/plagitype/plagiarism/bulk-clear?threshold=0.0&assignment_id={assignment_id}"
+        )
+        assert response.status_code == 200, f"Failed: {response.text}"
+        data = response.json()
+        assert "confirmed_pairs" in data
+
+    async def test_global_bulk_clear_with_invalid_assignment_id(self, client):
+        """Global bulk clear with invalid assignment_id returns 422."""
+        response = await client.post(
+            "/plagitype/plagiarism/bulk-clear?threshold=0.3&assignment_id=not-a-uuid"
+        )
+        assert response.status_code == 422

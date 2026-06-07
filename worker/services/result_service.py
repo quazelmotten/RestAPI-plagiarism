@@ -100,7 +100,9 @@ class ResultService:
             percent = (processed / total * 100) if total > 0 else 0
             logger.info(f"[Task {task_id}] Progress: {processed}/{total} ({percent:.1f}%)")
 
-    def finalize_task(self, task_id: str, total_pairs: int, processed_count: int) -> None:
+    def finalize_task(
+        self, task_id: str, total_pairs: int, processed_count: int, user_id: str | None = None
+    ) -> None:
         """
         Mark task as completed.
 
@@ -108,6 +110,7 @@ class ResultService:
             task_id: Task identifier
             total_pairs: Total number of pairs to process
             processed_count: Number of pairs actually processed
+            user_id: Optional user UUID for event attribution
         """
         max_sim = self.repository.get_max_similarity(task_id)
 
@@ -118,6 +121,7 @@ class ResultService:
             matches={"total_pairs": total_pairs, "processed_pairs": processed_count},
             total_pairs=total_pairs,
             processed_pairs=processed_count,
+            user_id=user_id,
         )
 
         logger.info(
@@ -125,11 +129,12 @@ class ResultService:
             f"processed={processed_count}/{total_pairs}"
         )
 
-    def mark_failed(self, task_id: str, error: str) -> None:
-        """Mark task as failed with error message."""
+    def mark_failed(self, task_id: str, error: str, user_id: str | None = None) -> None:
+        """Mark task as failed with error message. user_id is used for event attribution."""
         self.repository.update_task(
             task_id=task_id,
             status="failed",
             error=error[:1000],  # Truncate long errors
+            user_id=user_id,
         )
         logger.error(f"[Task {task_id}] FAILED: {error}")

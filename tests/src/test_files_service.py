@@ -551,3 +551,75 @@ async def test_delete_note_hard_deletes_and_commits(service):
     service.db.execute.assert_called_once()
     service.db.delete.assert_called_once_with(mock_note)
     service.db.commit.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# bulk_move_by_assignment
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_bulk_move_by_assignment_resets_source_tasks(service):
+    """Each distinct source task has its pair counts reset after the move."""
+    from shared.models import File as FileModel
+
+    source_task_a = uuid.uuid4()
+    source_task_b = uuid.uuid4()
+    target_assignment = str(uuid.uuid4())
+
+    src_file_a = MagicMock(spec=FileModel)
+    src_file_a.id = uuid.uuid4()
+    src_file_a.task_id = source_task_a
+    src_file_a.filename = "a.py"
+    src_file_a.language = "python"
+
+    src_file_b = MagicMock(spec=FileModel)
+    src_file_b.id = uuid.uuid4()
+    src_file_b.task_id = source_task_b
+    src_file_b.filename = "b.py"
+    src_file_b.language = "python"
+
+    file_ids = [str(src_file_a.id), str(src_file_b.id)]
+
+    new_task = MagicMock()
+    new_task.id = uuid.uuid4()
+    new_task.name = "Upload 2024-01-01 00:00"
+    service.repo.create_upload_task = AsyncMock(return_value=new_task)
+    service.repo.create_event = AsyncMock()
+    service.repo.rehome_files = AsyncMock(return_value=[])
+
+    mock_exec = MagicMock()
+    mock_exec.scalars = MagicMock(return_value=MagicMock(all=lambda: [src_file_a, src_file_b]))
+    service.db.execute = AsyncMock(return_value=mock_exec)
+
+    publish = AsyncMock()
+
+    await service.bulk_move_by_assignment(
+        file_ids=file_ids,
+        target_assignment_id=target_assignment,
+        publish_message=publish,
+    )
+
+    assert service.repo.reset_task_pair_counts_if_empty.await_count == 2
+    called_task_ids = {
+        call.args[0]
+        for call in service.repo.reset_task_pair_counts_if_empty.await_args_list
+    }
+    assert source_task_a in called_task_ids
+    assert source_task_b in called_task_ids
+
+
+@pytest.mark.asyncio
+async def test_bulk_move_by_assignment_no_files_raises_not_found(service):
+    mock_exec = MagicMock()
+    mock_exec.scalars = MagicMock(return_value=MagicMock(all=lambda: []))
+    service.db.execute = AsyncMock(return_value=mock_exec)
+
+    from exceptions.exceptions import NotFoundError
+
+    with pytest.raises(NotFoundError, match="No files found"):
+        await service.bulk_move_by_assignment(
+            file_ids=[str(uuid.uuid4())],
+            target_assignment_id=str(uuid.uuid4()),
+            publish_message=AsyncMock(),
+        )

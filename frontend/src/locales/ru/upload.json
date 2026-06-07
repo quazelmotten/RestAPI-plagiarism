@@ -21,6 +21,8 @@
   "filesCount": "{{count}} файлов",
   "addFiles": "Добавить файлы",
   "autoDetected": "автоопределён",
+  "uploadName": "Имя загрузки",
+  "uploadNamePlaceholder": "Необязательно, генерируется автоматически",
   "toasts": {
     "noFilesSelected": "Файлы не выбраны",
     "success": "Загрузка успешна",

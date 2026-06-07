@@ -8,10 +8,9 @@ import json
 import logging
 import time
 from typing import Any
-
-from shared.interfaces import TaskRepository
 from uuid import uuid4 as uuid4_gen
 
+from shared.interfaces import TaskRepository
 from shared.models import File, FileEvent, PlagiarismTask, SimilarityResult
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -90,6 +89,7 @@ class PostgresRepository(TaskRepository):
         error: str | None = None,
         total_pairs: int | None = None,
         processed_pairs: int | None = None,
+        user_id: str | None = None,
     ) -> None:
         """Update a plagiarism task."""
         with get_session() as session:
@@ -116,12 +116,17 @@ class PostgresRepository(TaskRepository):
                 task = session.get(PlagiarismTask, task_id)
                 if task:
                     assignment_id = str(task.assignment_id) if task.assignment_id else None
+                    files_count = session.execute(
+                        select(func.count()).select_from(File).where(File.task_id == task_id)
+                    ).scalar()
                     event = FileEvent(
                         id=str(uuid4_gen()),
                         assignment_id=assignment_id,
                         task_id=task_id,
+                        user_id=user_id,
                         event_type=f"upload_{status}",
                         event_metadata={
+                            "files_count": files_count,
                             "similarity": similarity,
                             "total_pairs": total_pairs,
                             "processed_pairs": processed_pairs,

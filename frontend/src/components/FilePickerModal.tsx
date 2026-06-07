@@ -190,8 +190,8 @@ const FilePickerModal: React.FC<FilePickerModalProps> = ({
       setFileBSearch('');
       setFileAResults([]);
       setFileBResults([]);
-      setSelectedFileA(initialFileAId ? { id: initialFileAId, filename: '', language: '', task_id: '', status: '' } : null);
-      setSelectedFileB(initialFileBId ? { id: initialFileBId, filename: '', language: '', task_id: '', status: '' } : null);
+      setSelectedFileA(initialFileAId ? { id: initialFileAId, filename: '', language: '', task_id: '', status: '', similarity: undefined } : null);
+      setSelectedFileB(initialFileBId ? { id: initialFileBId, filename: '', language: '', task_id: '', status: '', similarity: undefined } : null);
       setErrors({});
     }
   }, [isOpen, initialFileAId, initialFileBId]);

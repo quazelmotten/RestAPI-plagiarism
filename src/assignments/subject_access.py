@@ -3,11 +3,13 @@ Subject access service for managing user-subject permissions.
 """
 
 import logging
+import uuid
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from shared.models import SubjectAccess
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from auth.models import User
 from database import async_session_maker
@@ -25,8 +27,6 @@ class SubjectAccessService:
         """
         Grant a user access to a subject.
         """
-        import uuid
-
         async with async_session_maker() as session:
             # Convert IDs to UUID for proper comparison
             try:
@@ -56,7 +56,25 @@ class SubjectAccessService:
                 granted_at=datetime.now(UTC),
             )
             session.add(access)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                # Race: another concurrent grant_access won. Return the existing row.
+                result = await session.execute(
+                    select(SubjectAccess).where(
+                        SubjectAccess.user_id == user_uuid,
+                        SubjectAccess.subject_id == subject_uuid,
+                    )
+                )
+                winner = result.scalar_one_or_none()
+                if winner is None:
+                    raise
+                logger.info(
+                    f"Concurrent grant race for user {user_id} -> subject {subject_id}; "
+                    "returning existing row"
+                )
+                return winner
             await session.refresh(access)
 
             logger.info(f"Granted subject access: user {user_id} -> subject {subject_id}")
@@ -68,8 +86,6 @@ class SubjectAccessService:
         Revoke a user's access to a subject.
         Returns True if revoked, False if no access existed.
         """
-        import uuid
-
         async with async_session_maker() as session:
             # Convert IDs to UUID for proper comparison
             try:
@@ -91,7 +107,7 @@ class SubjectAccessService:
             await session.delete(access)
             await session.commit()
 
-            logger.info(f"Revoked subject access: user {user_id} -> subject {subject_id}")
+            logger.info(f"Revoked subject access: user {user_id} from subject {subject_id}")
             return True
 
     @staticmethod
@@ -99,8 +115,6 @@ class SubjectAccessService:
         """
         Check if a user has access to a subject.
         """
-        import uuid
-
         async with async_session_maker() as session:
             # Convert IDs to UUID for proper comparison
             try:
@@ -121,8 +135,6 @@ class SubjectAccessService:
         """
         Get list of subject IDs a user has access to.
         """
-        import uuid
-
         async with async_session_maker() as session:
             # Convert user ID to UUID for proper comparison
             try:
@@ -136,12 +148,36 @@ class SubjectAccessService:
             return [str(row[0]) for row in result.all()]
 
     @staticmethod
+    async def get_accessible_assignment_ids(db, user_id: str) -> list[str]:
+        """
+        Get list of assignment IDs a user has access to via their subjects.
+
+        Uses the provided database session (no new connection) so it participates
+        in the caller's transaction/connection.
+
+        Returns an empty list if the user has no subject access (caller can use
+        this to short-circuit queries). Returns an empty list for invalid user IDs.
+        """
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            return []
+
+        from shared.models import Assignment
+
+        result = await db.execute(
+            select(Assignment.id)
+            .join(SubjectAccess, SubjectAccess.subject_id == Assignment.subject_id)
+            .where(SubjectAccess.user_id == user_uuid)
+            .where(Assignment.deleted_at.is_(None))
+        )
+        return [str(row[0]) for row in result.all()]
+
+    @staticmethod
     async def get_subject_members(subject_id: str) -> list[dict]:
         """
         Get all members of a subject with their details.
         """
-        import uuid
-
         async with async_session_maker() as session:
             # Convert subject_id to UUID for proper comparison
             try:

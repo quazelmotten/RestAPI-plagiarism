@@ -3,6 +3,7 @@ Integration tests conftest.py - shared fixtures for API integration tests.
 Uses real services (PostgreSQL, Redis, RabbitMQ) via docker-compose.test.yml.
 """
 
+import asyncio
 import os
 import sys
 import uuid
@@ -69,16 +70,21 @@ def setup_db_schema():
             tables = [row[0] for row in result.fetchall()]
             print(f"Tables in database: {tables}")
 
-    asyncio.run(_ensure())
+    loop = asyncio.new_event_loop()
     try:
+        loop.run_until_complete(_ensure())
         yield
     finally:
         del os.environ["RATE_LIMIT_ENABLED"]
-        asyncio.run(engine.dispose())
+        loop.run_until_complete(engine.dispose())
+        loop.close()
 
 
 @pytest_asyncio.fixture
 async def fresh_db_session():
+    import sys as _sys
+    _sys.stderr.write("FIXTURE fresh_db_session: entering\n")
+    _sys.stderr.flush()
     engine = create_async_engine(
         TEST_DB_URL,
         pool_size=1,
@@ -88,13 +94,22 @@ async def fresh_db_session():
     test_session_local = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with test_session_local() as session:
+        _sys.stderr.write("FIXTURE fresh_db_session: yielding\n")
+        _sys.stderr.flush()
         yield session
 
+    _sys.stderr.write("FIXTURE fresh_db_session: disposing engine\n")
+    _sys.stderr.flush()
     await engine.dispose()
+    _sys.stderr.write("FIXTURE fresh_db_session: done\n")
+    _sys.stderr.flush()
 
 
 @pytest_asyncio.fixture
 async def db_clean(fresh_db_session):
+    import sys as _sys
+    _sys.stderr.write("FIXTURE db_clean: entering\n")
+    _sys.stderr.flush()
     engine = create_async_engine(
         TEST_DB_URL,
         pool_size=1,
@@ -115,6 +130,8 @@ async def db_clean(fresh_db_session):
             except Exception:
                 pass
     await engine.dispose()
+    _sys.stderr.write("FIXTURE db_clean: yielding\n")
+    _sys.stderr.flush()
     yield
 
 
@@ -122,6 +139,9 @@ class MockRabbitMQ:
     is_connected = True
 
     async def publish_message(self, *args, **kwargs):
+        pass
+
+    async def publish_file_event(self, *args, **kwargs):
         pass
 
     async def connect(self):
@@ -171,6 +191,9 @@ class MockS3Storage:
 
 @pytest_asyncio.fixture
 async def client(db_clean):
+    import sys as _sys
+    _sys.stderr.write("FIXTURE client: entering\n")
+    _sys.stderr.flush()
     from httpx import ASGITransport, AsyncClient
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker
@@ -214,6 +237,28 @@ async def client(db_clean):
     db_module.engine = engine
     db_module.async_session_maker = test_session_local
 
+    # Persist the mock user so FK constraints on subject_access / assignments succeed
+    async with test_session_local() as session:
+        from sqlalchemy import select
+
+        from auth.models import User as UserModel
+
+        result = await session.execute(
+            select(UserModel).where(UserModel.id == mock_user.id)
+        )
+        if result.scalar_one_or_none() is None:
+            session.add(
+                UserModel(
+                    id=mock_user.id,
+                    email=mock_user.email,
+                    username="test",
+                    hashed_password=mock_user.hashed_password,
+                    is_global_admin=mock_user.is_global_admin,
+                    session_version=mock_user.session_version,
+                )
+            )
+            await session.commit()
+
     # Set up mocks
     if not hasattr(app.state, "redis_client"):
         app.state.redis_client = MockRedisClient()
@@ -223,12 +268,20 @@ async def client(db_clean):
         app.state.s3_storage = MockS3Storage()
 
     transport = ASGITransport(app=app)
+    _sys.stderr.write("FIXTURE client: creating AsyncClient\n")
+    _sys.stderr.flush()
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        _sys.stderr.write("FIXTURE client: yielding AsyncClient\n")
+        _sys.stderr.flush()
         yield ac
 
+    _sys.stderr.write("FIXTURE client: cleanup starting\n")
+    _sys.stderr.flush()
     db_module.engine = None
     db_module.async_session_maker = original_maker
     await engine.dispose()
+    _sys.stderr.write("FIXTURE client: done\n")
+    _sys.stderr.flush()
 
 
 @pytest.fixture

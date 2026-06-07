@@ -265,6 +265,56 @@ async def bulk_clear(
     return await result_service.bulk_clear(str(assignment_id), threshold, current_user)
 
 
+@router.post(
+    "/bulk-confirm",
+    response_model=BulkConfirmResponse,
+    summary="Global bulk confirm pairs above threshold",
+    description="Confirm all pairs with similarity above a threshold across all accessible assignments.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": BulkConfirmResponse,
+            "description": "Bulk confirm completed",
+        },
+    },
+)
+async def global_bulk_confirm(
+    threshold: float = Query(..., ge=0.0, le=1.0, description="Similarity threshold (0.0-1.0)"),
+    result_service: ResultService = Depends(get_result_service),
+    assignment_id: uuid.UUID | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+):
+    """Bulk confirm all pairs above threshold across all accessible assignments."""
+    return await result_service.global_bulk_confirm(
+        threshold, current_user, assignment_id=assignment_id
+    )
+
+
+@router.post(
+    "/bulk-clear",
+    response_model=BulkConfirmResponse,
+    summary="Global bulk clear pairs",
+    description="Clear all pairs (set as not plagiarized) above threshold across all accessible assignments.",
+    responses={
+        status.HTTP_200_OK: {
+            "model": BulkConfirmResponse,
+            "description": "Pairs cleared successfully",
+        },
+    },
+)
+async def global_bulk_clear(
+    threshold: float = Query(
+        default=0.0, ge=0.0, le=1.0, description="Similarity threshold (0.0-1.0)"
+    ),
+    result_service: ResultService = Depends(get_result_service),
+    assignment_id: uuid.UUID | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+):
+    """Bulk clear all pairs above threshold across all accessible assignments."""
+    return await result_service.global_bulk_clear(
+        threshold, current_user, assignment_id=assignment_id
+    )
+
+
 @router.get(
     "/assignments/{assignment_id}/review-queue",
     response_model=ReviewQueueResponse,
@@ -289,7 +339,85 @@ async def get_review_queue(
     current_user: User = Depends(get_current_user),
 ):
     """Get smart review queue prioritized by unconfirmed files."""
-    return await result_service.get_review_queue(str(assignment_id), limit, offset)
+    return await result_service.get_review_queue(
+        str(assignment_id), limit, offset, current_user=current_user
+    )
+
+
+@router.get(
+    "/review-queue",
+    response_model=PaginatedResponse,
+    summary="Get global review queue",
+    description=(
+        "Get paginated review queue across all accessible assignments. "
+        "Optionally filter by assignment_id, status, and min_similarity. "
+        "Subject to the caller's subject-access scope."
+    ),
+    responses={
+        status.HTTP_200_OK: {
+            "model": PaginatedResponse,
+            "description": "Review queue retrieved successfully",
+        },
+    },
+)
+async def get_global_review_queue(
+    result_service: ResultService = Depends(get_result_service),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    assignment_id: uuid.UUID | None = Query(default=None),
+    status: str | None = Query(
+        default=None,
+        description="Filter by review status: all, unreviewed, plagiarism, bulk_confirmed, clear",
+    ),
+    min_similarity: float | None = Query(default=None, ge=0.0, le=1.0),
+    search: str | None = Query(default=None, description="Filter by filename (case-insensitive)"),
+    current_user: User = Depends(get_current_user),
+):
+    """Get global review queue across accessible assignments."""
+    return await result_service.get_global_review_queue(
+        current_user=current_user,
+        limit=limit,
+        offset=offset,
+        assignment_id=assignment_id,
+        status=status,
+        min_similarity=min_similarity,
+        search=search,
+    )
+
+
+@router.get(
+    "/review-queue/count",
+    summary="Get count of review-queue pairs matching filters",
+    description=(
+        "Return the total number of pairs matching the given filters. "
+        "Accepts the same filter parameters as /review-queue but returns only the count."
+    ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Count retrieved successfully",
+        },
+    },
+)
+async def get_review_queue_count(
+    result_service: ResultService = Depends(get_result_service),
+    assignment_id: uuid.UUID | None = Query(default=None),
+    status: str | None = Query(
+        default=None,
+        description="Filter by review status: all, unreviewed, plagiarism, bulk_confirmed, clear",
+    ),
+    min_similarity: float | None = Query(default=None, ge=0.0, le=1.0),
+    search: str | None = Query(default=None, description="Filter by filename (case-insensitive)"),
+    current_user: User = Depends(get_current_user),
+):
+    """Get count of review-queue pairs matching the given filters."""
+    count = await result_service.get_review_queue_count(
+        current_user=current_user,
+        assignment_id=assignment_id,
+        status=status,
+        min_similarity=min_similarity,
+        search=search,
+    )
+    return {"count": count}
 
 
 @router.get(
@@ -314,7 +442,33 @@ async def get_review_status(
     current_user: User = Depends(get_current_user),
 ):
     """Get review status summary for an assignment."""
-    return await result_service.get_review_status(str(assignment_id))
+    return await result_service.get_review_status(str(assignment_id), current_user=current_user)
+
+
+@router.get(
+    "/review-status",
+    response_model=ReviewStatusSummary,
+    summary="Get global review status summary",
+    description=(
+        "Get aggregated review status counts across all accessible assignments. "
+        "If assignment_id is provided, scope to that assignment."
+    ),
+    responses={
+        status.HTTP_200_OK: {
+            "model": ReviewStatusSummary,
+            "description": "Review status retrieved",
+        },
+    },
+)
+async def get_global_review_status(
+    result_service: ResultService = Depends(get_result_service),
+    assignment_id: uuid.UUID | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+):
+    """Get aggregated review status counts across accessible assignments."""
+    return await result_service.get_global_review_status(
+        current_user=current_user, assignment_id=assignment_id
+    )
 
 
 @router.get(
@@ -368,7 +522,9 @@ async def export_review(
     current_user: User = Depends(get_current_user),
 ):
     """Export review data as HTML."""
-    return await result_service.export_review_html(str(assignment_id), threshold)
+    return await result_service.export_review_html(
+        str(assignment_id), threshold, current_user=current_user
+    )
 
 
 @router.post(
@@ -435,7 +591,9 @@ async def get_cleared_pairs(
     current_user: User = Depends(get_current_user),
 ):
     """Get cleared pairs for an assignment."""
-    return await result_service.get_cleared_pairs(str(assignment_id), limit, offset)
+    return await result_service.get_cleared_pairs(
+        str(assignment_id), limit, offset, current_user=current_user
+    )
 
 
 @router.get(
@@ -452,7 +610,9 @@ async def get_plagiarism_pairs(
     current_user: User = Depends(get_current_user),
 ):
     """Get plagiarism pairs for an assignment."""
-    return await result_service.get_plagiarism_pairs(str(assignment_id), limit, offset)
+    return await result_service.get_plagiarism_pairs(
+        str(assignment_id), limit, offset, current_user=current_user
+    )
 
 
 @router.get(
@@ -473,17 +633,20 @@ async def get_pairs_by_status(
     current_user: User = Depends(get_current_user),
 ):
     """Get pairs by status for an assignment."""
-    return await result_service.get_pairs_by_status(str(assignment_id), status, limit, offset)
+    return await result_service.get_pairs_by_status(
+        str(assignment_id), status, limit, offset, current_user=current_user
+    )
 
 
 def sanitize_filename(name: str) -> str:
     """Sanitize filename to be safe for all filesystems (FAT, NTFS, etc.)."""
     import re
+
     # Remove or replace characters that are invalid in filenames
     # Invalid: < > : " / \ | ? *
-    sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
+    sanitized = re.sub(r'[<>:"/\\|?*]', "_", name)
     # Remove any control characters
-    sanitized = re.sub(r'[\x00-\x1f\x7f]', '', sanitized)
+    sanitized = re.sub(r"[\x00-\x1f\x7f]", "", sanitized)
     # Limit length to avoid path issues
     if len(sanitized) > 100:
         sanitized = sanitized[:100]
@@ -499,6 +662,7 @@ async def export_single_pdf(
 ):
     """Export a single plagiarism report as PDF."""
     import logging
+
     logger = logging.getLogger(__name__)
 
     import io
@@ -515,12 +679,13 @@ async def export_single_pdf(
         logger.info(f"PDF payload matches count: {len(payload.get('matches', []))}")
 
         from reports.generator import generate_report_pdf
+
         pdf_bytes = await generate_report_pdf(payload)
         logger.info(f"PDF generated: {len(pdf_bytes)} bytes")
 
         # Option 2: result_id + sanitized filenames (unique + human-readable)
-        file_a_name = sanitize_filename(payload['file_a']['filename'])
-        file_b_name = sanitize_filename(payload['file_b']['filename'])
+        file_a_name = sanitize_filename(payload["file_a"]["filename"])
+        file_b_name = sanitize_filename(payload["file_b"]["filename"])
         filename = f"{result_id}_{file_a_name}_vs_{file_b_name}.pdf"
 
         return StreamingResponse(
@@ -569,6 +734,7 @@ async def export_all_pdfs_zip(
     # Filter by task_id if provided
     if task_id:
         from uuid import UUID
+
         try:
             task_uuid = UUID(task_id)
             query = query.where(SimilarityResult.task_id == task_uuid)
@@ -583,7 +749,9 @@ async def export_all_pdfs_zip(
         return StreamingResponse(
             io.BytesIO(b""),
             media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="assignment_{assignment_id}_reports.zip'},
+            headers={
+                "Content-Disposition": f'attachment; filename="assignment_{assignment_id}_reports.zip'
+            },
         )
 
     # Collect payloads and generate PDFs
@@ -604,8 +772,8 @@ async def export_all_pdfs_zip(
             logger.info(f"Payload built for {result.id}")
 
             # Option 2: result.id + sanitized filenames (unique + human-readable)
-            file_a_name = sanitize_filename(payload['file_a']['filename'])
-            file_b_name = sanitize_filename(payload['file_b']['filename'])
+            file_a_name = sanitize_filename(payload["file_a"]["filename"])
+            file_b_name = sanitize_filename(payload["file_b"]["filename"])
             filename = f"{result.id}_{file_a_name}_vs_{file_b_name}.pdf"
 
             # Generate PDF using the appropriate backend
@@ -622,7 +790,7 @@ async def export_all_pdfs_zip(
 
     # Create ZIP
     zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
         for filename, pdf_bytes in pdf_list:
             zip_file.writestr(filename, pdf_bytes)
 

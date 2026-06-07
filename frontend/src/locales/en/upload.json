@@ -21,6 +21,8 @@
   "filesCount": "{{count}} files",
   "addFiles": "Add files",
   "autoDetected": "auto-detected",
+  "uploadName": "Upload name",
+  "uploadNamePlaceholder": "Optional, auto-generated if empty",
   "toasts": {
     "noFilesSelected": "No files selected",
     "success": "Upload successful",

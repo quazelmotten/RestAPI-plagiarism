@@ -55,6 +55,7 @@ class TestMessageHandler:
             [{"file_hash": "h1", "file_path": "/f1.py"}],
             "python",
             assignment_id=None,
+            user_id=None,
         )
 
     def test_passes_assignment_id_through(
@@ -70,7 +71,7 @@ class TestMessageHandler:
         handler.on_message(mock_channel, mock_method, mock_properties, body)
 
         mock_task_service.process_task.assert_called_once_with(
-            "task-abc", [{"file_hash": "h1"}], "python", assignment_id="assn-123"
+            "task-abc", [{"file_hash": "h1"}], "python", assignment_id="assn-123", user_id=None
         )
 
     def test_defaults_language_to_python_when_missing(
@@ -84,7 +85,7 @@ class TestMessageHandler:
         handler.on_message(mock_channel, mock_method, mock_properties, body)
 
         mock_task_service.process_task.assert_called_once_with(
-            "task-abc", [{"file_hash": "h1"}], "python", assignment_id=None
+            "task-abc", [{"file_hash": "h1"}], "python", assignment_id=None, user_id=None
         )
 
     def test_raises_value_error_when_task_id_missing(

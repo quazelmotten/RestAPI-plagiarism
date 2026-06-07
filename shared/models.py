@@ -6,7 +6,9 @@ These models define the schema and are independent of the database engine
 with their respective database connections.
 """
 
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime
+from enum import StrEnum
 
 from sqlalchemy import (
     Boolean,
@@ -19,6 +21,7 @@ from sqlalchemy import (
     MetaData,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -218,6 +221,9 @@ class SubjectAccess(SharedBase):
     """Tracks which users have access to which subjects."""
 
     __tablename__ = "subject_access"
+    __table_args__ = (
+        UniqueConstraint("user_id", "subject_id", name="uq_subject_access_user_subject"),
+    )
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
     user_id: Mapped[str] = mapped_column(UUID(as_uuid=True), nullable=False)
@@ -246,3 +252,91 @@ class FileEvent(SharedBase):
     event_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     event_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserRole(StrEnum):
+    """Roles for users.
+    Currently used: VIEWER, REVIEWER, ADMIN.
+    Hierarchy: VIEWER (1) < REVIEWER (2) < ADMIN (3).
+    """
+
+    VIEWER = "viewer"
+    REVIEWER = "reviewer"
+    ADMIN = "admin"
+
+
+class User(SharedBase):
+    """User model for authentication and authorization.
+
+    Defined in shared models so that the ``users`` table is registered in
+    the shared metadata for both the API and the worker. The worker needs
+    to know about the table to resolve the foreign key on
+    ``file_events.user_id`` when committing new events.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    hashed_password: Mapped[str] = mapped_column(Text, nullable=False)
+    is_global_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    failed_login_attempts: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0,
+        comment="Count of consecutive failed login attempts",
+        server_default="0",
+    )
+    lockout_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="Timestamp until which account is locked"
+    )
+    session_version: Mapped[int] = mapped_column(
+        nullable=False,
+        default=1,
+        comment="Session version for token invalidation",
+        server_default="1",
+    )
+
+    @property
+    def role(self) -> "UserRole":
+        """Return role enum based on is_global_admin flag.
+        Admins map to ADMIN, others default to VIEWER."""
+        if self.is_global_admin:
+            return UserRole.ADMIN
+        return UserRole.VIEWER
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+    )
+    last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationship to API keys (defined below).
+    api_keys: Mapped[list["ApiKey"]] = relationship(
+        "ApiKey", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        return f"<User(id={self.id}, email={self.email}, is_global_admin={self.is_global_admin})>"
+
+
+class ApiKey(SharedBase):
+    """API key model for programmatic access."""
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    key_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationship to User
+    user: Mapped["User"] = relationship("User", back_populates="api_keys")

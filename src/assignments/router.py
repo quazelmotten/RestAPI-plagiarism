@@ -56,6 +56,9 @@ logger = logging.getLogger(__name__)
             "model": AssignmentResponse,
             "description": "Assignment created successfully",
         },
+        status.HTTP_409_CONFLICT: {
+            "description": "An assignment with the same name already exists",
+        },
     },
 )
 async def create_assignment(
@@ -289,11 +292,11 @@ async def update_assignment(
 
 @router.delete(
     "/{assignment_id}",
-    status_code=status.HTTP_200_OK,
+    status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an assignment",
     description="Delete an assignment. Use cascade=true to also delete all associated tasks, files, and results.",
     responses={
-        status.HTTP_200_OK: {
+        status.HTTP_204_NO_CONTENT: {
             "description": "Assignment deleted successfully",
         },
         status.HTTP_404_NOT_FOUND: {
@@ -309,8 +312,7 @@ async def delete_assignment(
     current_user: User = Depends(require_subject_access),
 ):
     """Delete an assignment. Requires subject access."""
-    result = await assignment_service.delete_assignment(assignment.id, cascade=cascade)
-    return result
+    await assignment_service.delete_assignment(assignment.id, cascade=cascade)
 
 
 @router.post(

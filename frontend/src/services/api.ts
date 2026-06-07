@@ -2,6 +2,13 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import API_ENDPOINTS from '../constants/api';
 import { getSubpath, getBasePath } from '../utils/subpath';
 
+// Extend AxiosError interface to include validationError
+declare module 'axios' {
+  interface AxiosError {
+    validationError?: any;
+  }
+}
+
 const API_URL = import.meta.env.VITE_API_URL || (() => {
   const subpath = getSubpath();
   return subpath ? `/${subpath}` : '';
@@ -50,6 +57,8 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as any;
+    
+    // Handle 401 authentication errors
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
@@ -59,17 +68,31 @@ api.interceptors.response.use(
         }
         // Retry original request with new token
         return api(originalRequest);
-} catch (_unused) {
+      } catch (_unused) {
         // Refresh failed – clear tokens and redirect
         removeToken();
         window.location.href = `${getBasePath()}/login`;
         return Promise.reject(error);
       }
     }
+    
+    // Handle 401 authentication errors (non-retryable)
     if (error.response?.status === 401) {
       removeToken();
       window.location.href = `${getBasePath()}/login`;
     }
+    
+    // Handle 422 validation errors
+    if (error.response?.status === 422) {
+      const errorData = error.response.data;
+      // You can customize this based on how you want to show validation errors
+      console.error('Validation Error:', errorData);
+      
+      // If this is being used in a component with access to toast, you might want to handle it there
+      // For now, we'll add the error details to the error object for component-level handling
+      error.validationError = errorData;
+    }
+    
     return Promise.reject(error);
   }
 );

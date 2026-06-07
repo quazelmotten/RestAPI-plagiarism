@@ -62,7 +62,8 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
 
   // Bulk action state
   const [bulkThreshold, setBulkThreshold] = useState('0.8');
-  const [bulkClearThreshold, setBulkClearThreshold] = useState('0');
+  const [bulkClearThreshold, setBulkClearThreshold] = useState('0.3');
+  const [isBulkConfirming, setIsBulkConfirming] = useState(false);
 
   // Dialogs
   const { isOpen: isBulkOpen, onOpen: onBulkOpen, onClose: onBulkClose } = useDisclosure();
@@ -208,18 +209,23 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
       return;
     }
 
+    setIsBulkConfirming(true);
     try {
       const response = await api.post<BulkConfirmResponse>(
         API_ENDPOINTS.BULK_CONFIRM(assignmentId),
         null,
         { params: { threshold } }
       );
-      toast({ title: t('common:toasts.bulkConfirmComplete'), description: t('common:toasts.pairsConfirmed', { count: response.data.confirmed_pairs }), status: 'success', duration: 5000 });
+      const count = response.data.confirmed_pairs;
+      toast({ title: t('common:toasts.bulkConfirmComplete'), description: t('common:toasts.pairsConfirmed', { count }), status: 'success', duration: 5000 });
       onBulkClose();
       refetchStatus();
       refetchPairs();
+      if (activeTab === 0) { fetchQueue(); }
     } catch (error) {
       toast({ title: t('common:toasts.failedToBulkConfirm'), status: 'error', duration: 3000 });
+    } finally {
+      setIsBulkConfirming(false);
     }
   };
 
@@ -232,7 +238,8 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({ assignmentId, onReview
 
     try {
       const response = await bulkClearMutation.mutateAsync({ assignmentId, threshold });
-      toast({ title: t('common:toasts.bulkClearComplete'), description: t('common:toasts.pairsCleared', { count: response.confirmed_pairs }), status: 'success', duration: 5000 });
+      const count = response.confirmed_pairs;
+      toast({ title: t('common:toasts.bulkClearComplete'), description: t('common:toasts.pairsCleared', { count }), status: 'success', duration: 5000 });
       onBulkClearClose();
       refetchStatus();
       if (activeTab === 0) {
@@ -494,7 +501,7 @@ const handleExport = async () => {
             </AlertDialogBody>
             <AlertDialogFooter>
               <Button ref={cancelRef} onClick={onBulkClose}>{t('common:cancel')}</Button>
-              <Button colorScheme="orange" onClick={handleBulkConfirm} ml={3}>{t('review:confirmAll')}</Button>
+              <Button colorScheme="orange" onClick={handleBulkConfirm} isLoading={isBulkConfirming} loadingText="Confirming..." ml={3}>{t('review:confirmAll')}</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>
@@ -520,12 +527,14 @@ const handleExport = async () => {
                     </Text>
                   </InputRightElement>
                 </InputGroup>
-                <Text fontSize="xs" color="green.600">{t('review:bulkClearNote')}</Text>
+                <Text fontSize="xs" color="gray.500">
+                  Clears all unreviewed pairs with similarity ≤ threshold. Lower threshold = fewer pairs cleared.
+                </Text>
               </VStack>
             </AlertDialogBody>
             <AlertDialogFooter>
               <Button ref={cancelRef} onClick={onBulkClearClose}>{t('common:cancel')}</Button>
-              <Button colorScheme="green" onClick={handleBulkClear} isLoading={bulkClearMutation.isPending} ml={3}>{t('review:clearAll')}</Button>
+              <Button colorScheme="green" onClick={handleBulkClear} isLoading={bulkClearMutation.isPending} loadingText="Clearing..." ml={3}>{t('review:clearAll')}</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>

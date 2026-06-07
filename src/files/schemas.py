@@ -20,7 +20,7 @@ class FileResponse(CustomBaseModel):
     assignment_name: str | None = None
     subject_id: str | None = None
     subject_name: str | None = None
-    is_confirmed: bool = False
+    is_confirmed: bool | None = False
 
 
 class FileContentResponse(CustomBaseModel):

@@ -101,6 +101,7 @@ class TestResultService:
             matches={"total_pairs": total_pairs, "processed_pairs": processed_count},
             total_pairs=total_pairs,
             processed_pairs=processed_count,
+            user_id=None,
         )
 
     def test_mark_failed_updates_with_error(self, service, mock_repo):
@@ -109,5 +110,5 @@ class TestResultService:
         error_msg = "Something went wrong"
         service.mark_failed(task_id, error_msg)
         mock_repo.update_task.assert_called_once_with(
-            task_id=task_id, status="failed", error=error_msg[:1000]
+            task_id=task_id, status="failed", error=error_msg[:1000], user_id=None
         )

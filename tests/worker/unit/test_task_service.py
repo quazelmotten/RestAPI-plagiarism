@@ -88,7 +88,9 @@ class TestTaskService:
         )
 
         # 4. Completion
-        mock_services["result_service"].finalize_task.assert_called_once_with(task_id, 2, 2)
+        mock_services["result_service"].finalize_task.assert_called_once_with(
+            task_id, 2, 2, user_id=None
+        )
 
         assert "COMPLETED successfully" in caplog.text
 
@@ -121,7 +123,9 @@ class TestTaskService:
         service.process_task(task_id, files, "python")
 
         mock_services["result_service"].store_similarity_scores.assert_not_called()
-        mock_services["result_service"].finalize_task.assert_called_once_with(task_id, 0, 0)
+        mock_services["result_service"].finalize_task.assert_called_once_with(
+            task_id, 0, 0, user_id=None
+        )
         assert "Phase 2a COMPLETE: found 0 intra pairs" in caplog.text
 
     def test_process_task_handles_failure_marks_failed(self, service, mock_services, caplog):
@@ -155,7 +159,9 @@ class TestTaskService:
 
         service.process_task(task_id, files, "python")
 
-        mock_services["result_service"].finalize_task.assert_called_once_with(task_id, 84, 84)
+        mock_services["result_service"].finalize_task.assert_called_once_with(
+            task_id, 84, 84, user_id=None
+        )
 
     def test_process_task_passes_language_throughout(self, service, mock_services):
         """Test language parameter is propagated correctly."""

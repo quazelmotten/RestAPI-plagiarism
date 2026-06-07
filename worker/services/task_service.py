@@ -58,6 +58,7 @@ class TaskService:
         files: list[dict[str, Any]],
         language: str,
         assignment_id: str | None = None,
+        user_id: str | None = None,
     ) -> None:
         """
         Process a plagiarism detection task.
@@ -67,6 +68,7 @@ class TaskService:
             files: List of file info dicts with 'hash'/'file_hash' and 'path'/'file_path'
             language: Programming language (e.g., 'python', 'cpp')
             assignment_id: Optional assignment UUID to scope analysis
+            user_id: Optional user UUID of the user who submitted the task (used for event attribution)
         """
         total_files = len(files)
         scope_label = f"assignment={assignment_id}" if assignment_id else "full DB"
@@ -188,7 +190,7 @@ class TaskService:
             )
 
             if total_pairs == 0:
-                self.result_svc.finalize_task(task_id, 0, 0)
+                self.result_svc.finalize_task(task_id, 0, 0, user_id=user_id)
                 return
 
             # Phase 2.5: Compute AST Jaccard similarity using cached hashes
@@ -227,7 +229,7 @@ class TaskService:
             )
 
             # Phase 4: Complete
-            self.result_svc.finalize_task(task_id, total_pairs, total_pairs)
+            self.result_svc.finalize_task(task_id, total_pairs, total_pairs, user_id=user_id)
 
             total_elapsed = time.perf_counter() - task_start
             overall_speed = total_pairs / total_elapsed if total_elapsed > 0 else 0
@@ -238,5 +240,5 @@ class TaskService:
 
         except Exception as e:
             logger.exception(f"[Task {task_id}] FAILED")
-            self.result_svc.mark_failed(task_id, str(e))
+            self.result_svc.mark_failed(task_id, str(e), user_id=user_id)
             raise

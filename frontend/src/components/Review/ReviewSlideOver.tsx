@@ -3,7 +3,6 @@ import {
   Box,
   Flex,
   HStack,
-  VStack,
   Text,
   IconButton,
   Tooltip,
@@ -107,6 +106,7 @@ interface ReviewSlideOverProps {
   pairs: ReviewPair[];
   initialIndex?: number;
   onActionComplete?: (action: 'confirm' | 'clear', pairId: string) => void;
+  onNavigate?: (direction: 'next' | 'prev') => void;
 }
 
 const getSimilarityColor = (sim: number): string => {
@@ -122,6 +122,7 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
   pairs,
   initialIndex = 0,
   onActionComplete,
+  onNavigate,
 }) => {
   const { t } = useTranslation(['pairComparison', 'common']);
   const toast = useToast();
@@ -162,8 +163,8 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
       const idx = Math.min(initialIndex, pairs.length - 1);
       setCurrentIndex(idx);
       const pair = pairs[idx];
-      setSelectedFileA({ id: pair.file_a_id, filename: pair.file_a_name, language: '', task_id: pair.task_id, status: '' });
-      setSelectedFileB({ id: pair.file_b_id, filename: pair.file_b_name, language: '', task_id: pair.task_id, status: '' });
+      setSelectedFileA({ id: pair.file_a_id, filename: pair.file_a_name, language: '', task_id: pair.task_id, status: '', similarity: undefined });
+      setSelectedFileB({ id: pair.file_b_id, filename: pair.file_b_name, language: '', task_id: pair.task_id, status: '', similarity: undefined });
       setCurrentPair(null);
       setFileAContent(null);
       setFileBContent(null);
@@ -446,8 +447,8 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
     if (idx < 0 || idx >= pairs.length) return;
     const pair = pairs[idx];
     setCurrentIndex(idx);
-    setSelectedFileA({ id: pair.file_a_id, filename: pair.file_a_name, language: '', task_id: pair.task_id, status: '' });
-    setSelectedFileB({ id: pair.file_b_id, filename: pair.file_b_name, language: '', task_id: pair.task_id, status: '' });
+    setSelectedFileA({ id: pair.file_a_id, filename: pair.file_a_name, language: '', task_id: pair.task_id, status: '', similarity: undefined });
+    setSelectedFileB({ id: pair.file_b_id, filename: pair.file_b_name, language: '', task_id: pair.task_id, status: '', similarity: undefined });
     setHoveredMatchIndex(null);
     setCurrentPair(null);
     setFileAContent(null);
@@ -459,18 +460,22 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
   const handleNextPair = useCallback(() => {
     if (pairs.length > 0 && currentIndex < pairs.length - 1) {
       navigateToIndex(currentIndex + 1);
+    } else if (onNavigate) {
+      onNavigate('next');
     } else if (pairs.length > 0) {
       navigateToIndex(0);
     }
-  }, [pairs, currentIndex, navigateToIndex]);
+  }, [pairs, currentIndex, navigateToIndex, onNavigate]);
 
   const handlePrevPair = useCallback(() => {
     if (pairs.length > 0 && currentIndex > 0) {
       navigateToIndex(currentIndex - 1);
+    } else if (onNavigate) {
+      onNavigate('prev');
     } else if (pairs.length > 0) {
       navigateToIndex(pairs.length - 1);
     }
-  }, [pairs, currentIndex, navigateToIndex]);
+  }, [pairs, currentIndex, navigateToIndex, onNavigate]);
 
   const handleConfirmPlagiarism = async () => {
     const resultId = resultIdRef.current;
@@ -585,7 +590,6 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
                     size="sm"
                     variant="ghost"
                     onClick={handlePrevPair}
-                    isDisabled={currentIndex === 0 && pairs.length <= 1}
                   />
                   <Text fontSize="xs" color={mutedColor} minW="40px" textAlign="center">
                     {currentIndex + 1}/{pairs.length}
@@ -596,7 +600,6 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
                     size="sm"
                     variant="ghost"
                     onClick={handleNextPair}
-                    isDisabled={currentIndex === pairs.length - 1 && pairs.length <= 1}
                   />
                 </>
               )}

@@ -2,8 +2,10 @@
 Tasks domain service - business logic for task management.
 """
 
+import hashlib
 import logging
 import uuid
+from datetime import UTC, datetime
 
 from shared.models import File as FileModel
 from shared.models import PlagiarismTask
@@ -18,6 +20,19 @@ from tasks.schemas import TaskCreateResponse, TaskResponse
 logger = logging.getLogger(__name__)
 
 
+def _compute_sha256(data) -> str:
+    """Compute SHA-256 hex digest of a file-like object or bytes, then rewind."""
+    if hasattr(data, "read"):
+        content = data.read()
+        try:
+            data.seek(0)
+        except Exception:
+            pass
+    else:
+        content = data
+    return hashlib.sha256(content).hexdigest()
+
+
 class TaskService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -29,11 +44,17 @@ class TaskService:
         s3_storage,
         publish_message,
         assignment_id: str | None = None,
+        name: str | None = None,
+        user_id: str | None = None,
     ) -> TaskCreateResponse:
         task_id_str = str(uuid.uuid4())
 
+        if not name or not name.strip():
+            name = f"Upload {datetime.now(UTC).strftime('%Y-%m-%d %H:%M')}"
+
         task = PlagiarismTask(
             id=task_id_str,
+            name=name,
             status="queued",
             similarity=None,
             matches=None,
@@ -49,10 +70,12 @@ class TaskService:
                 continue
 
             upload_file.file.seek(0)
+            file_hash = _compute_sha256(upload_file.file)
 
             s3_result = await s3_storage.upload_file_async(
                 bucket_name=BUCKET_NAME, file_data=upload_file.file, filename=upload_file.filename
             )
+            final_hash = s3_result.get("hash") or file_hash
 
             file_id_str = str(uuid.uuid4())
 
@@ -61,7 +84,7 @@ class TaskService:
                 task_id=task_id_str,
                 filename=upload_file.filename,
                 file_path=s3_result["path"],
-                file_hash=s3_result["hash"],
+                file_hash=final_hash,
                 language=language,
             )
             self.db.add(file_record)
@@ -71,7 +94,7 @@ class TaskService:
                 FileUploadInfo(
                     id=file_id_str,
                     path=s3_result["path"],
-                    hash=s3_result["hash"],
+                    hash=final_hash,
                     filename=upload_file.filename,
                 )
             )
@@ -85,13 +108,15 @@ class TaskService:
         }
         if assignment_id:
             message["assignment_id"] = assignment_id
+        if user_id:
+            message["user_id"] = user_id
 
         await publish_message(
             queue="plagiarism_queue",
             message=message,
         )
 
-        return TaskCreateResponse(task_id=task_id_str, status="queued", files_count=len(file_paths))
+        return TaskCreateResponse(task_id=task_id_str, name=name, status="queued", files_count=len(file_paths))
 
     async def get_task(self, task_id: str) -> TaskResponse | None:
         return await self.repo.get_task(task_id)
@@ -155,7 +180,7 @@ class TaskService:
         if redis_client and file_hashes:
             try:
                 from worker.infrastructure.inverted_index import RedisInvertedIndex
-                from config import settings
+
 
                 sync_redis = redis_client.get_sync_client()
                 index = RedisInvertedIndex(sync_redis)

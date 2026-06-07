@@ -710,6 +710,15 @@ class AssignmentRepository:
 
         return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
 
+    async def get_assignment_by_name(self, name: str) -> Assignment | None:
+        """Get a non-deleted assignment by name. Returns None if not found."""
+        result = await self.db.execute(
+            select(Assignment).where(
+                Assignment.name == name, Assignment.deleted_at.is_(None)
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def create_assignment(
         self, assignment_id: str, name: str, description: str | None, subject_id: str | None = None
     ) -> AssignmentResponse:

@@ -119,7 +119,7 @@ class _SyncRepo:
         )
         self._s.commit()
 
-    def finalize_task(self, task_id, total_pairs, processed_count):
+    def finalize_task(self, task_id, total_pairs, processed_count, user_id=None):
         max_row = self._s.execute(
             _text("SELECT MAX(sr.ast_similarity) AS max_sim "
                   "FROM similarity_results sr WHERE sr.task_id = :tid"),
@@ -129,11 +129,11 @@ class _SyncRepo:
         self.update_task(
             task_id, status="completed", similarity=max_sim,
             matches={"total_pairs": total_pairs, "processed_pairs": processed_count},
-            total_pairs=total_pairs, processed_pairs=processed_count,
+            total_pairs=total_pairs, processed_pairs=processed_count, user_id=user_id,
         )
 
-    def mark_failed(self, task_id, error):
-        self.update_task(task_id, status="failed", error=error[:1000])
+    def mark_failed(self, task_id, error, user_id=None):
+        self.update_task(task_id, status="failed", error=error[:1000], user_id=user_id)
 
     def delete_task_results(self, task_id):
         self._s.execute(

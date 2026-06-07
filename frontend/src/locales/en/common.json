@@ -135,7 +135,8 @@
     "failedToLoad": "Failed to load file contents",
     "failedToLoadComparison": "Failed to load comparison",
     "pairIdMissing": "Pair ID is missing",
-    "assignmentNotFound": "Assignment not found"
+    "assignmentNotFound": "Assignment not found",
+    "assignmentNameExists": "An assignment with this name already exists"
   },
   "keyboardShortcuts": {
     "nextPair": "Next pair",
