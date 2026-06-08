@@ -589,7 +589,7 @@ const AssignmentDetail: React.FC = () => {
                     </Td>
                     <Td>
                       <IconButton
-                        aria-label="Delete task"
+                        aria-label={t('assignments:deleteTask')}
                         icon={<FiTrash2 />}
                         size="xs"
                         variant="ghost"

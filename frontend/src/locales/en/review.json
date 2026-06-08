@@ -81,5 +81,12 @@
   "pairsToReview": "{{count}} pairs to review",
   "startReview": "Start Review",
   "allAssignments": "All Assignments",
-  "noAssignments": "No assignments found"
+  "noAssignments": "No assignments found",
+  "searchPlaceholder": "Search files...",
+  "similarityPlaceholder": "Similarity: <0.5",
+  "selected": "{{count}} selected",
+  "selectAll": "Select All",
+  "confirming": "Confirming...",
+  "clearing": "Clearing...",
+  "clearsDescription": "Clears all unreviewed pairs with similarity ≤ threshold. Lower threshold = fewer pairs cleared."
 }

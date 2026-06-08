@@ -124,7 +124,7 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
   onActionComplete,
   onNavigate,
 }) => {
-  const { t } = useTranslation(['pairComparison', 'common']);
+  const { t } = useTranslation(['pairComparison', 'common', 'review']);
   const toast = useToast();
 
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
@@ -585,7 +585,7 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
               {pairs.length > 1 && (
                 <>
                   <IconButton
-                    aria-label="Previous pair"
+                    aria-label={t('common:aria.previousPair')}
                     icon={<FiChevronLeft />}
                     size="sm"
                     variant="ghost"
@@ -595,7 +595,7 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
                     {currentIndex + 1}/{pairs.length}
                   </Text>
                   <IconButton
-                    aria-label="Next pair"
+                    aria-label={t('common:aria.nextPair')}
                     icon={<FiChevronRight />}
                     size="sm"
                     variant="ghost"
@@ -610,9 +610,9 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
         <DrawerBody p={0} display="flex" flexDirection="column" overflow="hidden">
           {/* Toolbar */}
           <Flex borderBottomWidth="1px" borderColor={borderColor} px={3} py={2} gap={2} flexShrink={0}>
-            <Tooltip label={filterComments ? 'Show comments' : 'Hide comments'} placement="bottom">
+            <Tooltip label={filterComments ? t('pairComparison:tooltip.showComments') : t('pairComparison:tooltip.hideComments')} placement="bottom">
               <IconButton
-                aria-label="Toggle comments"
+                aria-label={t('common:aria.toggleComments')}
                 icon={filterComments ? <FiEye /> : <FiEyeOff />}
                 size="sm"
                 variant={filterComments ? 'solid' : 'ghost'}
@@ -620,9 +620,9 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
                 onClick={() => setFilterComments(!filterComments)}
               />
             </Tooltip>
-            <Tooltip label={filterEmpty ? 'Show empty lines' : 'Hide empty lines'} placement="bottom">
+            <Tooltip label={filterEmpty ? t('pairComparison:tooltip.showEmptyLines') : t('pairComparison:tooltip.hideEmptyLines')} placement="bottom">
               <IconButton
-                aria-label="Toggle empty lines"
+                aria-label={t('common:aria.toggleEmptyLines')}
                 icon={filterEmpty ? <FiEye /> : <FiFilter />}
                 size="sm"
                 variant={filterEmpty ? 'solid' : 'ghost'}
@@ -630,9 +630,9 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
                 onClick={() => setFilterEmpty(!filterEmpty)}
               />
             </Tooltip>
-            <Tooltip label={syntaxHighlight ? 'Disable syntax highlight' : 'Enable syntax highlight'} placement="bottom">
+            <Tooltip label={syntaxHighlight ? t('pairComparison:tooltip.enableSyntaxHighlight') : t('pairComparison:tooltip.disableSyntaxHighlight')} placement="bottom">
               <IconButton
-                aria-label="Toggle syntax highlight"
+                aria-label={t('common:aria.toggleSyntaxHighlight')}
                 icon={<FiCode />}
                 size="sm"
                 variant={syntaxHighlight ? 'solid' : 'ghost'}
@@ -640,9 +640,9 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
                 onClick={() => setSyntaxHighlight(!syntaxHighlight)}
               />
             </Tooltip>
-            <Tooltip label={syncScroll ? 'Unlock scroll sync' : 'Lock scroll sync'} placement="bottom">
+            <Tooltip label={syncScroll ? t('pairComparison:tooltip.unlockScrollSync') : t('pairComparison:tooltip.lockScrollSync')} placement="bottom">
               <IconButton
-                aria-label="Toggle scroll sync"
+                aria-label={t('common:aria.toggleScrollSync')}
                 icon={syncScroll ? <FiLink /> : <FiLink2 />}
                 size="sm"
                 variant={syncScroll ? 'solid' : 'ghost'}
@@ -654,7 +654,7 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
             <Box flex={1} />
 
             <Text fontSize="xs" color={mutedColor} alignSelf="center">
-              {matchStats.totalMatches} matches · {matchStats.coverageA.toFixed(0)}%A · {matchStats.coverageB.toFixed(0)}%B
+              {t('pairComparison:stats.totalMatches')}: {matchStats.totalMatches} · {t('pairComparison:stats.coverageA')}: {matchStats.coverageA.toFixed(0)}% · {t('pairComparison:stats.coverageB')}: {matchStats.coverageB.toFixed(0)}%
             </Text>
           </Flex>
 
@@ -668,7 +668,7 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
           {loadingContent ? (
             <Flex flex={1} align="center" justify="center" py={8}>
               <Spinner size="lg" />
-              <Text ml={3} color={mutedColor}>Loading...</Text>
+              <Text ml={3} color={mutedColor}>{t('common:loading')}</Text>
             </Flex>
           ) : (
             <Flex flex={1} gap={0} align="stretch" minH={0} overflow="hidden">
@@ -692,7 +692,7 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
               <Flex flex={1} gap={4} align="stretch" py={4} px={2} minH={0} overflow="hidden">
                 <FileViewer
                   content={fileAContent?.content || ''}
-                  fileName={fileAContent?.filename || 'File A'}
+                  fileName={fileAContent?.filename || t('pairComparison:filePicker.fileA')}
                   language={fileAContent?.language || 'unknown'}
                   matches={currentPair?.matches || []}
                   isFileA={true}
@@ -707,7 +707,7 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
                 />
                 <FileViewer
                   content={fileBContent?.content || ''}
-                  fileName={fileBContent?.filename || 'File B'}
+                  fileName={fileBContent?.filename || t('pairComparison:filePicker.fileB')}
                   language={fileBContent?.language || 'unknown'}
                   matches={currentPair?.matches || []}
                   isFileA={false}
@@ -750,7 +750,7 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
             onClick={handleConfirmPlagiarism}
             isLoading={confirming}
           >
-            Confirm (Y)
+            {t('review:confirm')} (Y)
           </Button>
           <Button
             flex={1}
@@ -759,7 +759,7 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
             onClick={handleClearPair}
             isLoading={clearing}
           >
-            Clear (N)
+            {t('review:clear')} (N)
           </Button>
         </DrawerFooter>
       </DrawerContent>

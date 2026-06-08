@@ -1,0 +1,29 @@
+{
+  "eventTypes": {
+    "allTypes": "Все типы",
+    "upload_queued": "Загрузка поставлена в очередь",
+    "upload_completed": "Загрузка завершена",
+    "upload_failed": "Загрузка не удалась",
+    "file_uploaded": "Файл загружен",
+    "file_deleted": "Файл удалён",
+    "file_moved": "Файл перемещён",
+    "file_transferred": "Файл передан",
+    "reanalysis_triggered": "Запущен повторный анализ"
+  },
+  "filterPlaceholder": "Фильтр по эл. почте пользователя",
+  "fromDate": "С даты",
+  "toDate": "По дату",
+  "clearFilters": "Очистить фильтры",
+  "noEventsFound": "События не найдены",
+  "columns": {
+    "event": "Событие",
+    "upload": "Загрузка",
+    "assignment": "Задание",
+    "user": "Пользователь",
+    "files": "Файлы",
+    "timestamp": "Время"
+  },
+  "showing": "Показано {{start}}–{{end}} из {{total}}",
+  "goTo": "Перейти к:",
+  "ofPages": "/ {{total}}"
+}

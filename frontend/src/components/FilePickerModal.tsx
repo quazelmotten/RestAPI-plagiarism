@@ -100,7 +100,7 @@ const FileItem: React.FC<FileItemProps> = ({ file, isSelectedA, isSelectedB, onS
               {file.language || t('common:unknown')}
             </Badge>
             <Text fontSize="xs" color="gray.500" isTruncated>
-              task: {file.task_id.substring(0, 8)}...
+              {t('pairComparison:filePicker.taskId')}{file.task_id.substring(0, 8)}...
             </Text>
           </HStack>
         </Box>

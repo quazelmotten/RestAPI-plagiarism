@@ -49,7 +49,7 @@ import type { UploadFile } from '../../types';
 const UploadDetail: React.FC = () => {
   const { uploadId } = useParams<{ uploadId: string }>();
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t } = useTranslation(['common', 'upload', 'status']);
   const toast = useToast();
   const queryClient = useQueryClient();
   const [tabIndex, setTabIndex] = useState(0);
@@ -67,10 +67,10 @@ const UploadDetail: React.FC = () => {
     if (!uploadId) return;
     try {
       await deleteUpload.mutateAsync(uploadId);
-      toast({ title: 'Upload deleted', status: 'success', duration: 2000 });
+      toast({ title: t('upload:uploadDeleted'), status: 'success', duration: 2000 });
       navigate('/dashboard/uploads');
     } catch {
-      toast({ title: 'Failed to delete upload', status: 'error', duration: 3000 });
+      toast({ title: t('upload:failedToDelete'), status: 'error', duration: 3000 });
     }
     setDeleteConfirmOpen(false);
   };
@@ -79,9 +79,9 @@ const UploadDetail: React.FC = () => {
     if (!uploadId) return;
     try {
       await reanalyzeUpload.mutateAsync({ taskId: uploadId });
-      toast({ title: 'Reanalysis started', status: 'info', duration: 2000 });
+      toast({ title: t('upload:reanalysisStarted'), status: 'info', duration: 2000 });
     } catch {
-      toast({ title: 'Failed to reanalyze', status: 'error', duration: 3000 });
+      toast({ title: t('upload:failedToReanalyze'), status: 'error', duration: 3000 });
     }
   };
 
@@ -89,9 +89,9 @@ const UploadDetail: React.FC = () => {
     if (!uploadId) return;
     try {
       await deleteFile.mutateAsync({ taskId: uploadId, fileId });
-      toast({ title: 'File deleted', status: 'success', duration: 2000 });
+      toast({ title: t('upload:fileDeleted'), status: 'success', duration: 2000 });
     } catch {
-      toast({ title: 'Failed to delete file', status: 'error', duration: 3000 });
+      toast({ title: t('upload:failedToDeleteFile'), status: 'error', duration: 3000 });
     }
   };
 
@@ -112,8 +112,8 @@ const UploadDetail: React.FC = () => {
   if (!upload) {
     return (
       <Flex justify="center" py={8} flexDirection="column" align="center">
-        <Text fontSize="lg" color="gray.500">Upload not found</Text>
-        <Button mt={4} onClick={() => navigate('/dashboard/uploads')}>Back to Uploads</Button>
+        <Text fontSize="lg" color="gray.500">{t('upload:notFound')}</Text>
+        <Button mt={4} onClick={() => navigate('/dashboard/uploads')}>{t('upload:backToUploads')}</Button>
       </Flex>
     );
   }
@@ -122,15 +122,15 @@ const UploadDetail: React.FC = () => {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'completed': return <Badge colorScheme="green">Completed</Badge>;
-      case 'queued': return <Badge colorScheme="yellow">Queued</Badge>;
+      case 'completed': return <Badge colorScheme="green">{t('status:completed')}</Badge>;
+      case 'queued': return <Badge colorScheme="yellow">{t('status:queued')}</Badge>;
       case 'processing':
       case 'indexing':
       case 'finding_intra_pairs':
       case 'finding_cross_pairs':
-      case 'storing_results': return <Badge colorScheme="blue">Processing</Badge>;
+      case 'storing_results': return <Badge colorScheme="blue">{t('status:processing')}</Badge>;
       case 'failed':
-      case 'error': return <Badge colorScheme="red">Error</Badge>;
+      case 'error': return <Badge colorScheme="red">{t('status:error')}</Badge>;
       default: return <Badge colorScheme="gray">{status}</Badge>;
     }
   };
@@ -146,35 +146,35 @@ const UploadDetail: React.FC = () => {
         <HStack>
           <IconButton
             icon={<FiArrowLeft />}
-            aria-label="Back"
+            aria-label={t('back')}
             size="sm"
             variant="ghost"
             onClick={() => navigate('/dashboard/uploads')}
           />
           <Text fontSize="2xl" fontWeight="bold" noOfLines={1}>
-            {upload.name || `Upload ${upload.task_id.substring(0, 8)}`}
+            {upload.name || `${t('upload:uploadName')} ${upload.task_id.substring(0, 8)}`}
           </Text>
           {getStatusBadge(upload.status)}
         </HStack>
         <HStack>
           {upload.status === 'completed' && (
             <Button size="sm" leftIcon={<FiRefreshCw />} onClick={handleReanalyze}>
-              Reanalyze
+              {t('upload:reanalyze')}
             </Button>
           )}
           <Button size="sm" colorScheme="red" leftIcon={<FiTrash2 />} onClick={() => setDeleteConfirmOpen(true)}>
-            Delete
+            {t('delete')}
           </Button>
         </HStack>
       </Flex>
 
       {/* Stats row */}
       <HStack spacing={{ base: 2, md: 6 }} fontSize="sm" color="gray.500" wrap="wrap">
-        <Text><strong>{files?.length || 0}</strong> files</Text>
+        <Text><strong>{files?.length || 0}</strong> {t('files')}</Text>
         {upload.language && <Text><strong>{upload.language}</strong></Text>}
-        {upload.total_pairs > 0 && <Text><strong>{upload.total_pairs}</strong> pairs</Text>}
+        {upload.total_pairs > 0 && <Text><strong>{upload.total_pairs}</strong> {t('pairs')}</Text>}
         {upload.high_similarity_count > 0 && (
-          <Text color="red.500"><strong>{upload.high_similarity_count}</strong> high similarity</Text>
+          <Text color="red.500"><strong>{upload.high_similarity_count}</strong> {t('upload:highSimilarity')}</Text>
         )}
         {upload.assignment_name && (
           <HStack>
@@ -192,9 +192,9 @@ const UploadDetail: React.FC = () => {
       {/* Tabs */}
       <Tabs index={tabIndex} onChange={setTabIndex} flex={1} overflow="hidden" display="flex" flexDirection="column">
         <TabList>
-          <Tab>Results</Tab>
-          <Tab>Files</Tab>
-          <Tab>Settings</Tab>
+          <Tab>{t('upload:tabs.results')}</Tab>
+          <Tab>{t('upload:tabs.files')}</Tab>
+          <Tab>{t('upload:tabs.settings')}</Tab>
         </TabList>
 
         <TabPanels flex={1} overflow="hidden">
@@ -214,7 +214,7 @@ const UploadDetail: React.FC = () => {
             )}
             {upload.status === 'completed' && (!taskDetails || !taskDetails.results) && (
               <Flex justify="center" py={8}>
-                <Text color="gray.500">No results available</Text>
+                <Text color="gray.500">{t('upload:noResults')}</Text>
               </Flex>
             )}
           </TabPanel>
@@ -239,14 +239,14 @@ const UploadDetail: React.FC = () => {
       >
         <AlertDialogOverlay>
           <AlertDialogContent>
-            <AlertDialogHeader>Delete Upload</AlertDialogHeader>
+            <AlertDialogHeader>{t('upload:deleteTitle')}</AlertDialogHeader>
             <AlertDialogBody>
-              This will permanently delete {files?.length || 0} files and all similarity results. This cannot be undone.
+              {t('upload:deleteDescription', { count: files?.length || 0 })}
             </AlertDialogBody>
             <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+              <Button ref={cancelRef} onClick={() => setDeleteConfirmOpen(false)}>{t('cancel')}</Button>
               <Button colorScheme="red" onClick={handleDelete} ml={3} isLoading={deleteUpload.isPending}>
-                Delete
+                {t('delete')}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -257,6 +257,7 @@ const UploadDetail: React.FC = () => {
 };
 
 const FilesTable: React.FC<{ files: UploadFile[]; onDelete: (fileId: string) => void }> = ({ files, onDelete }) => {
+  const { t } = useTranslation(['common', 'upload']);
   const bg = useColorModeValue('white', 'gray.700');
 
   return (
@@ -265,10 +266,10 @@ const FilesTable: React.FC<{ files: UploadFile[]; onDelete: (fileId: string) => 
         <Table size="sm" minW="500px">
           <Thead>
             <Tr>
-              <Th>Filename</Th>
-              <Th>Language</Th>
-              <Th>Max Similarity</Th>
-              <Th>Actions</Th>
+              <Th>{t('upload:filesTable.filename')}</Th>
+              <Th>{t('upload:filesTable.language')}</Th>
+              <Th>{t('upload:filesTable.maxSimilarity')}</Th>
+              <Th>{t('upload:filesTable.actions')}</Th>
             </Tr>
           </Thead>
           <Tbody>
@@ -284,7 +285,7 @@ const FilesTable: React.FC<{ files: UploadFile[]; onDelete: (fileId: string) => 
                   ) : '—'}
                 </Td>
                 <Td>
-                  <Button size="xs" colorScheme="red" onClick={() => onDelete(file.id)}>Delete</Button>
+                  <Button size="xs" colorScheme="red" onClick={() => onDelete(file.id)}>{t('delete')}</Button>
                 </Td>
               </Tr>
             ))}
@@ -296,7 +297,7 @@ const FilesTable: React.FC<{ files: UploadFile[]; onDelete: (fileId: string) => 
 };
 
 const SettingsPanel: React.FC<{ upload: any }> = ({ upload }) => {
-  const { t } = useTranslation();
+  const { t } = useTranslation(['common', 'upload', 'languages']);
   const toast = useToast();
   const queryClient = useQueryClient();
   const updateUpload = useUpdateUpload();
@@ -321,32 +322,32 @@ const SettingsPanel: React.FC<{ upload: any }> = ({ upload }) => {
         language: language || undefined,
         assignment_id: selectedAssignment || undefined,
       });
-      toast({ title: 'Settings saved', status: 'success', duration: 2000 });
+      toast({ title: t('upload:settingsSaved'), status: 'success', duration: 2000 });
       queryClient.invalidateQueries({ queryKey: ['uploads', 'details', upload.task_id] });
     } catch {
-      toast({ title: 'Failed to save', status: 'error', duration: 3000 });
+      toast({ title: t('upload:failedToSaveSettings'), status: 'error', duration: 3000 });
     }
   };
 
   const languageOptions = [
-    { value: 'python', label: 'Python' },
-    { value: 'java', label: 'Java' },
-    { value: 'cpp', label: 'C++' },
-    { value: 'c', label: 'C' },
-    { value: 'javascript', label: 'JavaScript' },
-    { value: 'go', label: 'Go' },
-    { value: 'rust', label: 'Rust' },
+    { value: 'python', label: t('languages:python') },
+    { value: 'java', label: t('languages:java') },
+    { value: 'cpp', label: t('languages:cpp') },
+    { value: 'c', label: t('languages:c') },
+    { value: 'javascript', label: t('languages:javascript') },
+    { value: 'go', label: t('languages:go') },
+    { value: 'rust', label: t('languages:rust') },
   ];
 
   return (
     <VStack align="stretch" spacing={4} maxW="600px">
       <Box>
-        <Text fontWeight="medium" mb={1}>Name</Text>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Upload name" />
+        <Text fontWeight="medium" mb={1}>{t('upload:nameLabel')}</Text>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('upload:uploadName')} />
       </Box>
 
       <Box>
-        <Text fontWeight="medium" mb={1}>Language</Text>
+        <Text fontWeight="medium" mb={1}>{t('upload:languageLabel')}</Text>
         <Select value={language} onChange={(e) => setLanguage(e.target.value)}>
           {languageOptions.map(opt => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -355,8 +356,8 @@ const SettingsPanel: React.FC<{ upload: any }> = ({ upload }) => {
       </Box>
 
       <Box>
-        <Text fontWeight="medium" mb={1}>Assignment</Text>
-        <Select value={selectedAssignment} onChange={(e) => setSelectedAssignment(e.target.value)} placeholder="No assignment">
+        <Text fontWeight="medium" mb={1}>{t('upload:assignmentLabel')}</Text>
+        <Select value={selectedAssignment} onChange={(e) => setSelectedAssignment(e.target.value)} placeholder={t('upload:noAssignment')}>
           {assignments.map((a: any) => (
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
@@ -364,13 +365,13 @@ const SettingsPanel: React.FC<{ upload: any }> = ({ upload }) => {
       </Box>
 
       <Button colorScheme="brand" onClick={handleSave} isLoading={updateUpload.isPending}>
-        Save Changes
+        {t('upload:saveChanges')}
       </Button>
 
       <Box mt={4} pt={4} borderTopWidth={1} borderColor="gray.200">
-        <Text fontSize="sm" color="gray.500">Created: {new Date(upload.created_at).toLocaleString()}</Text>
-        <Text fontSize="sm" color="gray.500">Status: {upload.status}</Text>
-        <Text fontSize="sm" color="gray.500">Upload ID: {upload.task_id}</Text>
+        <Text fontSize="sm" color="gray.500">{t('upload:createdLabel')}{new Date(upload.created_at).toLocaleString()}</Text>
+        <Text fontSize="sm" color="gray.500">{t('upload:statusLabel')}{upload.status}</Text>
+        <Text fontSize="sm" color="gray.500">{t('upload:uploadIdLabel')}{upload.task_id}</Text>
       </Box>
     </VStack>
   );

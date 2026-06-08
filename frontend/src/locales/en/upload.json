@@ -35,5 +35,39 @@
   },
   "buttons": {
     "leavePage": "Leave Page"
+  },
+  "uploadDeleted": "Upload deleted",
+  "failedToDelete": "Failed to delete upload",
+  "reanalysisStarted": "Reanalysis started",
+  "failedToReanalyze": "Failed to reanalyze",
+  "fileDeleted": "File deleted",
+  "failedToDeleteFile": "Failed to delete file",
+  "notFound": "Upload not found",
+  "backToUploads": "Back to Uploads",
+  "reanalyze": "Reanalyze",
+  "highSimilarity": "high similarity",
+  "tabs": {
+    "results": "Results",
+    "files": "Files",
+    "settings": "Settings"
+  },
+  "noResults": "No results available",
+  "deleteTitle": "Delete Upload",
+  "deleteDescription": "This will permanently delete {{count}} files and all similarity results. This cannot be undone.",
+  "settingsSaved": "Settings saved",
+  "failedToSaveSettings": "Failed to save",
+  "nameLabel": "Name",
+  "languageLabel": "Language",
+  "assignmentLabel": "Assignment",
+  "noAssignment": "No assignment",
+  "saveChanges": "Save Changes",
+  "createdLabel": "Created: ",
+  "statusLabel": "Status: ",
+  "uploadIdLabel": "Upload ID: ",
+  "filesTable": {
+    "filename": "Filename",
+    "language": "Language",
+    "maxSimilarity": "Max Similarity",
+    "actions": "Actions"
   }
 }

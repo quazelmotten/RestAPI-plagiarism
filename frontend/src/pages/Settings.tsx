@@ -36,7 +36,7 @@ import {
 import { AddIcon, CopyIcon, DeleteIcon, EditIcon } from '@chakra-ui/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
-import { listApiKeys, createApiKey, deleteApiKey, updateApiKey, listAllApiKeys } from '../services/api';
+import { listApiKeys, createApiKey, deleteApiKey, updateApiKey } from '../services/api';
 import { useTranslation } from 'react-i18next';
 
 interface ApiKey {
@@ -47,9 +47,6 @@ interface ApiKey {
   expires_at: string | null;
 }
 
-interface AllApiKey extends ApiKey {
-  user_email?: string;
-}
 
 const Settings: React.FC = () => {
   const { t } = useTranslation('common');
@@ -69,7 +66,7 @@ const Settings: React.FC = () => {
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const { onCopy, hasCopied } = useClipboard(generatedKey || '');
   const [activeTab, setActiveTab] = useState(0);
-  const [editingKey, setEditingKey] = useState<AllApiKey | ApiKey | null>(null);
+  const [editingKey, setEditingKey] = useState<ApiKey | null>(null);
   const [editName, setEditName] = useState('');
   const [editExpiresInDays, setEditExpiresInDays] = useState<number | null>(null);
   const { isOpen: isEditOpen, onOpen: onEditOpen, onClose: onEditClose } = useDisclosure();
@@ -82,13 +79,6 @@ const Settings: React.FC = () => {
     enabled: !!user,
   });
 
-  // Fetch all API keys (admin only)
-  const { data: allKeys = [], isLoading: allKeysLoading, error: allKeysError } = useQuery<AllApiKey[]>({
-    queryKey: ['allApiKeys'],
-    queryFn: listAllApiKeys,
-    enabled: !!user && user.is_global_admin === true && activeTab === 2,
-  });
-
   // Create key mutation
   const createMutation = useMutation({
     mutationFn: ({ name, expires_in_days }: { name?: string; expires_in_days?: number }) => createApiKey({ name, expires_in_days }),
@@ -99,7 +89,7 @@ const Settings: React.FC = () => {
        onOpen();
      },
     onError: () => {
-      toast({ status: 'error', title: 'Error creating API key' });
+      toast({ status: 'error', title: t('errorCreatingApiKey') });
     },
   });
 
@@ -108,11 +98,10 @@ const Settings: React.FC = () => {
     mutationFn: (keyId: string) => deleteApiKey(keyId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['apiKeys'] });
-      queryClient.invalidateQueries({ queryKey: ['allApiKeys'] });
-      toast({ status: 'success', title: 'API key revoked' });
+      toast({ status: 'success', title: t('apiKeyRevoked') });
     },
     onError: () => {
-      toast({ status: 'error', title: 'Error revoking API key' });
+      toast({ status: 'error', title: t('errorRevokingApiKey') });
     },
   });
 
@@ -128,15 +117,14 @@ const Settings: React.FC = () => {
       updateApiKey(keyId, { name, expires_in_days }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['apiKeys'] });
-      queryClient.invalidateQueries({ queryKey: ['allApiKeys'] });
       onEditClose();
       setEditingKey(null);
       setEditName('');
       setEditExpiresInDays(null);
-      toast({ status: 'success', title: 'API key updated' });
+      toast({ status: 'success', title: t('apiKeyUpdated') });
     },
     onError: () => {
-      toast({ status: 'error', title: 'Error updating API key' });
+      toast({ status: 'error', title: t('errorUpdatingApiKey') });
     },
   });
 
@@ -149,7 +137,7 @@ const Settings: React.FC = () => {
     setExpiresInDays(null);
   };
 
-  const handleEditClick = (key: AllApiKey | ApiKey) => {
+  const handleEditClick = (key: ApiKey) => {
     setEditingKey(key);
     setEditName(key.name || '');
     // Calculate days until expiration if exists
@@ -180,9 +168,6 @@ const Settings: React.FC = () => {
         <TabList>
           <Tab>{t('apiKeys') || 'API Keys'}</Tab>
           <Tab>{t('account') || 'Account'}</Tab>
-          {user?.is_global_admin && (
-            <Tab>{t('allApiKeys') || 'All API Keys (Admin)'}</Tab>
-          )}
         </TabList>
         <TabPanels>
           <TabPanel>
@@ -193,8 +178,8 @@ const Settings: React.FC = () => {
                     {t('createApiKey') || 'Create new key'}
                   </Button>
                 </HStack>
-              {isLoading && <Text>Loading...</Text>}
-              {error && <Alert status="error"><AlertIcon />Failed to load keys</Alert>}
+              {isLoading && <Text>{t('loading')}</Text>}
+              {error && <Alert status="error"><AlertIcon />{t('failedToLoadKeys')}</Alert>}
               {!isLoading && !error && keys.length === 0 && (
                 <Text color="gray.500">{t('noKeysYet') || 'No API keys yet.'}</Text>
               )}
@@ -202,11 +187,11 @@ const Settings: React.FC = () => {
                 <Table size="sm">
                   <Thead>
                     <Tr>
-                      <Th>Name</Th>
-                      <Th>Created</Th>
-                      <Th>Last Used</Th>
-                      <Th>Expires</Th>
-                      <Th>Actions</Th>
+                      <Th>{t('name')}</Th>
+                      <Th>{t('created')}</Th>
+                      <Th>{t('lastUsed')}</Th>
+                      <Th>{t('expires')}</Th>
+                      <Th>{t('actions')}</Th>
                     </Tr>
                   </Thead>
                   <Tbody>
@@ -218,18 +203,18 @@ const Settings: React.FC = () => {
                         <Td>
                           {key.expires_at ? (
                             isExpired(key.expires_at) ? (
-                              <Badge colorScheme="red">Expired</Badge>
+                              <Badge colorScheme="red">{t('expired')}</Badge>
                             ) : (
                               <Text>{formatDate(key.expires_at)}</Text>
                             )
                           ) : (
-                            <Text color="gray.400">Never</Text>
+                            <Text color="gray.400">{t('never')}</Text>
                           )}
                         </Td>
                          <Td>
 <HStack spacing={2}>
   <IconButton
-    aria-label="Edit key"
+    aria-label={t('editKey')}
     icon={<EditIcon />}
     size="xs"
     colorScheme="blue"
@@ -237,7 +222,7 @@ const Settings: React.FC = () => {
     onClick={() => handleEditClick(key)}
   />
   <IconButton
-    aria-label="Revoke key"
+    aria-label={t('revokeKeyAria')}
     icon={<DeleteIcon />}
     size="xs"
     colorScheme="red"
@@ -350,74 +335,6 @@ const Settings: React.FC = () => {
                </Box>
              </VStack>
            </TabPanel>
-          {user?.is_global_admin && (
-            <TabPanel>
-              <VStack align="stretch" spacing={4}>
-                <Text fontWeight="bold">{t('allApiKeys') || 'All API Keys'}</Text>
-                {allKeysLoading && <Text>Loading...</Text>}
-                {allKeysError && <Alert status="error"><AlertIcon />Failed to load keys</Alert>}
-                {!allKeysLoading && !allKeysError && allKeys.length === 0 && (
-                  <Text color="gray.500">No API keys found.</Text>
-                )}
-                 {allKeys.length > 0 && (
-                   <Table size="sm">
-                     <Thead>
-                       <Tr>
-                         <Th>User</Th>
-                         <Th>Name</Th>
-                         <Th>Created</Th>
-                         <Th>Last Used</Th>
-                         <Th>Expires</Th>
-                         <Th>Actions</Th>
-                       </Tr>
-                     </Thead>
-                     <Tbody>
-                       {allKeys.map((key) => (
-                         <Tr key={key.id}>
-                           <Td>{key.user_email || '—'}</Td>
-                           <Td>{key.name || '—'}</Td>
-                           <Td>{formatDate(key.created_at)}</Td>
-                           <Td>{formatDate(key.last_used_at)}</Td>
-                           <Td>
-                             {key.expires_at ? (
-                               isExpired(key.expires_at) ? (
-                                 <Badge colorScheme="red">Expired</Badge>
-                               ) : (
-                                 <Text>{formatDate(key.expires_at)}</Text>
-                               )
-                             ) : (
-                               <Text color="gray.400">Never</Text>
-                             )}
-                           </Td>
-                            <Td>
-<HStack spacing={2}>
-  <IconButton
-    aria-label="Edit key"
-    icon={<EditIcon />}
-    size="xs"
-    colorScheme="blue"
-    variant="ghost"
-    onClick={() => handleEditClick(key)}
-  />
-  <IconButton
-    aria-label="Revoke key"
-    icon={<DeleteIcon />}
-    size="xs"
-    colorScheme="red"
-    variant="ghost"
-    onClick={() => handleDeleteClick(key.id)}
-    isLoading={deleteMutation.isPending}
-  />
-</HStack>
-                            </Td>
-                         </Tr>
-                       ))}
-                     </Tbody>
-                   </Table>
-                 )}
-              </VStack>
-            </TabPanel>
-          )}
         </TabPanels>
       </Tabs>
 
@@ -430,11 +347,11 @@ const Settings: React.FC = () => {
             <Text mb={2}>{t('copyKeyNow') || 'Copy this key now. You won\'t be able to see it again!'}</Text>
             <HStack>
               <Input value={generatedKey || ''} isReadOnly />
-              <IconButton aria-label="Copy" icon={<CopyIcon />} onClick={onCopy} colorScheme={hasCopied ? 'green' : 'gray'} />
+              <IconButton aria-label={t('copy')} icon={<CopyIcon />} onClick={onCopy} colorScheme={hasCopied ? 'green' : 'gray'} />
             </HStack>
           </ModalBody>
           <ModalFooter>
-            <Button onClick={onClose}>Close</Button>
+            <Button onClick={onClose}>{t('close')}</Button>
           </ModalFooter>
         </ModalContent>
        </Modal>
@@ -446,15 +363,15 @@ const Settings: React.FC = () => {
           <ModalHeader>{t('createApiKey') || 'Create new API key'}</ModalHeader>
           <ModalBody>
             <VStack spacing={4} align="stretch">
-              <Text fontSize="sm" fontWeight="medium">Name</Text>
+              <Text fontSize="sm" fontWeight="medium">{t('name')}</Text>
               <Input
-                placeholder={t('keyName') || 'Key name (optional)'}
+                placeholder={t('keyName')}
                 value={newKeyName}
                 onChange={(e) => setNewKeyName(e.target.value)}
               />
-              <Text fontSize="sm" fontWeight="medium">Expiration (days from now, leave empty for no expiration)</Text>
+              <Text fontSize="sm" fontWeight="medium">{t('expirationLabel')}</Text>
               <Input
-                placeholder={t('expirationDays') || 'Days until expiration (optional)'}
+                placeholder={t('expirationDays')}
                 type="number"
                 min="0"
                 value={expiresInDays ?? ''}
@@ -484,15 +401,15 @@ const Settings: React.FC = () => {
           <ModalHeader>{t('editApiKey') || 'Edit API Key'}</ModalHeader>
           <ModalBody>
             <VStack spacing={4} align="stretch">
-              <Text fontSize="sm" fontWeight="medium">Name</Text>
+              <Text fontSize="sm" fontWeight="medium">{t('name')}</Text>
               <Input
-                placeholder="Key name (optional)"
+                placeholder={t('keyName')}
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
               />
-              <Text fontSize="sm" fontWeight="medium">Expiration (days from now, leave empty for no expiration)</Text>
+              <Text fontSize="sm" fontWeight="medium">{t('expirationLabel')}</Text>
               <Input
-                placeholder="Days until expiration (optional)"
+                placeholder={t('expirationDays')}
                 type="number"
                 min="0"
                 value={editExpiresInDays ?? ''}

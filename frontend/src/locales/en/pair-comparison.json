@@ -16,7 +16,8 @@
     "vs": "VS",
     "cancel": "Cancel",
     "compare": "Compare Files",
-    "selfComparison": "Cannot compare a file with itself. Select a different file."
+    "selfComparison": "Cannot compare a file with itself. Select a different file.",
+    "taskId": "task: "
   },
   "page": {
     "similarity": "{{percent}}% similarity",
@@ -48,7 +49,8 @@
       "totalMatches": "Total matches",
       "coverageA": "Coverage A",
       "coverageB": "Coverage B",
-      "matchLineInfo": "{{count}} ({{linesA}}+{{linesB}} lines)"
+      "matchLineInfo": "{{count}} ({{linesA}}+{{linesB}} lines)",
+      "matchLineShort": "{{linesA}}A / {{linesB}}B"
     },
     "loading": "Loading file contents...",
     "matchTypes": {
@@ -59,5 +61,5 @@
     },
    "match": "Match"
  },
- "keyboardShortcuts": "Keyboard Shortcuts"
+  "keyboardShortcuts": "Keyboard Shortcuts"
 }

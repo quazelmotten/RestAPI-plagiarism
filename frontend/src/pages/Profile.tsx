@@ -22,15 +22,15 @@ const Profile: React.FC = () => {
       <Heading mb={6}>{t('profile')}</Heading>
       <VStack align="stretch" spacing={4}>
         <Box>
-          <Text fontSize="sm" fontWeight="medium" mb={2}>{t('currentEmail') || 'Current email'}</Text>
+          <Text fontSize="sm" fontWeight="medium" mb={2}>{t('currentEmail')}</Text>
           <Text>{user?.email || '—'}</Text>
         </Box>
         <Box>
-          <Text fontSize="sm" fontWeight="medium" mb={2}>{t('currentUsername') || 'Current username'}</Text>
+          <Text fontSize="sm" fontWeight="medium" mb={2}>{t('currentUsername')}</Text>
           <Text>{user?.username || '—'}</Text>
         </Box>
         <Text color="gray.500" fontSize="sm">
-          {t('changePasswordInSettings') || 'Change your password in the Settings page.'}
+          {t('changePasswordInSettings')}
         </Text>
       </VStack>
       <Button mt={6} variant="outline" onClick={handleLogout} colorScheme="red">

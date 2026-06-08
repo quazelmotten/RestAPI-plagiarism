@@ -35,5 +35,39 @@
   },
   "buttons": {
     "leavePage": "Покинуть страницу"
+  },
+  "uploadDeleted": "Загрузка удалена",
+  "failedToDelete": "Не удалось удалить загрузку",
+  "reanalysisStarted": "Повторный анализ начат",
+  "failedToReanalyze": "Не удалось повторно проанализировать",
+  "fileDeleted": "Файл удалён",
+  "failedToDeleteFile": "Не удалось удалить файл",
+  "notFound": "Загрузка не найдена",
+  "backToUploads": "Назад к загрузкам",
+  "reanalyze": "Повторный анализ",
+  "highSimilarity": "высокое сходство",
+  "tabs": {
+    "results": "Результаты",
+    "files": "Файлы",
+    "settings": "Настройки"
+  },
+  "noResults": "Результаты недоступны",
+  "deleteTitle": "Удалить загрузку",
+  "deleteDescription": "Это навсегда удалит {{count}} файл(ов) и все результаты сравнения. Это действие необратимо.",
+  "settingsSaved": "Настройки сохранены",
+  "failedToSaveSettings": "Не удалось сохранить",
+  "nameLabel": "Название",
+  "languageLabel": "Язык",
+  "assignmentLabel": "Задание",
+  "noAssignment": "Без задания",
+  "saveChanges": "Сохранить изменения",
+  "createdLabel": "Создано: ",
+  "statusLabel": "Статус: ",
+  "uploadIdLabel": "ID загрузки: ",
+  "filesTable": {
+    "filename": "Имя файла",
+    "language": "Язык",
+    "maxSimilarity": "Макс. сходство",
+    "actions": "Действия"
   }
 }

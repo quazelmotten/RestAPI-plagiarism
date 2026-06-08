@@ -174,19 +174,19 @@ const AssignmentFilesTab: React.FC<AssignmentFilesTabProps> = ({
         <Card bg="brand.50" borderColor="brand.200" borderWidth={1} mb={3}>
           <CardBody py={2}>
             <HStack spacing={3}>
-              <Text fontSize="sm" fontWeight="medium">{selectedFiles.size} selected</Text>
+              <Text fontSize="sm" fontWeight="medium">{t('review:selected', { count: selectedFiles.size })}</Text>
               {onDownloadFiles && (
                 <Button size="sm" leftIcon={<FiDownload />} onClick={handleBulkDownload}>
-                  Download
+                  {t('common:buttons.download')}
                 </Button>
               )}
               {onDeleteFiles && (
                 <Button size="sm" colorScheme="red" leftIcon={<FiTrash2 />} onClick={handleBulkDelete}>
-                  Delete
+                  {t('common:delete')}
                 </Button>
               )}
               <Button size="sm" variant="ghost" onClick={() => setSelectedFiles(new Set())}>
-                Clear
+                {t('common:clear')}
               </Button>
             </HStack>
           </CardBody>
@@ -207,7 +207,7 @@ const AssignmentFilesTab: React.FC<AssignmentFilesTabProps> = ({
         <Text fontSize="xs" color={mutedColor}>{totalFiles} {t('common:files')}</Text>
         {(onDeleteFiles || onDownloadFiles) && displayedFiles.length > 0 && (
           <Checkbox isChecked={selectedFiles.size === displayedFiles.length && displayedFiles.length > 0} onChange={handleSelectAll}>
-            Select all
+            {t('assignments:selectAll')}
           </Checkbox>
         )}
       </HStack>

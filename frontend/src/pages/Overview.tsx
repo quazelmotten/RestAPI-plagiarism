@@ -78,7 +78,7 @@ const formatTimeAgo = (date: Date, t: (key: string, options?: { count: number })
 };
 
 const Overview: React.FC = () => {
-  const { t } = useTranslation(['overview', 'common']);
+  const { t } = useTranslation(['overview', 'common', 'status']);
   const navigate = useNavigate();
   const { data, isLoading } = useTasks();
   const tasks = data?.items ?? [];
@@ -239,7 +239,7 @@ const Overview: React.FC = () => {
                       size="sm"
                       colorScheme={getStatusColor(item.status)}
                     >
-                      {item.status}
+                      {t('status:' + item.status, { defaultValue: item.status })}
                     </Badge>
                   </HStack>
                   {(item.subject_name || item.assignment_name) && (

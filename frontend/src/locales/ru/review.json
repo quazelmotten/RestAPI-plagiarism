@@ -78,5 +78,17 @@
   "topSimilarities": "Топ схожести",
   "vs": "против",
   "allAssignments": "Все задания",
-  "noAssignments": "Задания не найдены"
+  "noAssignments": "Задания не найдены",
+  "clearAllSuccess": "Все оставшиеся пары очищены.",
+  "clearAllError": "Не удалось очистить оставшиеся пары.",
+  "confirmClearAll": "Очистить все оставшиеся непроверенные пары? Это действие необратимо.",
+  "pairsToReview": "{{count}} пар для проверки",
+  "startReview": "Начать проверку",
+  "searchPlaceholder": "Поиск файлов...",
+  "similarityPlaceholder": "Сходство: <0.5",
+  "selected": "Выбрано: {{count}}",
+  "selectAll": "Выбрать все",
+  "confirming": "Подтверждение...",
+  "clearing": "Очистка...",
+  "clearsDescription": "Очищает все непроверенные пары со сходством ≤ порога. Чем ниже порог, тем меньше пар очищается."
 }

@@ -58,8 +58,8 @@ const Users: React.FC = () => {
   if (!currentUser?.is_global_admin) {
     return (
       <Box p={8} textAlign="center">
-        <Text fontSize="lg" color="red.500">Access Denied</Text>
-        <Text color="gray.500" mt={2}>You must be an admin to view this page.</Text>
+        <Text fontSize="lg" color="red.500">{t('accessDenied')}</Text>
+        <Text color="gray.500" mt={2}>{t('adminRequired')}</Text>
       </Box>
     );
   }

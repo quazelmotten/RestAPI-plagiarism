@@ -76,7 +76,9 @@
     "clearFiles": "Clear files",
     "grantAccess": "Grant access",
     "revokeAccess": "Revoke access",
-    "reviewInDetail": "Review in detail"
+    "reviewInDetail": "Review in detail",
+    "toggleEmptyLines": "Toggle empty lines",
+    "toggleSyntaxHighlight": "Toggle syntax highlight"
   },
   "labels": {
     "of": "of",
@@ -99,6 +101,7 @@
     "note": "Note",
     "confirm": "Confirm",
     "clear": "Clear",
+    "download": "Download",
     "addNote": "Add Note",
     "leavePage": "Leave Page",
     "shortcuts": "Shortcuts"
@@ -257,5 +260,26 @@
   "moveToUpload": "Move to upload...",
   "moveFiles": "Move Files",
   "move": "Move",
-  "filterByAssignment": "Filter by assignment..."
+  "filterByAssignment": "Filter by assignment...",
+  "name": "Name",
+  "lastUsed": "Last Used",
+  "expires": "Expires",
+  "expired": "Expired",
+  "failedToLoadKeys": "Failed to load keys",
+  "copy": "Copy",
+  "expirationLabel": "Expiration (days from now, leave empty for no expiration)",
+  "editKey": "Edit key",
+  "revokeKeyAria": "Revoke key",
+  "errorCreatingApiKey": "Error creating API key",
+  "apiKeyRevoked": "API key revoked",
+  "errorRevokingApiKey": "Error revoking API key",
+  "apiKeyUpdated": "API key updated",
+  "errorUpdatingApiKey": "Error updating API key",
+  "noApiKeys": "No API keys found.",
+  "allApiKeys": "All API Keys",
+  "user": "User",
+  "stats": "Stats",
+  "storage": "Storage",
+  "accessDenied": "Access Denied",
+  "adminRequired": "You must be an admin to view this page."
 }

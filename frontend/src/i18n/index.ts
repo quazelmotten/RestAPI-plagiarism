@@ -15,8 +15,12 @@ import enReview from '../locales/en/review.json';
 import enSessions from '../locales/en/sessions.json';
 import enStorage from '../locales/en/storage.json';
 import enQuickCheck from '../locales/en/quick-check.json';
+import enFiles from '../locales/en/files.json';
+import enEvents from '../locales/en/events.json';
 
 import ruCommon from '../locales/ru/common.json';
+import ruFiles from '../locales/ru/files.json';
+import ruEvents from '../locales/ru/events.json';
 import ruNavigation from '../locales/ru/navigation.json';
 import ruUpload from '../locales/ru/upload.json';
 import ruAssignments from '../locales/ru/assignments.json';
@@ -50,6 +54,8 @@ i18n
         sessions: enSessions,
         storage: enStorage,
         quickCheck: enQuickCheck,
+        files: enFiles,
+        events: enEvents,
       },
       ru: {
         common: ruCommon,
@@ -66,6 +72,8 @@ i18n
         sessions: ruSessions,
         storage: ruStorage,
         quickCheck: ruQuickCheck,
+        files: ruFiles,
+        events: ruEvents,
       },
     },
     lng: localStorage.getItem('language') || 'en',

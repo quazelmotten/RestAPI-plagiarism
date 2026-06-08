@@ -140,43 +140,43 @@ const ResultsList: React.FC<ResultsListProps & { loading?: boolean }> = ({
               icon={<FiChevronsLeft />}
               onClick={() => setPage(0)}
               isDisabled={page === 0}
-              aria-label="First page"
+              aria-label={t('common:aria.firstPage')}
             />
             <IconButton
               size="sm"
               icon={<FiChevronLeft />}
               onClick={() => setPage(p => Math.max(0, p - 1))}
               isDisabled={page === 0}
-              aria-label="Previous page"
+              aria-label={t('common:aria.previousPage')}
             />
             <Text fontSize="sm" minW="80px" textAlign="center">
-              Page {page + 1} / {totalPages}
+              {t('common:pageOf', { current: page + 1, total: totalPages })}
             </Text>
             <IconButton
               size="sm"
               icon={<FiChevronRight />}
               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
               isDisabled={page >= totalPages - 1}
-              aria-label="Next page"
+              aria-label={t('common:aria.nextPage')}
             />
             <IconButton
               size="sm"
               icon={<FiChevronsRight />}
               onClick={() => setPage(totalPages - 1)}
               isDisabled={page >= totalPages - 1}
-              aria-label="Last page"
+              aria-label={t('common:aria.lastPage')}
             />
             <HStack spacing={1} ml={2}>
               <Input
                 size="xs"
                 w="60px"
-                placeholder="Go to..."
+                placeholder={t('common:placeholders.goToPage')}
                 value={goPage}
                 onChange={(e) => setGoPage(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleGoPage(); }}
               />
               <Button size="xs" onClick={handleGoPage} isDisabled={!goPage}>
-                Go
+                {t('common:go')}
               </Button>
             </HStack>
           </HStack>

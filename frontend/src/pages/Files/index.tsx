@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Flex,
@@ -78,30 +79,30 @@ const formatDate = (dateStr: string | null): string => {
 
 const getFileKey = (file: File): string => `${file.name}-${file.size}-${file.lastModified}`;
 
-const languageOptions = [
-  { value: '', label: 'All languages' },
-  { value: 'python', label: 'Python' },
-  { value: 'javascript', label: 'JavaScript' },
-  { value: 'typescript', label: 'TypeScript' },
-  { value: 'cpp', label: 'C++' },
-  { value: 'c', label: 'C' },
-  { value: 'java', label: 'Java' },
-  { value: 'go', label: 'Go' },
-  { value: 'rust', label: 'Rust' },
+const languageOptions = (t: (key: string) => string) => [
+  { value: '', label: t('files:filterLabels.allLanguages') },
+  { value: 'python', label: t('languages:python') },
+  { value: 'javascript', label: t('languages:javascript') },
+  { value: 'typescript', label: t('languages:typescript') },
+  { value: 'cpp', label: t('languages:cpp') },
+  { value: 'c', label: t('languages:c') },
+  { value: 'java', label: t('languages:java') },
+  { value: 'go', label: t('languages:go') },
+  { value: 'rust', label: t('languages:rust') },
 ];
 
-const statusOptions = [
-  { value: '', label: 'All statuses' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'processing', label: 'Processing' },
-  { value: 'queued', label: 'Queued' },
-  { value: 'error', label: 'Error' },
+const statusOptions = (t: (key: string) => string) => [
+  { value: '', label: t('files:filterLabels.allStatuses') },
+  { value: 'completed', label: t('status:completed') },
+  { value: 'processing', label: t('status:processing') },
+  { value: 'queued', label: t('status:queued') },
+  { value: 'error', label: t('status:error') },
 ];
 
-const confirmedOptions = [
-  { value: '', label: 'All files' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'unreviewed', label: 'Unreviewed' },
+const confirmedOptions = (t: (key: string) => string) => [
+  { value: '', label: t('files:filterLabels.allFiles') },
+  { value: 'confirmed', label: t('files:confirmedBadge') },
+  { value: 'unreviewed', label: t('files:unreviewedBadge') },
 ];
 
 const getSimilarityBadge = (similarity: number | null) => {
@@ -116,16 +117,16 @@ const getLanguageBadge = (language: string | null | undefined) => {
   return <Badge variant="subtle" colorScheme="gray" fontSize="xs">{language}</Badge>;
 };
 
-const languageFormOptions = [
-  { value: 'auto', label: 'Auto-detect' },
-  { value: 'python', label: 'Python' },
-  { value: 'javascript', label: 'JavaScript' },
-  { value: 'typescript', label: 'TypeScript' },
-  { value: 'cpp', label: 'C++' },
-  { value: 'c', label: 'C' },
-  { value: 'java', label: 'Java' },
-  { value: 'go', label: 'Go' },
-  { value: 'rust', label: 'Rust' },
+const languageFormOptions = (t: (key: string) => string) => [
+  { value: 'auto', label: t('languages:auto') },
+  { value: 'python', label: t('languages:python') },
+  { value: 'javascript', label: t('languages:javascript') },
+  { value: 'typescript', label: t('languages:typescript') },
+  { value: 'cpp', label: t('languages:cpp') },
+  { value: 'c', label: t('languages:c') },
+  { value: 'java', label: t('languages:java') },
+  { value: 'go', label: t('languages:go') },
+  { value: 'rust', label: t('languages:rust') },
 ];
 
 // --- File Row ---
@@ -138,6 +139,7 @@ interface FileRowProps {
 }
 
 const FileRow: React.FC<FileRowProps> = React.memo(({ file, isSelected, onSelect, onDelete }) => {
+  const { t } = useTranslation(['files', 'common', 'status']);
   const navigate = useNavigate();
   const rowBg = useColorModeValue('white', 'gray.800');
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
@@ -181,9 +183,9 @@ const FileRow: React.FC<FileRowProps> = React.memo(({ file, isSelected, onSelect
       <Td>{getSimilarityBadge(file.similarity)}</Td>
       <Td>
         {file.is_confirmed ? (
-          <Badge colorScheme="green" variant="subtle" fontSize="xs">Confirmed</Badge>
+          <Badge colorScheme="green" variant="subtle" fontSize="xs">{t('files:confirmedBadge')}</Badge>
         ) : (
-          <Badge colorScheme="gray" variant="subtle" fontSize="xs">Unreviewed</Badge>
+          <Badge colorScheme="gray" variant="subtle" fontSize="xs">{t('files:unreviewedBadge')}</Badge>
         )}
       </Td>
       <Td whiteSpace="nowrap" fontSize="sm" color="gray.500">
@@ -195,7 +197,7 @@ const FileRow: React.FC<FileRowProps> = React.memo(({ file, isSelected, onSelect
           size="xs"
           variant="ghost"
           color="red.400"
-          aria-label="Delete file"
+          aria-label={t('files:deleteFileLabel')}
           onClick={() => onDelete(file.id)}
         />
       </Td>
@@ -213,6 +215,7 @@ interface NewUploadFormProps {
 }
 
 const NewUploadForm: React.FC<NewUploadFormProps> = ({ onSuccess, assignments }) => {
+  const { t } = useTranslation(['files', 'common', 'languages', 'upload']);
   const toast = useToast();
   const [files, setFiles] = useState<File[]>([]);
   const [language, setLanguage] = useState('auto');
@@ -225,7 +228,7 @@ const NewUploadForm: React.FC<NewUploadFormProps> = ({ onSuccess, assignments })
     for (const file of accepted) {
       if (newFiles.length >= MAX_FILES) break;
       if (file.size > MAX_FILE_SIZE) {
-        toast({ title: `File too large: ${file.name}`, status: 'warning', duration: 3000 });
+        toast({ title: t('files:toasts.fileTooLarge', { name: file.name }), status: 'warning', duration: 3000 });
         continue;
       }
       const key = getFileKey(file);
@@ -234,7 +237,7 @@ const NewUploadForm: React.FC<NewUploadFormProps> = ({ onSuccess, assignments })
       }
     }
     for (const rej of rejected) {
-      toast({ title: `Rejected: ${rej.file.name}`, status: 'error', duration: 3000 });
+      toast({ title: t('files:toasts.fileRejected', { name: rej.file.name }), status: 'error', duration: 3000 });
     }
     setFiles(newFiles);
   }, [files, toast]);
@@ -271,12 +274,12 @@ const NewUploadForm: React.FC<NewUploadFormProps> = ({ onSuccess, assignments })
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      toast({ title: 'Upload started', status: 'success', duration: 2000 });
+      toast({ title: t('files:toasts.uploadStarted'), status: 'success', duration: 2000 });
       setFiles([]);
       setUploadName('');
       onSuccess();
     } catch {
-      toast({ title: 'Upload failed', status: 'error', duration: 3000 });
+      toast({ title: t('files:toasts.uploadFailed'), status: 'error', duration: 3000 });
     } finally {
       setUploading(false);
     }
@@ -292,7 +295,7 @@ const NewUploadForm: React.FC<NewUploadFormProps> = ({ onSuccess, assignments })
         <VStack spacing={4} align="stretch">
           <HStack spacing={3} wrap="wrap">
             <Input
-              placeholder="Upload name (optional)"
+              placeholder={t('files:uploadNamePlaceholder')}
               value={uploadName}
               onChange={(e) => setUploadName(e.target.value)}
               size="sm"
@@ -300,7 +303,7 @@ const NewUploadForm: React.FC<NewUploadFormProps> = ({ onSuccess, assignments })
               minW={{ base: 'full', md: '200px' }}
             />
             <Select value={language} onChange={(e) => setLanguage(e.target.value)} size="sm" w={{ base: 'full', md: '180px' }}>
-              {languageFormOptions.map(opt => (
+              {languageFormOptions(t).map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </Select>
@@ -310,7 +313,7 @@ const NewUploadForm: React.FC<NewUploadFormProps> = ({ onSuccess, assignments })
                 onChange={(e) => setSelectedAssignment(e.target.value)}
                 size="sm"
                 w={{ base: 'full', md: '220px' }}
-                placeholder="Link to assignment..."
+                placeholder={t('files:linkToAssignment')}
               >
                 {assignments.map(a => (
                   <option key={a.id} value={a.id}>{a.name}</option>
@@ -333,10 +336,10 @@ const NewUploadForm: React.FC<NewUploadFormProps> = ({ onSuccess, assignments })
             <input {...getInputProps()} />
             <Icon as={FiUploadCloud} boxSize={8} color="brand.500" mb={2} />
             <Text fontWeight="medium">
-              {isDragActive ? 'Drop files here' : 'Drag files here or click to browse'}
+              {isDragActive ? t('files:dropzone.active') : t('files:dropzone.inactive')}
             </Text>
             <Text fontSize="xs" color="gray.500">
-              Max {MAX_FILES} files, {formatFileSize(MAX_FILE_SIZE)} each
+              {t('files:dropzone.maxInfo', { max: MAX_FILES, size: formatFileSize(MAX_FILE_SIZE) })}
             </Text>
           </Box>
 
@@ -353,7 +356,7 @@ const NewUploadForm: React.FC<NewUploadFormProps> = ({ onSuccess, assignments })
                     icon={<FiX />}
                     size="xs"
                     variant="ghost"
-                    aria-label="Remove"
+                    aria-label={t('files:removeFileLabel')}
                     onClick={() => removeFile(i)}
                   />
                 </HStack>
@@ -368,7 +371,7 @@ const NewUploadForm: React.FC<NewUploadFormProps> = ({ onSuccess, assignments })
               isDisabled={files.length === 0 || uploading}
               isLoading={uploading}
             >
-              Start Analysis ({files.length} files)
+              {t('files:startAnalysis', { count: files.length })}
             </Button>
           </Flex>
         </VStack>
@@ -380,6 +383,7 @@ const NewUploadForm: React.FC<NewUploadFormProps> = ({ onSuccess, assignments })
 // --- Main Files Page ---
 
 const Files: React.FC = () => {
+  const { t } = useTranslation(['files', 'common', 'languages', 'status']);
   const toast = useToast();
   const queryClient = useQueryClient();
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -496,9 +500,9 @@ const Files: React.FC = () => {
     if (!pendingDeleteId) return;
     try {
       await deleteFile.mutateAsync(pendingDeleteId);
-      toast({ title: 'File deleted', status: 'success', duration: 2000 });
+      toast({ title: t('files:toasts.fileDeleted'), status: 'success', duration: 2000 });
     } catch {
-      toast({ title: 'Failed to delete file', status: 'error', duration: 3000 });
+      toast({ title: t('files:toasts.failedToDelete'), status: 'error', duration: 3000 });
     }
     setPendingDeleteId(null);
     onDeleteClose();
@@ -516,7 +520,7 @@ const Files: React.FC = () => {
         // continue
       }
     }
-    toast({ title: `${selected.size} files deleted`, status: 'success', duration: 3000 });
+    toast({ title: t('files:toasts.filesDeleted', { count: selected.size }), status: 'success', duration: 3000 });
     setSelected(new Set());
     onBulkDeleteClose();
   };
@@ -541,10 +545,10 @@ const Files: React.FC = () => {
       {/* Header */}
       <Flex justify="space-between" align="center">
         <HStack spacing={3}>
-          <Text fontSize="2xl" fontWeight="bold">Files</Text>
+          <Text fontSize="2xl" fontWeight="bold">{t('files:pageTitle')}</Text>
           {!isLoading && (
             <Badge colorScheme="gray" variant="subtle" fontSize="sm" px={2}>
-              {total.toLocaleString()} files
+              {t('files:count', { count: total })}
             </Badge>
           )}
         </HStack>
@@ -554,7 +558,7 @@ const Files: React.FC = () => {
           onClick={() => setShowUpload(!showUpload)}
           size="sm"
         >
-          {showUpload ? 'Hide' : 'New Upload'}
+          {showUpload ? t('files:hide') : t('files:newUpload')}
         </Button>
       </Flex>
 
@@ -573,7 +577,7 @@ const Files: React.FC = () => {
                   <Icon as={FiSearch} color="gray.400" />
                 </InputLeftElement>
                 <Input
-                  placeholder="Search by filename..."
+                  placeholder={t('files:searchPlaceholder')}
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setPage(0); }}
                   size="sm"
@@ -585,7 +589,7 @@ const Files: React.FC = () => {
                 value={languageFilter}
                 onChange={(e) => { setLanguageFilter(e.target.value); setPage(0); }}
               >
-                {languageOptions.map(opt => (
+                {languageOptions(t).map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </Select>
@@ -595,7 +599,7 @@ const Files: React.FC = () => {
                 value={statusFilter}
                 onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
               >
-                {statusOptions.map(opt => (
+                {statusOptions(t).map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </Select>
@@ -605,7 +609,7 @@ const Files: React.FC = () => {
                 value={confirmedFilter}
                 onChange={(e) => { setConfirmedFilter(e.target.value); setPage(0); }}
               >
-                {confirmedOptions.map(opt => (
+                {confirmedOptions(t).map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </Select>
@@ -616,7 +620,7 @@ const Files: React.FC = () => {
             </HStack>
             <HStack spacing={3} wrap="wrap" w="full">
               <HStack spacing={1}>
-                <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">Sim ≥</Text>
+                <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">{t('files:simGreater')}</Text>
                 <NumberInput
                   size="xs"
                   w="70px"
@@ -626,11 +630,11 @@ const Files: React.FC = () => {
                   value={minSimilarity ?? ''}
                   onChange={(_, val) => { setMinSimilarity(isNaN(val) ? undefined : val); setPage(0); }}
                 >
-                  <NumberInputField placeholder="Min" />
+                  <NumberInputField placeholder={t('files:min')} />
                 </NumberInput>
               </HStack>
               <HStack spacing={1}>
-                <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">Sim ≤</Text>
+                <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">{t('files:simLess')}</Text>
                 <NumberInput
                   size="xs"
                   w="70px"
@@ -640,7 +644,7 @@ const Files: React.FC = () => {
                   value={maxSimilarity ?? ''}
                   onChange={(_, val) => { setMaxSimilarity(isNaN(val) ? undefined : val); setPage(0); }}
                 >
-                  <NumberInputField placeholder="Max" />
+                  <NumberInputField placeholder={t('files:max')} />
                 </NumberInput>
               </HStack>
               {(search || languageFilter || statusFilter || confirmedFilter || assignmentFilter || minSimilarity !== undefined || maxSimilarity !== undefined) && (
@@ -658,7 +662,7 @@ const Files: React.FC = () => {
                     setPage(0);
                   }}
                 >
-                  Clear filters
+                  {t('files:clearFilters')}
                 </Button>
               )}
             </HStack>
@@ -674,8 +678,10 @@ const Files: React.FC = () => {
               <HStack spacing={3}>
                 <Text fontSize="sm" fontWeight="medium" color="brand.700">
                   {selectAllAcrossPages
-                    ? `All ${total.toLocaleString()} files selected (across all pages)`
-                    : `${selected.size} file${selected.size > 1 ? 's' : ''} selected`}
+                    ? t('files:selectedAll', { total: total.toLocaleString() })
+                    : selected.size === 1
+                      ? t('files:selectedCount', { count: selected.size })
+                      : t('files:selectedCountPlural', { count: selected.size })}
                 </Text>
                 <Button
                   size="xs"
@@ -684,7 +690,7 @@ const Files: React.FC = () => {
                   onClick={handleBulkDelete}
                   isLoading={isAnyBulkLoading}
                 >
-                  Delete
+                  {t('files:delete')}
                 </Button>
                 <Button
                   size="xs"
@@ -692,10 +698,10 @@ const Files: React.FC = () => {
                   leftIcon={<FiMove />}
                   onClick={() => setShowMoveToAssignment(true)}
                 >
-                  Move to Assignment
+                  {t('files:moveToAssignment')}
                 </Button>
                 <Button size="xs" variant="ghost" onClick={handleClearSelection}>
-                  Clear
+                  {t('files:clear')}
                 </Button>
               </HStack>
               {showMoveToAssignment && (
@@ -705,7 +711,7 @@ const Files: React.FC = () => {
                     w="250px"
                     value={targetAssignmentId}
                     onChange={(e) => setTargetAssignmentId(e.target.value)}
-                    placeholder="Select target assignment..."
+                    placeholder={t('files:selectAssignmentPlaceholder')}
                   >
                     {assignments.map((a: { id: string; name: string }) => (
                       <option key={a.id} value={a.id}>{a.name}</option>
@@ -725,24 +731,24 @@ const Files: React.FC = () => {
                           fileIds,
                           targetAssignmentId,
                         });
-                        toast({ title: `${fileIds.length} files moved`, status: 'success', duration: 3000 });
+                        toast({ title: t('files:toasts.filesMoved', { count: fileIds.length }), status: 'success', duration: 3000 });
                         setShowMoveToAssignment(false);
                         setTargetAssignmentId('');
                         handleClearSelection();
                         queryClient.invalidateQueries({ queryKey: ['files'] });
                       } catch {
-                        toast({ title: 'Failed to move files', status: 'error', duration: 3000 });
+                        toast({ title: t('files:toasts.failedToMove'), status: 'error', duration: 3000 });
                       }
                     }}
                   >
-                    Move
+                    {t('files:move')}
                   </Button>
                   <Button
                     size="xs"
                     variant="ghost"
                     onClick={() => { setShowMoveToAssignment(false); setTargetAssignmentId(''); }}
                   >
-                    Cancel
+                    {t('files:cancel')}
                   </Button>
                 </HStack>
               )}
@@ -773,12 +779,12 @@ const Files: React.FC = () => {
                   size="sm"
                 />
               </Th>
-              <Th>Filename</Th>
-              <Th>Upload</Th>
-              <Th>Language</Th>
-              <Th>Similarity</Th>
-              <Th>Confirmed</Th>
-              <Th>Created</Th>
+              <Th>{t('files:columns.filename')}</Th>
+              <Th>{t('files:columns.upload')}</Th>
+              <Th>{t('files:columns.language')}</Th>
+              <Th>{t('files:columns.similarity')}</Th>
+              <Th>{t('files:columns.confirmed')}</Th>
+              <Th>{t('files:columns.created')}</Th>
               <Th w="40px"></Th>
             </Tr>
           </Thead>
@@ -796,11 +802,11 @@ const Files: React.FC = () => {
                 <Td colSpan={8}>
                   <Flex justify="center" py={8} flexDirection="column" align="center">
                     <Icon as={FiFile} boxSize={10} color="gray.300" mb={3} />
-                    <Text color="gray.500" fontSize="md">No files found</Text>
+                    <Text color="gray.500" fontSize="md">{t('files:noFilesFound')}</Text>
                     <Text color="gray.400" fontSize="sm">
                       {search || languageFilter || statusFilter || confirmedFilter || assignmentFilter || minSimilarity !== undefined || maxSimilarity !== undefined
-                        ? 'Try adjusting your filters'
-                        : 'Upload files to get started'}
+                        ? t('files:adjustFilters')
+                        : t('files:uploadToGetStarted')}
                     </Text>
                   </Flex>
                 </Td>
@@ -828,34 +834,38 @@ const Files: React.FC = () => {
             icon={<FiChevronsLeft />}
             onClick={() => goToPage(0)}
             isDisabled={page === 0}
-            aria-label="First page"
+            aria-label={t('common:aria.firstPage')}
           />
           <IconButton
             size="sm"
             icon={<FiChevronLeft />}
             onClick={() => goToPage(page - 1)}
             isDisabled={page === 0}
-            aria-label="Previous page"
+            aria-label={t('common:aria.previousPage')}
           />
           <Text fontSize="sm" minW="200px" textAlign="center" color="gray.600">
-            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString()}
+            {t('files:showing', {
+              start: page * PAGE_SIZE + 1,
+              end: Math.min((page + 1) * PAGE_SIZE, total),
+              total: total.toLocaleString(),
+            })}
           </Text>
           <IconButton
             size="sm"
             icon={<FiChevronRight />}
             onClick={() => goToPage(page + 1)}
             isDisabled={page >= totalPages - 1}
-            aria-label="Next page"
+            aria-label={t('common:aria.nextPage')}
           />
           <IconButton
             size="sm"
             icon={<FiChevronsRight />}
             onClick={() => goToPage(totalPages - 1)}
             isDisabled={page >= totalPages - 1}
-            aria-label="Last page"
+            aria-label={t('common:aria.lastPage')}
           />
           <HStack spacing={1} ml={2}>
-            <Text fontSize="xs" color="gray.500">Go to:</Text>
+            <Text fontSize="xs" color="gray.500">{t('files:goTo')}</Text>
             <Select
               size="xs"
               w="70px"
@@ -866,7 +876,7 @@ const Files: React.FC = () => {
                 <option key={i} value={i}>{i + 1}</option>
               ))}
             </Select>
-            <Text fontSize="xs" color="gray.500">/ {totalPages}</Text>
+            <Text fontSize="xs" color="gray.500">{t('files:ofPages', { total: totalPages })}</Text>
           </HStack>
         </HStack>
       )}
@@ -879,13 +889,13 @@ const Files: React.FC = () => {
       >
         <AlertDialogOverlay>
           <AlertDialogContent>
-            <AlertDialogHeader fontSize="lg" fontWeight="bold">Delete file</AlertDialogHeader>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">{t('files:singleDeleteTitle')}</AlertDialogHeader>
             <AlertDialogBody>
-              This will permanently delete this file and its analysis data. This action cannot be undone.
+              {t('files:singleDeleteDesc')}
             </AlertDialogBody>
             <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onDeleteClose} isDisabled={deleteFile.isPending}>Cancel</Button>
-              <Button colorScheme="red" onClick={confirmSingleDelete} ml={3} isLoading={deleteFile.isPending}>Delete</Button>
+              <Button ref={cancelRef} onClick={onDeleteClose} isDisabled={deleteFile.isPending}>{t('common:cancel')}</Button>
+              <Button colorScheme="red" onClick={confirmSingleDelete} ml={3} isLoading={deleteFile.isPending}>{t('common:delete')}</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>
@@ -900,14 +910,14 @@ const Files: React.FC = () => {
         <AlertDialogOverlay>
           <AlertDialogContent>
             <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Delete {selected.size} file{selected.size > 1 ? 's' : ''}
+              {t('files:bulkDeleteTitle', { count: selected.size })}
             </AlertDialogHeader>
             <AlertDialogBody>
-              This will permanently delete {selected.size} file{selected.size > 1 ? 's' : ''} and their analysis data. This action cannot be undone.
+              {t('files:bulkDeleteDesc', { count: selected.size })}
             </AlertDialogBody>
             <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onBulkDeleteClose} isDisabled={deleteFile.isPending}>Cancel</Button>
-              <Button colorScheme="red" onClick={confirmBulkDelete} ml={3} isLoading={deleteFile.isPending}>Delete</Button>
+              <Button ref={cancelRef} onClick={onBulkDeleteClose} isDisabled={deleteFile.isPending}>{t('common:cancel')}</Button>
+              <Button colorScheme="red" onClick={confirmBulkDelete} ml={3} isLoading={deleteFile.isPending}>{t('common:delete')}</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>

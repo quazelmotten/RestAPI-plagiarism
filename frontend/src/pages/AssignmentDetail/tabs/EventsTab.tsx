@@ -71,19 +71,19 @@ export default function EventsTab() {
                 )}
               </div>
               <div className="mt-0.5 text-xs text-gray-600 space-y-0.5">
-                {!!meta.filename && <div>File: {String(meta.filename)}</div>}
-                {!!meta.name && <div>Name: {String(meta.name)}</div>}
-                {meta.files_count !== undefined && <div>Files: {String(meta.files_count)}</div>}
-                {!!meta.error && <div>Error: {String(meta.error)}</div>}
-                {!!meta.language && <div>Language: {String(meta.language)}</div>}
+                {!!meta.filename && <div>{t('assignments:meta.file')}{String(meta.filename)}</div>}
+                {!!meta.name && <div>{t('assignments:meta.name')}{String(meta.name)}</div>}
+                {meta.files_count !== undefined && <div>{t('assignments:meta.files')}{String(meta.files_count)}</div>}
+                {!!meta.error && <div>{t('assignments:meta.error')}{String(meta.error)}</div>}
+                {!!meta.language && <div>{t('assignments:meta.language')}{String(meta.language)}</div>}
                 {!!meta.source_task_id && (
                   <div>
-                    Moved from: {String(meta.source_task_id).substring(0, 8)}...
+                    {t('assignments:meta.movedFrom')}{String(meta.source_task_id).substring(0, 8)}...
                   </div>
                 )}
                 {!!meta.target_task_id && (
                   <div>
-                    Moved to: {String(meta.target_task_id).substring(0, 8)}...
+                    {t('assignments:meta.movedTo')}{String(meta.target_task_id).substring(0, 8)}...
                   </div>
                 )}
               </div>

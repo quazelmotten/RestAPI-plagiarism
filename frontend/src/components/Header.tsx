@@ -257,7 +257,7 @@ const Header: React.FC = () => {
                 </MenuButton>
                 <MenuList>
                    <MenuItem as={Link} to="/dashboard/settings">{t('common:settings')}</MenuItem>
-                   <MenuItem as={Link} to="/dashboard/admin/stats">{t('common:admin') || 'Administration'}</MenuItem>
+                   <MenuItem as={Link} to="/dashboard/admin/stats">{t('common:admin')}</MenuItem>
                    {user.is_global_admin && (
                      <MenuItem as={Link} to="/dashboard/admin/users">{t('common:adminUsers')}</MenuItem>
                    )}

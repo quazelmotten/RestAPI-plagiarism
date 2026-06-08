@@ -80,5 +80,17 @@
     "file_moved": "File moved",
     "reanalysis_triggered": "Re-analysis triggered"
   },
-  "noEvents": "No events yet"
+  "noEvents": "No events yet",
+  "deleteTask": "Delete task",
+  "unassignFromAssignment": "Unassign from assignment",
+  "selectAll": "Select all",
+  "meta": {
+    "file": "File: ",
+    "name": "Name: ",
+    "files": "Files: ",
+    "error": "Error: ",
+    "language": "Language: ",
+    "movedFrom": "Moved from: ",
+    "movedTo": "Moved to: "
+  }
 }

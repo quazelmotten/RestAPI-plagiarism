@@ -204,7 +204,7 @@ const OrphanedTasks: React.FC = () => {
   const formatDate = (dateStr: string) => {
     try {
       const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     } catch {
       return dateStr;
     }
@@ -385,7 +385,7 @@ const OrphanedTasks: React.FC = () => {
                 ml={3}
                 isLoading={cleanupMutation.isPending}
               >
-                {t('common:delete')} All
+                {t('common:delete')} {t('common:all')}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>

@@ -184,7 +184,7 @@ const AssignmentUploadsTab: React.FC<AssignmentUploadsTabProps> = ({
               <Td>
                 <HStack spacing={1}>
                   <IconButton
-                    aria-label="Unassign from assignment"
+                    aria-label={t('assignments:unassignFromAssignment')}
                     icon={<FiLink />}
                     size="xs"
                     variant="ghost"
@@ -195,7 +195,7 @@ const AssignmentUploadsTab: React.FC<AssignmentUploadsTabProps> = ({
                     }}
                   />
                   <IconButton
-                    aria-label="Delete task"
+                    aria-label={t('assignments:deleteTask')}
                     icon={<FiTrash2 />}
                     size="xs"
                     variant="ghost"

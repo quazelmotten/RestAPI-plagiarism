@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Text,
@@ -47,21 +48,22 @@ const EVENT_COLORS: Record<string, string> = {
   reanalysis_triggered: 'yellow',
 };
 
-const EVENT_TYPES = [
-  { value: '', label: 'All types' },
-  { value: 'upload_queued', label: 'Upload Queued' },
-  { value: 'upload_completed', label: 'Upload Completed' },
-  { value: 'upload_failed', label: 'Upload Failed' },
-  { value: 'file_uploaded', label: 'File Uploaded' },
-  { value: 'file_deleted', label: 'File Deleted' },
-  { value: 'file_moved', label: 'File Moved' },
-  { value: 'file_transferred', label: 'File Transferred' },
-  { value: 'reanalysis_triggered', label: 'Reanalysis Triggered' },
+const EVENT_TYPES = (t: (key: string) => string) => [
+  { value: '', label: t('events:eventTypes.allTypes') },
+  { value: 'upload_queued', label: t('events:eventTypes.upload_queued') },
+  { value: 'upload_completed', label: t('events:eventTypes.upload_completed') },
+  { value: 'upload_failed', label: t('events:eventTypes.upload_failed') },
+  { value: 'file_uploaded', label: t('events:eventTypes.file_uploaded') },
+  { value: 'file_deleted', label: t('events:eventTypes.file_deleted') },
+  { value: 'file_moved', label: t('events:eventTypes.file_moved') },
+  { value: 'file_transferred', label: t('events:eventTypes.file_transferred') },
+  { value: 'reanalysis_triggered', label: t('events:eventTypes.reanalysis_triggered') },
 ];
 
 const PAGE_SIZE = 50;
 
 const Events: React.FC = () => {
+  const { t } = useTranslation(['events', 'common']);
   const [page, setPage] = useState(0);
   const [eventType, setEventType] = useState('');
   const [userEmail, setUserEmail] = useState('');
@@ -119,16 +121,16 @@ const Events: React.FC = () => {
               w={{ base: 'full', md: '150px' }}
               value={eventType}
               onChange={e => { setEventType(e.target.value); setPage(0); }}
-              placeholder="All types"
+              placeholder={t('events:eventTypes.allTypes')}
             >
-              {EVENT_TYPES.map(et => (
+              {EVENT_TYPES(t).map(et => (
                 <option key={et.value} value={et.value}>{et.label}</option>
               ))}
             </Select>
             <Input
               size="sm"
               w={{ base: 'full', md: '200px' }}
-              placeholder="Filter by user email"
+              placeholder={t('events:filterPlaceholder')}
               value={userEmail}
               onChange={e => setUserEmail(e.target.value)}
             />
@@ -138,7 +140,7 @@ const Events: React.FC = () => {
               w={{ base: 'full', md: '150px' }}
               value={dateFrom}
               onChange={e => { setDateFrom(e.target.value); setPage(0); }}
-              title="From date"
+              title={t('events:fromDate')}
             />
             <Input
               size="sm"
@@ -146,11 +148,11 @@ const Events: React.FC = () => {
               w={{ base: 'full', md: '150px' }}
               value={dateTo}
               onChange={e => { setDateTo(e.target.value); setPage(0); }}
-              title="To date"
+              title={t('events:toDate')}
             />
             {hasFilters && (
               <Button onClick={handleFilterReset} size="xs" variant="ghost">
-                Clear filters
+                {t('events:clearFilters')}
               </Button>
             )}
           </HStack>
@@ -162,10 +164,10 @@ const Events: React.FC = () => {
           <Spinner size="xl" />
         </Flex>
       ) : events.length === 0 ? (
-        <Flex direction="column" align="center" justify="center" py={16} color="gray.500">
-          <Icon as={FiClock} boxSize={10} mb={2} color="gray.300" />
-          <Text>No events found</Text>
-        </Flex>
+          <Flex direction="column" align="center" justify="center" py={16} color="gray.500">
+            <Icon as={FiClock} boxSize={10} mb={2} color="gray.300" />
+            <Text>{t('events:noEventsFound')}</Text>
+          </Flex>
       ) : (
         <>
           <TableContainer
@@ -179,12 +181,12 @@ const Events: React.FC = () => {
               <Thead position="sticky" top={0} bg={headerBg} zIndex={1}>
                 <Tr>
                   <Th width="32px" px={2} borderRightWidth="1px" borderColor={dividerColor}></Th>
-                  <Th borderRightWidth="1px" borderColor={dividerColor}>Event</Th>
-                  <Th borderRightWidth="1px" borderColor={dividerColor}>Upload</Th>
-                  <Th borderRightWidth="1px" borderColor={dividerColor}>Assignment</Th>
-                  <Th borderRightWidth="1px" borderColor={dividerColor}>User</Th>
-                  <Th isNumeric borderRightWidth="1px" borderColor={dividerColor}>Files</Th>
-                  <Th>Timestamp</Th>
+                  <Th borderRightWidth="1px" borderColor={dividerColor}>{t('events:columns.event')}</Th>
+                  <Th borderRightWidth="1px" borderColor={dividerColor}>{t('events:columns.upload')}</Th>
+                  <Th borderRightWidth="1px" borderColor={dividerColor}>{t('events:columns.assignment')}</Th>
+                  <Th borderRightWidth="1px" borderColor={dividerColor}>{t('events:columns.user')}</Th>
+                  <Th isNumeric borderRightWidth="1px" borderColor={dividerColor}>{t('events:columns.files')}</Th>
+                  <Th>{t('events:columns.timestamp')}</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -200,7 +202,7 @@ const Events: React.FC = () => {
                       <Td borderRightWidth="1px" borderColor={dividerColor}>
                         <HStack spacing={2} minW={0}>
                           <Badge colorScheme={color} fontSize="xs" flexShrink={0}>
-                            {event.event_type}
+                            {t('events:eventTypes.' + event.event_type, { defaultValue: event.event_type })}
                           </Badge>
                         </HStack>
                       </Td>
@@ -243,12 +245,16 @@ const Events: React.FC = () => {
           {total > 0 && (
             <HStack justify="space-between" mt={3} pt={3}>
               <Text fontSize="sm" color="gray.500">
-                {`Showing ${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total.toLocaleString()}`}
+                {t('events:showing', {
+                  start: page * PAGE_SIZE + 1,
+                  end: Math.min((page + 1) * PAGE_SIZE, total),
+                  total: total.toLocaleString(),
+                })}
               </Text>
               <HStack spacing={1}>
                 <IconButton
                   icon={<FiChevronLeft />}
-                  aria-label="Previous page"
+                  aria-label={t('common:aria.previousPage')}
                   isDisabled={page === 0}
                   onClick={goPrev}
                   size="xs"
@@ -256,14 +262,14 @@ const Events: React.FC = () => {
                 />
                 <IconButton
                   icon={<FiChevronRight />}
-                  aria-label="Next page"
+                  aria-label={t('common:aria.nextPage')}
                   isDisabled={page >= totalPages - 1}
                   onClick={goNext}
                   size="xs"
                   variant="ghost"
                 />
                 <HStack spacing={1} ml={2}>
-                  <Text fontSize="xs" color="gray.500">Go to:</Text>
+                  <Text fontSize="xs" color="gray.500">{t('events:goTo')}</Text>
                   <Select
                     size="xs"
                     w="70px"
@@ -274,7 +280,7 @@ const Events: React.FC = () => {
                       <option key={i} value={i}>{i + 1}</option>
                     ))}
                   </Select>
-                  <Text fontSize="xs" color="gray.500">/ {totalPages}</Text>
+                  <Text fontSize="xs" color="gray.500">{t('events:ofPages', { total: totalPages })}</Text>
                 </HStack>
               </HStack>
             </HStack>

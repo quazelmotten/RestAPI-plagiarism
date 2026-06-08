@@ -15,6 +15,7 @@
   "failedToFetchDetails": "Не удалось загрузить детали задачи",
   "invalidDataFormat": "Получен неверный формат данных с сервера",
   "allTasks": "Все задачи",
+  "uploadToGetStarted": "Загрузите файлы, чтобы начать",
   "taskPicker": {
     "title": "Выбрать задачу",
     "search": "Поиск задач...",

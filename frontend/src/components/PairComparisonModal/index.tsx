@@ -863,9 +863,9 @@ toast({
                   Number(type) === 2 ? 'yellow' :
                   Number(type) === 3 ? 'blue' : 'red'
                 }>
-                  T{type}
+                  {t('pairComparison:page.match')} {type}
                 </Badge>
-                <Text fontSize="sm">{s.linesA}A / {s.linesB}B</Text>
+                <Text fontSize="sm">{t('pairComparison:stats.matchLineShort', { linesA: s.linesA, linesB: s.linesB })}</Text>
               </HStack>
             ))}
           </HStack>

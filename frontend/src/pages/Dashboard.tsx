@@ -48,6 +48,7 @@ const Dashboard: React.FC = () => {
                   <Route path="admin/stats" element={<Admin />} />
                   <Route path="admin/storage" element={<Admin initialTab={1} />} />
                   <Route path="admin/users" element={<Admin initialTab={2} />} />
+                  <Route path="admin/api-keys" element={<Admin initialTab={3} />} />
                   <Route path="events" element={<Events />} />
                 </Routes>
             </Box>

@@ -617,14 +617,14 @@ const ReviewPage: React.FC = () => {
         />
         <InputGroup size="sm" maxW={{ base: 'full', md: '200px' }}>
           <Input
-            placeholder="Search files..."
+            placeholder={t('review:searchPlaceholder')}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
         </InputGroup>
         <InputGroup size="sm" maxW={{ base: 'full', md: '120px' }}>
           <Input
-            placeholder="Similarity: <0.5"
+            placeholder={t('review:similarityPlaceholder')}
             value={similarityFilter}
             onChange={(e) => setSimilarityFilter(e.target.value)}
           />
@@ -648,12 +648,12 @@ const ReviewPage: React.FC = () => {
 
       {selected.size > 0 && (
         <HStack p={3} bg={selectedBarBg} borderRadius="md">
-          <Text fontSize="sm" fontWeight="medium">{selected.size} selected</Text>
+          <Text fontSize="sm" fontWeight="medium">{t('review:selected', { count: selected.size })}</Text>
           <Button size="xs" colorScheme="green" leftIcon={<FiCheckCircle />} onClick={selectAll}>
-            Select All
+            {t('review:selectAll')}
           </Button>
           <Button size="xs" variant="ghost" onClick={() => setSelected(new Set())}>
-            Clear
+            {t('review:clear')}
           </Button>
         </HStack>
       )}
@@ -747,7 +747,7 @@ const ReviewPage: React.FC = () => {
             </AlertDialogBody>
             <AlertDialogFooter>
               <Button ref={cancelRef} onClick={onBulkClose} isDisabled={isBulkConfirming}>{t('common:cancel')}</Button>
-              <Button colorScheme="orange" onClick={handleBulkConfirm} isLoading={isBulkConfirming} loadingText="Confirming..." ml={3}>{t('review:confirmAll')}</Button>
+              <Button colorScheme="orange" onClick={handleBulkConfirm} isLoading={isBulkConfirming} loadingText={t('review:confirming')} ml={3}>{t('review:confirmAll')}</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>
@@ -778,13 +778,13 @@ const ReviewPage: React.FC = () => {
                   </InputRightElement>
                 </InputGroup>
                 <Text fontSize="xs" color="gray.500">
-                  Clears all unreviewed pairs with similarity ≤ threshold. Lower threshold = fewer pairs cleared.
+                  {t('review:clearsDescription')}
                 </Text>
               </VStack>
             </AlertDialogBody>
             <AlertDialogFooter>
               <Button ref={cancelRef} onClick={onBulkClearClose} isDisabled={isBulkClearing}>{t('common:cancel')}</Button>
-              <Button colorScheme="green" onClick={handleBulkClear} isLoading={isBulkClearing} loadingText="Clearing..." ml={3}>{t('review:clearAll')}</Button>
+              <Button colorScheme="green" onClick={handleBulkClear} isLoading={isBulkClearing} loadingText={t('review:clearing')} ml={3}>{t('review:clearAll')}</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>
@@ -808,6 +808,7 @@ const ReviewPairRow: React.FC<{
   onClick: () => void;
   onConfirm: () => void;
 }> = ({ pair, isSelected, onSelect, onClick, onConfirm }) => {
+  const { t } = useTranslation();
   const cardBg = useColorModeValue('white', 'gray.700');
   const rowBorderColor = useColorModeValue('gray.200', 'gray.600');
   const hoverBg = useColorModeValue('gray.50', 'gray.600');
@@ -849,7 +850,7 @@ const ReviewPairRow: React.FC<{
       </Box>
 
       <Button size="xs" colorScheme="green" variant="ghost" onClick={(e) => { e.stopPropagation(); onConfirm(); }}>
-        Confirm
+        {t('review:confirm')}
       </Button>
     </Flex>
   );

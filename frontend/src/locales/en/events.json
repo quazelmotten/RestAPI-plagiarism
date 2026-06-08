@@ -1,0 +1,29 @@
+{
+  "eventTypes": {
+    "allTypes": "All types",
+    "upload_queued": "Upload Queued",
+    "upload_completed": "Upload Completed",
+    "upload_failed": "Upload Failed",
+    "file_uploaded": "File Uploaded",
+    "file_deleted": "File Deleted",
+    "file_moved": "File Moved",
+    "file_transferred": "File Transferred",
+    "reanalysis_triggered": "Reanalysis Triggered"
+  },
+  "filterPlaceholder": "Filter by user email",
+  "fromDate": "From date",
+  "toDate": "To date",
+  "clearFilters": "Clear filters",
+  "noEventsFound": "No events found",
+  "columns": {
+    "event": "Event",
+    "upload": "Upload",
+    "assignment": "Assignment",
+    "user": "User",
+    "files": "Files",
+    "timestamp": "Timestamp"
+  },
+  "showing": "Showing {{start}}–{{end}} of {{total}}",
+  "goTo": "Go to:",
+  "ofPages": "/ {{total}}"
+}

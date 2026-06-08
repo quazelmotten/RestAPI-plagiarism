@@ -501,7 +501,7 @@ const handleExport = async () => {
             </AlertDialogBody>
             <AlertDialogFooter>
               <Button ref={cancelRef} onClick={onBulkClose}>{t('common:cancel')}</Button>
-              <Button colorScheme="orange" onClick={handleBulkConfirm} isLoading={isBulkConfirming} loadingText="Confirming..." ml={3}>{t('review:confirmAll')}</Button>
+              <Button colorScheme="orange" onClick={handleBulkConfirm} isLoading={isBulkConfirming} loadingText={t('review:confirming')} ml={3}>{t('review:confirmAll')}</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>
@@ -528,13 +528,13 @@ const handleExport = async () => {
                   </InputRightElement>
                 </InputGroup>
                 <Text fontSize="xs" color="gray.500">
-                  Clears all unreviewed pairs with similarity ≤ threshold. Lower threshold = fewer pairs cleared.
+                  {t('review:clearsDescription')}
                 </Text>
               </VStack>
             </AlertDialogBody>
             <AlertDialogFooter>
               <Button ref={cancelRef} onClick={onBulkClearClose}>{t('common:cancel')}</Button>
-              <Button colorScheme="green" onClick={handleBulkClear} isLoading={bulkClearMutation.isPending} loadingText="Clearing..." ml={3}>{t('review:clearAll')}</Button>
+              <Button colorScheme="green" onClick={handleBulkClear} isLoading={bulkClearMutation.isPending} loadingText={t('review:clearing')} ml={3}>{t('review:clearAll')}</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>

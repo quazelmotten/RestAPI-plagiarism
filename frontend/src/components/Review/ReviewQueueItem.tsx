@@ -60,16 +60,16 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
     try {
       await api.post(API_ENDPOINTS.CLEAR_PAIR(item.id));
       toast({
-        title: 'Cleared',
-        description: 'Pair marked as not plagiarism',
+        title: t('common:toasts.cleared'),
+        description: t('common:toasts.pairMarkedAsNotPlagiarism'),
         status: 'info',
         duration: 2000,
       });
       onAction?.();
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to clear',
+        title: t('common:errors.generic'),
+        description: t('common:toasts.failedToClear'),
         status: 'error',
         duration: 3000,
       });
@@ -88,7 +88,7 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
       _hover={{ bg: itemHoverBg }}
       transition="all 0.2s"
       role="listitem"
-      aria-label={`${item.file_a.filename} vs ${item.file_b.filename}`}
+      aria-label={`${item.file_a.filename} ${t('common:vs')} ${item.file_b.filename}`}
     >
       <Badge colorScheme={isBothUnconfirmed ? "blue" : "gray"} mr={2}>
         {index + 1}
@@ -101,7 +101,7 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
         {item.file_a.is_confirmed && (
           <Badge colorScheme="green" size="sm">✓</Badge>
         )}
-        <Text fontSize="sm" color={mutedTextColor}>vs</Text>
+        <Text fontSize="sm" color={mutedTextColor}>{t('common:vs')}</Text>
         <Text fontSize="sm" fontWeight="medium">
           {item.file_b.filename}
         </Text>
@@ -115,11 +115,11 @@ const ReviewQueueItem: React.FC<ReviewQueueItemProps> = ({
       </Badge>
       
       <HStack spacing={1}>
-<Tooltip label="Review in detail">
+<Tooltip label={t('common:aria.reviewInDetail')}>
           <IconButton
             size="sm"
             icon={<FiEye />}
-            aria-label={`Review ${item.file_a.filename} vs ${item.file_b.filename}`}
+            aria-label={t('review:reviewInDetail') + ' ' + item.file_a.filename + ' vs ' + item.file_b.filename}
             onClick={(e) => { e.stopPropagation(); onReview(item); }}
             _focus={{ boxShadow: 'outline' }}
           />
