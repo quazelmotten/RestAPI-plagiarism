@@ -30,4 +30,5 @@ class RedisConfig(BaseSettings):
     def url(self) -> str:
         """Generate Redis URL."""
         scheme = "rediss" if self.use_ssl else "redis"
-        return f"{scheme}://{self.host}:{self.port}/{self.db}"
+        auth = f":{self.password}@" if self.password else ""
+        return f"{scheme}://{auth}{self.host}:{self.port}/{self.db}"

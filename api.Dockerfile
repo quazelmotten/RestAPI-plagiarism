@@ -9,6 +9,8 @@ RUN npm install
 
 # Copy source and build
 COPY frontend/ ./
+ARG VITE_SUBPATH=plagitype
+ENV VITE_SUBPATH=${VITE_SUBPATH}
 RUN npm run build
 
 # Python API stage
@@ -18,7 +20,7 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY ./src/requirements.txt ./
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --upgrade pip --index-url https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn && pip install -r requirements.txt --index-url https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
 
 # Copy Python source
 COPY ./src ./

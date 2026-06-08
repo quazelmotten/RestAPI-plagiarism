@@ -8,7 +8,7 @@ COPY database ./database/
 COPY shared ./shared/
 
 # Install dependencies (including pydantic for env.py)
-RUN pip install --no-cache-dir sqlalchemy alembic psycopg2-binary asyncpg pydantic pydantic-settings
+RUN pip install --no-cache-dir --index-url https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn sqlalchemy alembic psycopg2-binary asyncpg pydantic pydantic-settings
 
 # Run migrations
 CMD ["sh", "-c", "cd /app/database && alembic upgrade head"]

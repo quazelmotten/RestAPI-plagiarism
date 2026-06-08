@@ -60,6 +60,8 @@ services:
     build:
       context: .
       dockerfile: api.Dockerfile
+      args:
+        VITE_SUBPATH: ${SUBPATH:-plagitype}
     ports:
       - "${API_PORT:-8000}:${API_PORT:-8000}"
     environment:
@@ -117,6 +119,8 @@ services:
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_DB: ${REDIS_DB:-0}
       REDIS_TTL: ${REDIS_TTL:-86400}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_USE_SSL: ${REDIS_USE_SSL:-false}
     depends_on:
       migrations:
         condition: service_completed_successfully
@@ -174,16 +178,13 @@ services:
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_DB: ${REDIS_DB:-0}
       REDIS_TTL: ${REDIS_TTL:-86400}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_USE_SSL: ${REDIS_USE_SSL:-false}
+      REDIS_FINGERPRINT_TTL: ${REDIS_FINGERPRINT_TTL:-604800}
 
       # Worker
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
       WORKER_PREFETCH_COUNT: ${WORKER_PREFETCH_COUNT:-1}
-
-      # Embedding service (F2LLM-v2-80M)
-      EMBEDDING_ENABLED: ${EMBEDDING_ENABLED:-false}  # v2.0 detector doesn't need embeddings
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-codefuse-ai/F2LLM-v2-80M}
-      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-256}
-      EMBEDDING_USE_QUANTIZATION: ${EMBEDDING_USE_QUANTIZATION:-true}
 
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -214,12 +215,14 @@ services:
       RABBITMQ_DEFAULT_USER: ${RMQ_USER:-plagiarism_mq_user}
       RABBITMQ_DEFAULT_PASS: ${RMQ_PASS}
       RABBITMQ_FEATURE_FLAGS: stream_filtering
-      RABBITMQ_NODE_PORT: ${RMQ_PORT:-5672}
+      RABBITMQ_NODE_PORT: ${RMQ_PORT:-5777}
     ports:
       - "${RMQ_PORT:-5672}:${RMQ_PORT:-5672}"
-      - "${RMQ_MGMT_PORT:-15672}:15672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/advanced.config:/etc/rabbitmq/advanced.config:ro
     networks:
       - plagiarism-network
     healthcheck:
@@ -236,7 +239,7 @@ services:
     container_name: plagiarism-redis
     hostname: redis
     image: redis:8.6.1-alpine
-    command: redis-server --port ${REDIS_PORT:-6379} --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru
+    command: redis-server --port ${REDIS_PORT:-6379} --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-512mb} --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
     ports:
       - "${REDIS_PORT:-6379}:${REDIS_PORT:-6379}"
     volumes:
@@ -244,7 +247,7 @@ services:
     networks:
       - plagiarism-network
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -p ${REDIS_PORT:-6379} ping"]
+      test: ["CMD-SHELL", "redis-cli -p ${REDIS_PORT:-6379} -a ${REDIS_PASSWORD} ping"]
       interval: 10s
       timeout: 5s
       retries: 5

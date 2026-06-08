@@ -124,15 +124,6 @@ MAX_UPLOAD_REQUEST_SIZE=52428800
 MAX_FILES_PER_BATCH=100
 
 # =============================================================================
-# EMBEDDING MODEL CONFIGURATION
-# =============================================================================
-EMBEDDING_MODEL=codefuse-ai/F2LLM-v2-80M
-EMBEDDING_DEVICE=cpu
-EMBEDDING_BATCH_SIZE=32
-EMBEDDING_MAX_LENGTH=512
-EMBEDDING_QUANTIZATION=float16
-
-# =============================================================================
 # API AUTHENTICATION
 # =============================================================================
 # API Keys for programmatic access (auto-generated)
