@@ -77,7 +77,7 @@ services:
       
       # RabbitMQ
       RMQ_HOST: rabbitmq
-      RMQ_PORT: ${RMQ_PORT:-5672}
+      RMQ_PORT: ${RMQ_PORT:-5777}
       RMQ_USER: ${RMQ_USER:-plagiarism_mq_user}
       RMQ_PASS: ${RMQ_PASS}
       RMQ_QUEUE_EXCHANGE: ${RMQ_QUEUE_EXCHANGE:-plagiarism}
@@ -86,7 +86,7 @@ services:
       RMQ_QUEUE_DEAD_LETTER_EXCHANGE: ${RMQ_QUEUE_DEAD_LETTER_EXCHANGE:-plagiarism_dlx}
       RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER: ${RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER:-plagiarism.dead}
       RMQ_QUEUE_DEAD_LETTER_NAME: ${RMQ_QUEUE_DEAD_LETTER_NAME:-plagiarism_dead}
-      
+
       # API
       ENVIRONMENT: ${ENVIRONMENT:-production}
       API_HOST: ${API_HOST:-0.0.0.0}
@@ -163,7 +163,7 @@ services:
 
       # RabbitMQ
       RMQ_HOST: rabbitmq
-      RMQ_PORT: ${RMQ_PORT:-5672}
+      RMQ_PORT: ${RMQ_PORT:-5777}
       RMQ_USER: ${RMQ_USER:-plagiarism_mq_user}
       RMQ_PASS: ${RMQ_PASS}
       RMQ_QUEUE_EXCHANGE: ${RMQ_QUEUE_EXCHANGE:-plagiarism}
@@ -215,14 +215,17 @@ services:
       RABBITMQ_DEFAULT_USER: ${RMQ_USER:-plagiarism_mq_user}
       RABBITMQ_DEFAULT_PASS: ${RMQ_PASS}
       RABBITMQ_FEATURE_FLAGS: stream_filtering
-      RABBITMQ_NODE_PORT: ${RMQ_PORT:-5777}
+      RMQ_PORT: ${RMQ_PORT:-5777}
+      RABBITMQ_MANAGEMENT_PORT: ${RABBITMQ_MANAGEMENT_PORT:-15672}
+      RABBITMQ_DIST_PORT: ${RABBITMQ_DIST_PORT:-25672}
     ports:
-      - "${RMQ_PORT:-5672}:${RMQ_PORT:-5672}"
-      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+      - "${RMQ_HOST_PORT:-5672}:${RMQ_PORT:-5777}"
+      - "${RABBITMQ_MANAGEMENT_HOST_PORT:-15672}:${RABBITMQ_MANAGEMENT_PORT:-15672}"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
-      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./rabbitmq/advanced.config:/etc/rabbitmq/advanced.config:ro
+      - ./rabbitmq/init.sh:/init.sh:ro
+    entrypoint: ["/bin/sh", "/init.sh"]
+    command: ["rabbitmq-server"]
     networks:
       - plagiarism-network
     healthcheck:

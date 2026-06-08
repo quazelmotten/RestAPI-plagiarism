@@ -1,0 +1,12 @@
+[
+  {kernel, [
+    {inet_dist_listen_min, 25672},
+    {inet_dist_listen_max, 25672}
+  ]},
+  {rabbit, [
+    {tcp_listeners, [5777]}
+  ]},
+  {rabbitmq_management, [
+    {listener, [{port, 15672}]}
+  ]}
+].
