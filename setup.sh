@@ -51,12 +51,13 @@ echo
 # Generate secure passwords and keys
 DB_PASS=$(generate_password)
 RMQ_PASS=$(generate_password)
+REDIS_PASS=$(generate_password)
 SECRET_KEY=$(generate_secret)
 ADMIN_PASS=$(generate_password)
 
 echo "Creating .env file with secure passwords..."
 
-# Create .env from template
+# Create .env from template (must match .env.example)
 cat > .env << EOF
 # =============================================================================
 # DATABASE CONFIGURATION
@@ -75,7 +76,11 @@ DB_POOL_TIMEOUT=30
 # RABBITMQ CONFIGURATION
 # =============================================================================
 RMQ_HOST=rabbitmq
-RMQ_PORT=5672
+RMQ_PORT=5777
+RMQ_HOST_PORT=5672
+RABBITMQ_MANAGEMENT_PORT=15672
+RABBITMQ_MANAGEMENT_HOST_PORT=15672
+RABBITMQ_DIST_PORT=25672
 RMQ_USER=plagiarism_mq_user
 RMQ_PASS=${RMQ_PASS}
 
@@ -100,44 +105,6 @@ CORS_ORIGINS=http://localhost:3000
 SUBPATH=plagitype
 
 # =============================================================================
-# AUTHENTICATION CONFIGURATION
-# =============================================================================
-# JWT secret key - REQUIRED (auto-generated)
-SECRET_KEY=${SECRET_KEY}
-
-# Initial admin user (created automatically on first startup)
-INITIAL_ADMIN_EMAIL=admin@example.com
-INITIAL_ADMIN_PASSWORD=${ADMIN_PASS}
-
-# Token expiration
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
-REFRESH_TOKEN_EXPIRE_DAYS=7
-
-# =============================================================================
-# PLAGIARISM DETECTION SETTINGS
-# =============================================================================
-DEFAULT_PLAGIARISM_THRESHOLD=0.75
-INVERTED_INDEX_MIN_OVERLAP_THRESHOLD=0.15
-SUPPORTED_LANGUAGES=python,java,cpp,javascript,typescript,go,rust
-MAX_FILE_SIZE=1048576
-MAX_UPLOAD_REQUEST_SIZE=52428800
-MAX_FILES_PER_BATCH=100
-
-# =============================================================================
-# API AUTHENTICATION
-# =============================================================================
-# API Keys for programmatic access (auto-generated)
-API_KEY_1=$(openssl rand -hex 24)
-API_KEY_2=$(openssl rand -hex 24)
-API_KEY_3=$(openssl rand -hex 24)
-
-# =============================================================================
-# STORAGE CONFIGURATION
-# =============================================================================
-STORAGE_LOCAL_PATH=/app/s3_storage
-BUCKET_NAME=plagiarism-bucket
-
-# =============================================================================
 # RATE LIMITING
 # =============================================================================
 RATE_LIMIT_ENABLED=true
@@ -156,7 +123,7 @@ WORKER_PREFETCH_COUNT=1
 REDIS_HOST=redis
 REDIS_PORT=6379
 REDIS_DB=0
-REDIS_PASSWORD=
+REDIS_PASSWORD=${REDIS_PASS}
 REDIS_USE_SSL=false
 REDIS_TTL=86400
 REDIS_FINGERPRINT_TTL=604800
@@ -171,9 +138,35 @@ LOG_FORMAT=json
 # =============================================================================
 # MONITORING (Optional)
 # =============================================================================
-# SENTRY_DSN=
-# METRICS_ENDPOINT=
+SENTRY_DSN=
+METRICS_ENDPOINT=
 ENABLE_PROFILING=false
+
+# =============================================================================
+# AUTHENTICATION CONFIGURATION
+# =============================================================================
+SECRET_KEY=${SECRET_KEY}
+INITIAL_ADMIN_EMAIL=admin@example.com
+INITIAL_ADMIN_PASSWORD=${ADMIN_PASS}
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# =============================================================================
+# STORAGE CONFIGURATION
+# =============================================================================
+STORAGE_LOCAL_PATH=/app/s3_storage
+BUCKET_NAME=plagiarism-bucket
+
+# =============================================================================
+# PLAGIARISM DETECTION SETTINGS
+# =============================================================================
+DEFAULT_PLAGIARISM_THRESHOLD=0.75
+INVERTED_INDEX_MIN_OVERLAP_THRESHOLD=0.15
+SUPPORTED_LANGUAGES=python,java,cpp,c,javascript,typescript,go,rust
+MAX_FILE_SIZE=1048576
+MAX_UPLOAD_REQUEST_SIZE=52428800
+MAX_FILES_PER_BATCH=100
 EOF
 
 echo -e "${GREEN}✓ .env file created successfully!${NC}"
@@ -191,6 +184,7 @@ echo
 echo "Your configuration has been generated with:"
 echo "  • Strong database password (32 chars)"
 echo "  • Strong RabbitMQ password (32 chars)"
+echo "  • Strong Redis password (32 chars)"
 echo "  • JWT secret key (64 chars hex)"
 echo "  • Initial admin user credentials"
 echo ""

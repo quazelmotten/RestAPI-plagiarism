@@ -13,7 +13,6 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-venv && \
 COPY database ./
 COPY shared /app/shared
 COPY src /app/src
-COPY --chown=postgres:postgres .env ./
 
 ENV PYTHONPATH=/app
 
