@@ -49,7 +49,7 @@ import type {
   PlagiarismMatch as ApiPlagiarismMatch,
   ApiError,
 } from '../../types';
-import { PLAGIARISM_TYPE_COLORS } from '../../types';
+import { MINIMAP_PALETTE } from '../../types';
 import ErrorBoundary from '../ErrorBoundary';
 import { useFileNotes, useAddNote, useDeleteNote } from '../../hooks/useGrading';
 import { useToast } from '@chakra-ui/react';
@@ -324,7 +324,7 @@ const PairComparisonModal: React.FC<PairComparisonModalProps> = ({
         const end = isFileA ? m.file_a_end_line : m.file_b_end_line;
         const top = ((start - 1) / totalLines) * 100;
         const height = Math.max(((end - start + 1) / totalLines) * 100, 0.5);
-        const color = PLAGIARISM_TYPE_COLORS[m.plagiarism_type ?? 1] || 'rgba(255,235,59,0.4)';
+        const color = MINIMAP_PALETTE[idx % MINIMAP_PALETTE.length];
         return { top, height, color, idx };
       });
 

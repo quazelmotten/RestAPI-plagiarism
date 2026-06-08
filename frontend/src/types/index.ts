@@ -41,6 +41,17 @@ export const PLAGIARISM_TYPE_BORDERS: Record<number, string> = {
   4: '#D32F2F',
 };
 
+export const MINIMAP_PALETTE: string[] = [
+  'rgba(244, 67, 54, 0.4)',    // red
+  'rgba(33, 150, 243, 0.4)',   // blue
+  'rgba(76, 175, 80, 0.4)',    // green
+  'rgba(255, 235, 59, 0.45)',  // yellow
+  'rgba(156, 39, 176, 0.4)',   // purple
+  'rgba(255, 152, 0, 0.4)',    // orange
+  'rgba(0, 188, 212, 0.4)',    // cyan
+  'rgba(233, 30, 99, 0.4)',    // pink
+];
+
 export const PLAGIARISM_TYPE_LABELS: Record<number, string> = {
   1: 'Exact copy',
   2: 'Renamed identifiers',

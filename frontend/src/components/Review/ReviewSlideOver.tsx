@@ -42,7 +42,7 @@ import type {
   ApiError,
   ReviewPair,
 } from '../../types';
-import { PLAGIARISM_TYPE_COLORS } from '../../types';
+import { MINIMAP_PALETTE } from '../../types';
 
 type PlagiarismMatch = ApiPlagiarismMatch;
 
@@ -235,7 +235,7 @@ const ReviewSlideOver: React.FC<ReviewSlideOverProps> = ({
         const end = isFileA ? m.file_a_end_line : m.file_b_end_line;
         const top = ((start - 1) / totalLines) * 100;
         const height = Math.max(((end - start + 1) / totalLines) * 100, 0.5);
-        const color = PLAGIARISM_TYPE_COLORS[m.plagiarism_type ?? 1] || 'rgba(255,235,59,0.4)';
+        const color = MINIMAP_PALETTE[idx % MINIMAP_PALETTE.length];
         return { top, height, color, idx };
       });
 

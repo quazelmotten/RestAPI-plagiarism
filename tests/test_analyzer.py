@@ -39,7 +39,10 @@ class TestAnalyzeSources:
         s1 = "def foo(x):\n    return x + 1\n"
         s2 = "def bar(y):\n    return y + 1\n"
         result = self.analyzer.analyze_sources(s1, s2, "python")
-        assert len(result.matches) > 0
+        # AST-subtree matching detects identical structure despite different names
+        assert result.similarity_ratio > 0
+        assert result.metrics.left_covered > 0
+        assert result.metrics.right_covered > 0
 
     def test_metrics_computed(self):
         s1 = "def foo():\n    return 1\n"

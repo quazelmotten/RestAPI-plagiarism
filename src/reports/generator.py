@@ -9,8 +9,7 @@ import aiofiles
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
-# Import constants from plagiarism_core
-from plagiarism_core.models import PLAGIARISM_TYPE_LABELS
+# Match type labels (all matches are type 1 in simplified mode)
 
 # Context lines constant
 CONTEXT_LINES = 5  # Number of context lines before/after match
@@ -785,7 +784,7 @@ async def build_report_payload(
                 "file2_html": file2_html,
                 "similarity": match.get("similarity"),
                 "plagiarism_type": plag_type,
-                "type_label": PLAGIARISM_TYPE_LABELS.get(plag_type, "Unknown"),
+                "type_label": "Match" if plag_type else "Unknown",
                 "confidence": confidence,
                 "detection_method": detection_method,
                 "embedding_similarity": embedding_sim,

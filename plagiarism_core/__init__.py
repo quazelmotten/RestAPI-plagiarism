@@ -7,15 +7,9 @@ AST analysis, and similarity detection.
 
 __version__ = "2.0.0"
 
-from .canonicalizer import canonicalize_full as canonicalize_full
-from .canonicalizer import canonicalize_type4 as canonicalize_type4
-from .canonicalizer import normalize_identifiers as normalize_identifiers
-from .detector import PlagiarismDetector
 from .analyzer import Analyzer
 from .models import AnalysisResult as AnalysisResult
-from .models import FunctionInfo as FunctionInfo
 from .models import Match as Match
-from .models import PlagiarismType as PlagiarismType
 from .models import Point as Point
 from .models import Region as Region
 from .models import SimilarityMetrics as SimilarityMetrics
@@ -34,16 +28,15 @@ def detect_plagiarism(
     """
     Convenience function for single-shot plagiarism detection.
 
-    If pre-parsed trees (tree_a, bytes_a, tree_b, bytes_b) are provided,
-    they will be reused across all sub-detectors, avoiding redundant
-    parsing.
-
-    Creates a PlagiarismDetector and returns list of Match objects.
+    Uses Analyzer with the simple line-hash matcher.
+    Returns list of Match objects (all type 1, no classification).
     """
-    detector = PlagiarismDetector()
-    result = detector.detect(source_a, source_b, lang=lang_code,
-                              tree_a=tree_a, bytes_a=bytes_a,
-                              tree_b=tree_b, bytes_b=bytes_b)
+    analyzer = Analyzer()
+    result = analyzer.analyze_sources(
+        source_a, source_b, language=lang_code,
+        tree1=tree_a, bytes1=bytes_a,
+        tree2=tree_b, bytes2=bytes_b,
+    )
     return result.matches
 
 
@@ -59,10 +52,6 @@ def detect_plagiarism_from_files(
 ) -> list:
     """
     Convenience function for file-based plagiarism detection.
-
-    If pre-parsed trees (tree_a, bytes_a, tree_b, bytes_b) are provided,
-    they will be reused across all sub-detectors. When not provided,
-    the method parses after reading the files.
     """
     with open(file_a, encoding="utf-8", errors="ignore") as f:
         source_a = f.read()
@@ -79,16 +68,10 @@ def detect_plagiarism_from_files(
 __all__ = [
     "detect_plagiarism",
     "detect_plagiarism_from_files",
-    "PlagiarismDetector",
     "Analyzer",
     "AnalysisResult",
     "Match",
-    "PlagiarismType",
     "SimilarityMetrics",
-    "FunctionInfo",
     "Point",
     "Region",
-    "canonicalize_full",
-    "canonicalize_type4",
-    "normalize_identifiers",
 ]

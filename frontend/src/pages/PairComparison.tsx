@@ -26,7 +26,7 @@ import api, { API_ENDPOINTS } from '../services/api';
 import FilePickerModal from '../components/FilePickerModal';
 import { useSearchParams } from 'react-router';
 import type { FileInfo, FileContent, PlagiarismResult as ApiPlagiarismResult, PlagiarismMatch as ApiPlagiarismMatch, ApiError } from '../types';
-import { PLAGIARISM_TYPE_LABELS, PLAGIARISM_TYPE_COLORS } from '../types';
+import { MINIMAP_PALETTE } from '../types';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 type PlagiarismMatch = ApiPlagiarismMatch;
@@ -222,24 +222,90 @@ const PairComparison: React.FC = () => {
   }, [currentPairMemo, fileAContent, fileBContent]);
 
   const minimapData = useMemo(() => {
-    const matches = currentPairMemo?.matches || [];
     const fileALines = (fileAContent?.content || '').split('\n').length;
     const fileBLines = (fileBContent?.content || '').split('\n').length;
     if (fileALines === 0 || fileBLines === 0) return { a: [], b: [] };
 
-    const buildBlocks = (totalLines: number, isFileA: boolean) =>
-      matches.map((m, idx) => {
-        const start = isFileA ? m.file_a_start_line : m.file_b_start_line;
-        const end = isFileA ? m.file_a_end_line : m.file_b_end_line;
-        const top = ((start - 1) / totalLines) * 100;
-        const height = Math.max(((end - start + 1) / totalLines) * 100, 0.5);
-        const color = PLAGIARISM_TYPE_COLORS[m.plagiarism_type ?? 1] || 'rgba(255,235,59,0.4)';
-        return { top, height, color, idx };
+    // Build deduplicated minimap blocks from per-line resolved types.
+    // This avoids the rainbow effect caused by overlapping matches (e.g. whole-file
+    // matches stacked on top of granular matches). Each line gets exactly one color
+    // (hardest type wins), and contiguous same-color lines are merged into one block.
+    const buildBlocks = (totalLines: number, lineTypeMap: Map<number, number>) => {
+      const blocks: Array<{ top: number; height: number; color: string }> = [];
+      let runStart: number | null = null;
+      let runType: number | null = null;
+
+      for (let i = 0; i < totalLines; i++) {
+        const type = lineTypeMap.get(i) ?? 0;
+        if (type === runType) {
+          // Continue current run
+          continue;
+        }
+        // End previous run
+        if (runStart !== null && runType !== null && runType > 0) {
+          blocks.push({
+            top: (runStart / totalLines) * 100,
+            height: Math.max(((i - runStart) / totalLines) * 100, 0.5),
+            color: MINIMAP_PALETTE[(runType - 100) % MINIMAP_PALETTE.length],
+          });
+        }
+        runStart = i;
+        runType = type;
+      }
+      // Flush final run
+      if (runStart !== null && runType !== null && runType > 0) {
+        blocks.push({
+          top: (runStart / totalLines) * 100,
+          height: Math.max(((totalLines - runStart) / totalLines) * 100, 0.5),
+          color: MINIMAP_PALETTE[(runType - 100) % MINIMAP_PALETTE.length],
+        });
+      }
+      return blocks;
+    };
+
+    // Reuse the same line-type resolution logic as matchStats
+    const matches = currentPairMemo?.matches || [];
+    const contentA = fileAContent?.content || '';
+    const langA = fileAContent?.language || '';
+    const contentB = fileBContent?.content || '';
+    const langB = fileBContent?.language || '';
+
+    const computeEffectiveLines = (content: string, lang: string): Set<number> => {
+      const lines = content.split('\n');
+      const set = new Set<number>();
+      lines.forEach((line, idx) => {
+        const trimmed = line.trim();
+        if (trimmed === '') return;
+        if (isCommentLine(line, lang)) return;
+        set.add(idx);
       });
+      return set;
+    };
+
+    const effectiveA = computeEffectiveLines(contentA, langA);
+    const effectiveB = computeEffectiveLines(contentB, langB);
+
+    const lineTypeA = new Map<number, number>();
+    const lineTypeB = new Map<number, number>();
+    matches.forEach((m, idx) => {
+      const type = idx + 100;
+      for (let i = m.file_a_start_line - 1; i <= m.file_a_end_line - 1; i++) {
+        if (effectiveA.has(i)) {
+          const current = lineTypeA.get(i) ?? 0;
+          if (type > current) lineTypeA.set(i, type);
+        }
+      }
+      for (let i = m.file_b_start_line - 1; i <= m.file_b_end_line - 1; i++) {
+        if (effectiveB.has(i)) {
+          const current = lineTypeB.get(i) ?? 0;
+          if (type > current) lineTypeB.set(i, type);
+        }
+      }
+    });
 
     return {
-      a: buildBlocks(fileALines, true),
-      b: buildBlocks(fileBLines, false),
+      a: buildBlocks(fileALines, lineTypeA),
+      b: buildBlocks(fileBLines, lineTypeB),
     };
   }, [currentPairMemo, fileAContent, fileBContent]);
 
@@ -647,9 +713,9 @@ const PairComparison: React.FC = () => {
             <ErrorBoundary>
               <Flex flex={1} gap={0} align="stretch" minH={0} overflow="hidden">
                 <Box w="16px" bg={minimapBg} position="relative" flexShrink={0}>
-                  {minimapData.a.map(block => (
+                  {minimapData.a.map((block, i) => (
                     <Box
-                      key={block.idx}
+                      key={i}
                       position="absolute"
                       left="2px"
                       right="2px"
@@ -697,9 +763,9 @@ const PairComparison: React.FC = () => {
                 </Flex>
 
                 <Box w="16px" bg={minimapBg} position="relative" flexShrink={0}>
-                  {minimapData.b.map(block => (
+                  {minimapData.b.map((block, i) => (
                     <Box
-                      key={block.idx}
+                      key={i}
                       position="absolute"
                       left="2px"
                       right="2px"

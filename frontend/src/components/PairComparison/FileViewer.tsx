@@ -14,11 +14,7 @@ import {
 import { Highlight, themes } from 'prism-react-renderer';
 import { useTranslation } from 'react-i18next';
 import type { PlagiarismMatch } from '../../types';
-import {
-  PLAGIARISM_TYPE_COLORS,
-  PLAGIARISM_TYPE_COLORS_HOVER,
-  PLAGIARISM_TYPE_BORDERS,
-} from '../../types';
+import { MINIMAP_PALETTE } from '../../types';
 
 const prismLanguageMap: Record<string, string> = {
   javascript: 'javascript',
@@ -54,14 +50,9 @@ const prismLanguageMap: Record<string, string> = {
 };
 
 // Fallback colors for matches without type info (backward compat)
-const FALLBACK_COLORS = [
-  'rgba(255, 235, 59, 0.3)',
-  'rgba(76, 175, 80, 0.25)',
-  'rgba(33, 150, 243, 0.25)',
-  'rgba(156, 39, 176, 0.25)',
-];
+const FALLBACK_COLORS = MINIMAP_PALETTE;
 
-const FALLBACK_BORDERS = ['#FBC02D', '#388E3C', '#1976D2', '#7B1FA2'];
+const FALLBACK_BORDERS = ['#D32F2F', '#1976D2', '#388E3C', '#FBC02D', '#7B1FA2', '#E65100', '#0097A7', '#C2185B'];
 
 const isCommentLine = (line: string, language: string): boolean => {
   const trimmed = line.trim();
@@ -95,40 +86,31 @@ const isCommentLine = (line: string, language: string): boolean => {
   return false;
 };
 
-const getMatchBg = (match: PlagiarismMatch | null, isHovered: boolean): string => {
+const getMatchBg = (match: PlagiarismMatch | null, isHovered: boolean, matchIndex?: number): string => {
   if (!match) return 'transparent';
-  const ptype = match.plagiarism_type;
-  if (ptype && PLAGIARISM_TYPE_COLORS[ptype]) {
-    return isHovered
-      ? PLAGIARISM_TYPE_COLORS_HOVER[ptype]
-      : PLAGIARISM_TYPE_COLORS[ptype];
-  }
-  // Fallback: use index-based coloring
-  return isHovered ? 'rgba(255, 235, 59, 0.7)' : FALLBACK_COLORS[0];
+  const idx = matchIndex ?? 0;
+  const base = MINIMAP_PALETTE[idx % MINIMAP_PALETTE.length];
+  if (!isHovered) return base;
+  return base.replace(/0\.\d+\)$/, '0.7)');
 };
 
-const getMatchBorder = (match: PlagiarismMatch | null): string => {
+const getMatchBorder = (match: PlagiarismMatch | null, matchIndex?: number): string => {
   if (!match) return 'transparent';
-  const ptype = match.plagiarism_type;
-  if (ptype && PLAGIARISM_TYPE_BORDERS[ptype]) {
-    return PLAGIARISM_TYPE_BORDERS[ptype];
-  }
-  return FALLBACK_BORDERS[0];
+  const idx = matchIndex ?? 0;
+  return FALLBACK_BORDERS[idx % FALLBACK_BORDERS.length];
 };
 
 const getMatchTooltip = (match: PlagiarismMatch | null, t: (key: string, opts?: any) => string): string => {
   if (!match) return '';
-  const ptype = match.plagiarism_type;
-  const label = ptype ? t(`page.matchTypes.${ptype}`, `Type ${ptype}`) : t('page.match');
   if (match.description) {
-    return `${label}: ${match.description}`;
+    return `${t('page.match')}: ${match.description}`;
   }
   if (match.details?.renames && match.details.renames.length > 0) {
     const renames = (match.details.renames as Array<{ original: string; renamed: string }>)
       .map((r) => `${r.original} → ${r.renamed}`).join(', ');
-    return `${label}: ${renames}`;
+    return `${t('page.match')}: ${renames}`;
   }
-  return label;
+  return t('page.match');
 };
 
 interface FileViewerProps {
@@ -172,20 +154,39 @@ const FileViewer: React.FC<FileViewerProps> = ({
 
   const lines = useMemo(() => content.split('\n'), [content]);
 
+  const isNonCodeLine = useCallback((line: string): boolean => {
+    const trimmed = line.trim();
+    if (!trimmed) return true;
+    if (isCommentLine(line, language)) return true;
+    return false;
+  }, [language]);
+
   const lineMatchMap = useMemo(() => {
     const map: Array<{ matchIndex: number; match: PlagiarismMatch } | null> = new Array(lines.length).fill(null);
     matches.forEach((match, index) => {
-      const startLine = isFileA ? match.file_a_start_line : match.file_b_start_line;
-      const endLine = isFileA ? match.file_a_end_line : match.file_b_end_line;
+      let startLine = isFileA ? match.file_a_start_line : match.file_b_start_line;
+      let endLine = isFileA ? match.file_a_end_line : match.file_b_end_line;
+
+      // Trim leading non-code lines (blank, comment-only)
+      while (startLine <= endLine && startLine - 1 < lines.length && isNonCodeLine(lines[startLine - 1])) {
+        startLine++;
+      }
+      // Trim trailing non-code lines
+      while (endLine >= startLine && endLine - 1 < lines.length && isNonCodeLine(lines[endLine - 1])) {
+        endLine--;
+      }
+
       for (let lineNum = Math.max(1, startLine); lineNum <= endLine && lineNum <= lines.length; lineNum++) {
         const idx = lineNum - 1;
-        if (map[idx] === null) {
+        const matchType = match.plagiarism_type ?? 1;
+        const currentType = map[idx]?.match?.plagiarism_type ?? 0;
+        if (map[idx] === null || matchType > currentType) {
           map[idx] = { matchIndex: index, match };
         }
       }
     });
     return map;
-  }, [lines.length, matches, isFileA]);
+  }, [lines.length, matches, isFileA, isNonCodeLine]);
 
   const displayedLines = useMemo(() => {
     const result: Array<{ originalIdx: number; originalLineNumber: number; line: string }> = [];
@@ -238,8 +239,8 @@ const FileViewer: React.FC<FileViewerProps> = ({
               const matchInfo = lineMatchMap[originalIdx];
               const isHovered = matchInfo !== null && matchInfo.matchIndex === hoveredMatchIndex;
                const tooltip = getMatchTooltip(matchInfo?.match ?? null, t);
-              const bg = getMatchBg(matchInfo?.match ?? null, isHovered);
-              const border = getMatchBorder(matchInfo?.match ?? null);
+               const bg = getMatchBg(matchInfo?.match ?? null, isHovered, matchInfo?.matchIndex);
+               const border = getMatchBorder(matchInfo?.match ?? null, matchInfo?.matchIndex);
 
               return (
                 <Flex

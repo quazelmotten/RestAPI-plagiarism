@@ -3,27 +3,7 @@ Core data structures for plagiarism detection.
 """
 
 from dataclasses import dataclass
-from enum import IntEnum
 from typing import TypedDict
-
-
-class PlagiarismType(IntEnum):
-    """Classification of detected plagiarism."""
-
-    NONE = 0
-    EXACT = 1
-    RENAMED = 2
-    REORDERED = 3
-    SEMANTIC = 4
-
-
-PLAGIARISM_TYPE_LABELS = {
-    PlagiarismType.NONE: "No match",
-    PlagiarismType.EXACT: "Exact copy",
-    PlagiarismType.RENAMED: "Renamed identifiers",
-    PlagiarismType.REORDERED: "Reordered code",
-    PlagiarismType.SEMANTIC: "Semantic equivalent",
-}
 
 
 @dataclass(frozen=True)
@@ -62,12 +42,11 @@ class Match:
     file1: SourceRegion
     file2: SourceRegion
     kgram_count: int
-    plagiarism_type: int = PlagiarismType.EXACT
+    plagiarism_type: int = 1
     similarity: float = 1.0
     details: dict | None = None
     description: str | None = None
 
-    # New-style Region-based access
     @property
     def file1_region(self) -> Region:
         return Region(
@@ -81,17 +60,6 @@ class Match:
             start=Point(line=self.file2["start_line"], col=self.file2["start_col"]),
             end=Point(line=self.file2["end_line"], col=self.file2["end_col"]),
         )
-
-
-@dataclass
-class FunctionInfo:
-    """Extracted function with structural and semantic hashes."""
-
-    name: str
-    qualified_name: str
-    region: Region
-    structural_hash: int
-    semantic_hash: int
 
 
 @dataclass
