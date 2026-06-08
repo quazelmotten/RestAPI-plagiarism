@@ -76,5 +76,7 @@
   "clear": "Очистить",
   "reviewInDetail": "Подробнее",
   "topSimilarities": "Топ схожести",
-  "vs": "против"
+  "vs": "против",
+  "allAssignments": "Все задания",
+  "noAssignments": "Задания не найдены"
 }

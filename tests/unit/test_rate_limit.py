@@ -13,7 +13,6 @@ from auth.rate_limit import (
     get_client_ip,
     login_rate_limit,
     rate_limit,
-    register_rate_limit,
 )
 
 
@@ -139,14 +138,10 @@ async def test_rate_limit_dependency_blocked():
         assert exc_info.value.status_code == status.HTTP_429_TOO_MANY_REQUESTS
         assert exc_info.value.headers["Retry-After"] == "60"
 
+    def test_rate_limit_factories():
+        """Test rate limit factory functions return configured dependencies."""
+        login_limiter = login_rate_limit()
+        assert callable(login_limiter)
 
-def test_rate_limit_factories():
-    """Test rate limit factory functions return configured dependencies."""
-    login_limiter = login_rate_limit()
-    assert callable(login_limiter)
-
-    register_limiter = register_rate_limit()
-    assert callable(register_limiter)
-
-    forgot_limiter = forgot_password_rate_limit()
-    assert callable(forgot_limiter)
+        forgot_limiter = forgot_password_rate_limit()
+        assert callable(forgot_limiter)

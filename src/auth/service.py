@@ -89,7 +89,10 @@ def get_token_expiry(token: str) -> datetime | None:
     """Extract expiration time from token."""
     try:
         payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.jwt_algorithm], options={"verify_exp": False}
+            token,
+            settings.secret_key,
+            algorithms=[settings.jwt_algorithm],
+            options={"verify_exp": False},
         )
         exp_timestamp = payload.get("exp")
         if exp_timestamp:
@@ -149,7 +152,9 @@ class AuthService:
             return user
 
     @staticmethod
-    async def create_user(email: str, password: str, is_global_admin: bool = False) -> User:
+    async def create_user(
+        email: str, password: str, is_global_admin: bool = False, username: str | None = None
+    ) -> User:
         """Create a new user with password validation."""
         validation_errors = validate_password(password)
         if validation_errors:
@@ -168,6 +173,7 @@ class AuthService:
                 email=email_normalized,
                 hashed_password=hashed_password,
                 is_global_admin=is_global_admin,
+                username=username,
             )
             session.add(user)
             await session.commit()
@@ -231,7 +237,9 @@ class AuthService:
         return True
 
     @staticmethod
-    async def update_user_profile(user_id: str, username: str | None = None, email: str | None = None) -> User | None:
+    async def update_user_profile(
+        user_id: str, username: str | None = None, email: str | None = None
+    ) -> User | None:
         """Update a user's profile (username and/or email). Returns updated user or None."""
         async with async_session_maker() as session:
             result = await session.execute(select(User).where(User.id == user_id))
@@ -465,7 +473,9 @@ class AuthService:
         return hashlib.sha256(key.encode()).hexdigest()
 
     @staticmethod
-    async def create_api_key(user: User, name: str | None = None, expires_in_days: int | None = None) -> tuple[ApiKey, str]:
+    async def create_api_key(
+        user: User, name: str | None = None, expires_in_days: int | None = None
+    ) -> tuple[ApiKey, str]:
         """Create a new API key for the user. Returns (ApiKey object, raw key)."""
         raw_key = AuthService.generate_api_key()
         key_hash = AuthService.hash_key(raw_key)
@@ -518,7 +528,9 @@ class AuthService:
             return result.scalar_one_or_none()
 
     @staticmethod
-    async def update_api_key(key_id: uuid.UUID, name: str | None = None, expires_in_days: int | None = None) -> ApiKey | None:
+    async def update_api_key(
+        key_id: uuid.UUID, name: str | None = None, expires_in_days: int | None = None
+    ) -> ApiKey | None:
         """Update an API key's name and/or expiration. Returns updated key or None if not found."""
         async with async_session_maker() as session:
             result = await session.execute(
@@ -540,9 +552,7 @@ class AuthService:
         """Resolve a raw API key to the associated user, if valid and not expired."""
         key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
         async with async_session_maker() as session:
-            result = await session.execute(
-                select(ApiKey).where(ApiKey.key_hash == key_hash)
-            )
+            result = await session.execute(select(ApiKey).where(ApiKey.key_hash == key_hash))
             api_key = result.scalar_one_or_none()
             if not api_key:
                 return None
@@ -561,8 +571,6 @@ class AuthService:
         """List all API keys for all users. Admin only."""
         async with async_session_maker() as session:
             result = await session.execute(
-                select(ApiKey)
-                .options(selectinload(ApiKey.user))
-                .order_by(ApiKey.created_at.desc())
+                select(ApiKey).options(selectinload(ApiKey.user)).order_by(ApiKey.created_at.desc())
             )
             return result.scalars().all()

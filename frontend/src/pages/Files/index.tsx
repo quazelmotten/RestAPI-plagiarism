@@ -53,7 +53,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api, { API_ENDPOINTS } from '../../services/api';
 import { useAllFiles, useDeleteFile, useFileIds, useBulkMoveByAssignment } from '../../hooks/useFileQueries';
 import { useDebounce } from '../../hooks/useDebounce';
+import { useSubjectsWithAssignments } from '../../hooks/useSubjects';
 import type { FileListItem } from '../../types';
+import { AssignmentFilter } from '../../components/Review/AssignmentFilter';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_FILES = 1000;
@@ -425,20 +427,16 @@ const Files: React.FC = () => {
     similarity_max: maxSimilarity,
   });
 
-  const { data: assignmentsData } = useQuery({
-    queryKey: ['assignments'],
-    queryFn: async () => {
-      const res = await api.get(API_ENDPOINTS.ASSIGNMENTS);
-      return res.data;
-    },
-  });
+  const { data: subjectsData } = useSubjectsWithAssignments();
 
   const deleteFile = useDeleteFile();
   const bulkMoveMutation = useBulkMoveByAssignment();
 
   const total = filesData?.total || 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const assignments: { id: string; name: string }[] = assignmentsData?.items || [];
+  const assignments: { id: string; name: string }[] = (subjectsData || []).flatMap(
+    (s: { assignments?: { id: string; name: string }[] }) => s.assignments || [],
+  );
 
   const fileIdsQuery = useFileIds({
     filename: debouncedSearch || undefined,
@@ -611,17 +609,10 @@ const Files: React.FC = () => {
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </Select>
-              <Select
-                size="sm"
-                w={{ base: 'full', md: '200px' }}
-                value={assignmentFilter}
-                onChange={(e) => { setAssignmentFilter(e.target.value); setPage(0); }}
-                placeholder="All assignments"
-              >
-                {assignments.map((a: { id: string; name: string }) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </Select>
+              <AssignmentFilter
+                selectedAssignmentId={assignmentFilter || null}
+                onSelect={(id) => { setAssignmentFilter(id || ''); setPage(0); }}
+              />
             </HStack>
             <HStack spacing={3} wrap="wrap" w="full">
               <HStack spacing={1}>

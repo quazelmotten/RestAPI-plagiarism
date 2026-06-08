@@ -110,15 +110,6 @@ export const login = async (email: string, password: string) => {
   return response.data;
 };
 
-export const register = async (email: string, password: string) => {
-  const response = await api.post('/auth/register', { email, password });
-  // Save the access token from registration (auto sign-in)
-  if (response.data.access_token) {
-    setToken(response.data.access_token);
-  }
-  return response.data;
-};
-
 export const forgotPassword = async (email: string) => {
   const response = await api.post('/auth/forgot-password', { email });
   return response.data;
@@ -174,6 +165,11 @@ export const updateUserGlobalRole = async (userId: string, isGlobalAdmin: boolea
 
 export const adminChangePassword = async (userId: string, newPassword: string) => {
   await api.post(`/auth/users/${userId}/change-password`, { new_password: newPassword });
+};
+
+export const createUser = async (data: { email: string; password: string; username?: string; is_global_admin?: boolean }) => {
+  const response = await api.post('/auth/users', data);
+  return response.data;
 };
 
 export const updateUserProfile = async (data: { username?: string; email?: string }) => {

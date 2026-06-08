@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   login as apiLogin,
-  register as apiRegister,
   logout as apiLogout,
   forgotPassword as apiForgotPassword,
   resetPassword as apiResetPassword,
@@ -23,7 +22,6 @@ interface AuthContextProps {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (token: string, newPassword: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -78,19 +76,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthVersion(v => v + 1);
   };
 
-  const register = async (email: string, password: string) => {
-    const data = await apiRegister(email, password);
-    // apiRegister already stores token, set user from response
-    setUser({
-      id: data.user.id,
-      email: data.user.email,
-      username: data.user.username,
-      is_global_admin: data.user.is_global_admin,
-      role: data.user.role,
-    });
-    // Note: login() attempt removed because token already set and user set above
-  };
-
   const forgotPassword = async (email: string) => {
     await apiForgotPassword(email);
   };
@@ -115,7 +100,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user,
     login,
     logout,
-    register,
     forgotPassword,
     resetPassword,
     changePassword,

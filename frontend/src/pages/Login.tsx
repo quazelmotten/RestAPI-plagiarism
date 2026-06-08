@@ -29,11 +29,10 @@ function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<'signin' | 'signup'>('signin');
   const navigate = useNavigate();
   const toast = useToast();
   const { t, i18n } = useTranslation();
-  const { login: authLogin, register: authRegister, isAuthenticated } = useAuth();
+  const { login: authLogin, isAuthenticated } = useAuth();
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -45,29 +44,19 @@ function Login() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      if (viewMode === 'signup') {
-        await authRegister(email, password);
-        toast({
-          title: t('registrationSuccessful'),
-          status: 'success',
-          duration: 3000,
-        });
-        navigate('/dashboard', { replace: true });
-      } else {
-        await authLogin(email, password);
-        toast({
-          title: t('loginSuccessful'),
-          status: 'success',
-          duration: 3000,
-        });
-        navigate('/dashboard', { replace: true });
-      }
-    } catch (error: unknown) {
-      const message = error instanceof Error 
-        ? error.message 
-        : t(viewMode === 'signup' ? 'registrationFailed' : 'loginFailedCheckCredentials');
+      await authLogin(email, password);
       toast({
-        title: t(viewMode === 'signup' ? 'registrationFailed' : 'loginFailed'),
+        title: t('loginSuccessful'),
+        status: 'success',
+        duration: 3000,
+      });
+      navigate('/dashboard', { replace: true });
+    } catch (error: unknown) {
+      const message = error instanceof Error
+        ? error.message
+        : t('loginFailedCheckCredentials');
+      toast({
+        title: t('loginFailed'),
         description: message,
         status: 'error',
         duration: 5000,
@@ -77,7 +66,7 @@ function Login() {
     }
   };
 
-const languages = [
+  const languages = [
     { code: 'en', name: t('languageNames.en'), flag: '🇺🇸' },
     { code: 'ru', name: t('languageNames.ru'), flag: '🇷🇺' },
   ];
@@ -93,8 +82,6 @@ const languages = [
     });
   };
 
-  const toggleBg = useColorModeValue('gray.50', 'gray.700');
-  const toggleBorder = useColorModeValue('gray.200', 'gray.600');
   const subtitleColor = useColorModeValue('gray.600', 'gray.400');
 
   return (
@@ -102,74 +89,41 @@ const languages = [
       <Card>
         <CardBody>
           <VStack spacing={6} as="form" onSubmit={handleSubmit}>
-            <Heading size="lg">{viewMode === 'signin' ? t('signIn') : t('signUp')}</Heading>
-            
-            {/* View Toggle - Classic/Assignment style */}
-            <Box 
-              border="1px" 
-              borderColor={toggleBorder}
-              borderRadius="md"
-              p={1}
-              bg={toggleBg}
-            >
-              <HStack spacing={1}>
-                <Button
-                  size="sm"
-                  variant={viewMode === 'signin' ? 'solid' : 'ghost'}
-                  colorScheme={viewMode === 'signin' ? 'brand' : 'gray'}
-                  onClick={() => setViewMode('signin')}
-                  flex={1}
-                >
-                  {t('signIn')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant={viewMode === 'signup' ? 'solid' : 'ghost'}
-                  colorScheme={viewMode === 'signup' ? 'brand' : 'gray'}
-                  onClick={() => setViewMode('signup')}
-                  flex={1}
-                >
-                  {t('signUp')}
-                </Button>
-              </HStack>
-            </Box>
+            <Heading size="lg">{t('signIn')}</Heading>
 
             <Text color={subtitleColor}>
-              {viewMode === 'signin' 
-                ? t('enterCredentialsSignIn') 
-                : t('createAccountSignUp')
-              }
+              {t('enterCredentialsSignIn')}
             </Text>
-<FormControl isRequired>
-  <FormLabel>{t('email')}</FormLabel>
-  <Input
-    type="email"
-    value={email}
-    onChange={(e) => setEmail(e.target.value)}
-    placeholder={t('placeholders.email')}
-  />
-</FormControl>
-<FormControl isRequired>
-  <FormLabel>{t('password')}</FormLabel>
-  <Input
-    type="password"
-    value={password}
-    onChange={(e) => setPassword(e.target.value)}
-    placeholder={t('placeholders.password')}
-  />
-</FormControl>
+            <FormControl isRequired>
+              <FormLabel>{t('email')}</FormLabel>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t('placeholders.email')}
+              />
+            </FormControl>
+            <FormControl isRequired>
+              <FormLabel>{t('password')}</FormLabel>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={t('placeholders.password')}
+              />
+            </FormControl>
             <Button
               type="submit"
               colorScheme="brand"
               width="full"
               isLoading={isLoading}
             >
-              {viewMode === 'signin' ? t('signIn') : t('signUp')}
+              {t('signIn')}
             </Button>
           </VStack>
         </CardBody>
       </Card>
-      
+
       {/* Subtle language switcher */}
       <Box mt={4} display="flex" justifyContent="center">
         <Menu>

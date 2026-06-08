@@ -78,6 +78,7 @@ async def get_files(
         similarity_max=similarity_max,
         submitted_after=submitted_after,
         submitted_before=submitted_before,
+        current_user=current_user,
     )
 
 
@@ -333,6 +334,7 @@ async def get_file_ids(
         assignment_id=str(assignment_id) if assignment_id else None,
         similarity_min=similarity_min,
         similarity_max=similarity_max,
+        current_user=current_user,
     )
 
 
@@ -358,6 +360,7 @@ async def get_events(
         assignment_id=str(assignment_id) if assignment_id else None,
         task_id=str(task_id) if task_id else None,
         event_type=event_type,
+        current_user=current_user,
     )
 
 

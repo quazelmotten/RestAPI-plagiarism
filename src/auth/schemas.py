@@ -14,11 +14,13 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
-class RegisterRequest(BaseModel):
-    """Registration request schema."""
+class AdminCreateUserRequest(BaseModel):
+    """Admin user creation request schema."""
 
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
+    username: str | None = None
+    is_global_admin: bool = False
 
 
 class TokenResponse(BaseModel):
@@ -84,17 +86,20 @@ class UsersListResponse(BaseModel):
 
 class GlobalRoleUpdate(BaseModel):
     """Update user global role schema."""
+
     is_global_admin: bool
 
 
 class ApiKeyCreate(BaseModel):
     """API key creation request schema."""
+
     name: str | None = None
     expires_in_days: int | None = None
 
 
 class ApiKeyResponse(BaseModel):
     """API key response schema (excludes raw key)."""
+
     id: str
     name: str | None = None
     created_at: datetime
@@ -105,6 +110,7 @@ class ApiKeyResponse(BaseModel):
 
 class ApiKeyCreatedResponse(ApiKeyResponse):
     """Response when a new API key is created; includes raw key."""
+
     raw_key: str
 
 
@@ -131,12 +137,14 @@ class SubjectMember(BaseModel):
 
 class ApiKeyUpdate(BaseModel):
     """API key update request schema."""
+
     name: str | None = None
     expires_in_days: int | None = None
 
 
 class UserProfileUpdate(BaseModel):
     """User profile update request schema."""
+
     username: str | None = None
     email: str | None = None
 
@@ -150,5 +158,3 @@ class SubjectMembersResponse(BaseModel):
 
 # Forward reference resolution
 TokenResponse.model_rebuild()
-
-

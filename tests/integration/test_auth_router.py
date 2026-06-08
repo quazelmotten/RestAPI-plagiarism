@@ -84,7 +84,10 @@ class TestAuthRouterIntegration:
             mock_result = MagicMock()
             query_str = str(query)
 
-            if "12345678-1234-5678-1234-567812345678" in query_str or "9abcdef-1234-5678-1234-567812345678" in query_str:
+            if (
+                "12345678-1234-5678-1234-567812345678" in query_str
+                or "9abcdef-1234-5678-1234-567812345678" in query_str
+            ):
                 if "9abcdef-1234-5678-1234-567812345678" in query_str:
                     user = mock_admin_user
                 else:
@@ -132,38 +135,6 @@ class TestAuthRouterIntegration:
 
         # Clean up overrides after test
         test_app.dependency_overrides.clear()
-
-    @patch("auth.service.AuthService.get_user_by_email")
-    @patch("auth.service.AuthService.create_user")
-    def test_register_new_user(self, mock_create_user, mock_get_user, mock_user):
-        """Test registering a new user gets auto-signed in with tokens."""
-        mock_get_user.return_value = None
-        mock_create_user.return_value = mock_user
-
-        response = client.post(
-            "/auth/register", json={"email": "newuser@example.com", "password": "NewPass123!"}
-        )
-
-        assert response.status_code == 201
-        json_data = response.json()
-        assert "access_token" in json_data
-        assert json_data["access_token"] != ""
-        assert json_data["user"]["email"] == "test@example.com"
-        assert mock_create_user.called
-
-    @patch("auth.service.AuthService.get_user_by_email")
-    def test_register_existing_user(self, mock_get_user, mock_user):
-        """Test registering an existing user returns user info without tokens."""
-        mock_get_user.return_value = mock_user
-
-        response = client.post(
-            "/auth/register", json={"email": "test@example.com", "password": "Password123!"}
-        )
-
-        assert response.status_code == 201
-        json_data = response.json()
-        assert json_data["access_token"] == ""
-        assert json_data["user"]["email"] == "test@example.com"
 
     @patch("auth.service.AuthService.authenticate_user")
     @patch("auth.service.AuthService.update_last_login")
@@ -370,7 +341,9 @@ class TestAuthRouterIntegration:
         """Test admin can get user by ID."""
         mock_get_user.return_value = mock_user
 
-        response = client.get("/auth/users/12345678-1234-5678-1234-567812345678", headers=admin_auth_headers)
+        response = client.get(
+            "/auth/users/12345678-1234-5678-1234-567812345678", headers=admin_auth_headers
+        )
 
         assert response.status_code == 200
         assert response.json()["email"] == "test@example.com"
@@ -420,3 +393,87 @@ class TestAuthRouterIntegration:
 
         assert response.status_code == 200
         assert mock_reset_password.called
+
+    @patch("auth.service.AuthService.get_user_by_email")
+    @patch("auth.service.AuthService.create_user")
+    def test_admin_create_user(
+        self, mock_create_user, mock_get_user, mock_admin_user, mock_user, admin_auth_headers
+    ):
+        """Test admin can create a new user."""
+        mock_get_user.return_value = None
+        mock_create_user.return_value = mock_user
+
+        response = client.post(
+            "/auth/users",
+            json={
+                "email": "newuser@example.com",
+                "password": "NewPass123!",
+                "username": "newuser",
+                "is_global_admin": False,
+            },
+            headers=admin_auth_headers,
+        )
+
+        assert response.status_code == 201
+        json_data = response.json()
+        assert json_data["email"] == "test@example.com"
+        assert mock_create_user.called
+        call_kwargs = mock_create_user.call_args
+        assert (
+            call_kwargs.kwargs.get(
+                "is_global_admin", call_kwargs[0][2] if len(call_kwargs[0]) > 2 else False
+            )
+            is not None
+        )
+
+    @patch("auth.service.AuthService.get_user_by_email")
+    @patch("auth.service.AuthService.create_user")
+    def test_admin_create_user_existing_email(
+        self, mock_create_user, mock_get_user, mock_admin_user, mock_user, admin_auth_headers
+    ):
+        """Test admin creating a user with an existing email returns 409."""
+        mock_get_user.return_value = mock_user
+
+        response = client.post(
+            "/auth/users",
+            json={
+                "email": "test@example.com",
+                "password": "NewPass123!",
+            },
+            headers=admin_auth_headers,
+        )
+
+        assert response.status_code == 409
+        assert "already exists" in response.json()["detail"]
+        assert not mock_create_user.called
+
+    def test_admin_create_user_forbidden(self, mock_user, auth_headers):
+        """Test non-admin cannot create users via the admin endpoint."""
+        from src.app import app as test_app
+
+        from auth.dependencies import require_global_admin
+
+        # Clear the existing override first
+        del test_app.dependency_overrides[require_global_admin]
+
+        # Mock require_global_admin to raise 403
+        def mock_require_global_admin(current_user=mock_user):
+            from fastapi import HTTPException, status
+
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Requires global admin privileges",
+            )
+
+        test_app.dependency_overrides[require_global_admin] = mock_require_global_admin
+
+        response = client.post(
+            "/auth/users",
+            json={
+                "email": "newuser@example.com",
+                "password": "NewPass123!",
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 403

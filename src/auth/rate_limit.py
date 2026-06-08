@@ -101,15 +101,6 @@ def login_rate_limit():
     )
 
 
-def register_rate_limit():
-    """Rate limiter for register endpoint: 3 requests per minute per IP."""
-    return rate_limit(
-        max_requests=3,
-        window_seconds=60,
-        key_builder=lambda r: f"rate_limit:register:{get_client_ip(r)}",
-    )
-
-
 def forgot_password_rate_limit():
     """Rate limiter for forgot password endpoint: 2 requests per minute per IP."""
     return rate_limit(

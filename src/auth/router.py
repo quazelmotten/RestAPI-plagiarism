@@ -11,9 +11,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from auth.blacklist_service import blacklist_service
 from auth.dependencies import get_current_user, require_global_admin
 from auth.models import User
-from auth.rate_limit import forgot_password_rate_limit, login_rate_limit, register_rate_limit
+from auth.rate_limit import forgot_password_rate_limit, login_rate_limit
 from auth.schemas import (
     AdminChangePasswordRequest,
+    AdminCreateUserRequest,
     ApiKeyCreate,
     ApiKeyCreatedResponse,
     ApiKeyResponse,
@@ -23,7 +24,6 @@ from auth.schemas import (
     GlobalRoleUpdate,
     LoginRequest,
     RefreshTokenRequest,
-    RegisterRequest,
     ResetPasswordRequest,
     TokenResponse,
     UserProfileUpdate,
@@ -37,56 +37,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 security = HTTPBearer(auto_error=False)
-
-
-@router.post(
-    "/register",
-    response_model=TokenResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(register_rate_limit)],
-)
-async def register(request: RegisterRequest, response: Response) -> TokenResponse:
-    """Register a new user and automatically sign them in.
-
-    Returns JWT tokens for immediate authentication.
-    For security, if the email already exists, returns user info without tokens.
-    """
-    existing_user = await AuthService.get_user_by_email(request.email)
-    if existing_user:
-        # Email already exists - don't issue tokens, just return user info
-        return TokenResponse(
-            access_token="",
-            token_type="bearer",
-            expires_in=0,
-            user=AuthService.user_to_response(existing_user),
-        )
-
-    new_user = await AuthService.create_user(
-        email=request.email,
-        password=request.password,
-        is_global_admin=False,
-    )
-    logger.info("User registered: %s", new_user.email)
-
-    # Automatically sign in the user by issuing tokens
-    token_response = AuthService.create_token_response(new_user)
-
-    # Set refresh token in HttpOnly cookie
-    # Only use secure=True in production (HTTPS)
-    if token_response.refresh_token:
-        response.set_cookie(
-            key="refresh_token",
-            value=token_response.refresh_token,
-            httponly=True,
-            secure=settings.is_production,
-            samesite="lax",
-            max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
-            path="/",
-        )
-        # Remove refresh token from JSON response
-        token_response.refresh_token = None
-
-    return token_response
 
 
 @router.post(
@@ -214,7 +164,9 @@ async def update_current_user(
     current_user: User = Depends(get_current_user),
 ) -> UserResponse:
     """Update current user's profile (username and/or email)."""
-    updated = await AuthService.update_user_profile(current_user.id, update_data.username, update_data.email)
+    updated = await AuthService.update_user_profile(
+        current_user.id, update_data.username, update_data.email
+    )
     if not updated:
         raise HTTPException(status_code=404, detail="User not found")
     return AuthService.user_to_response(updated)
@@ -341,6 +293,33 @@ async def admin_change_password(
     return {"message": "Password changed successfully"}
 
 
+@router.post(
+    "/users",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def admin_create_user(
+    request: AdminCreateUserRequest,
+    current_user: User = Depends(require_global_admin),
+) -> UserResponse:
+    """Create a new user. Global admin only."""
+    existing_user = await AuthService.get_user_by_email(request.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists",
+        )
+
+    new_user = await AuthService.create_user(
+        email=request.email,
+        password=request.password,
+        is_global_admin=request.is_global_admin,
+        username=request.username,
+    )
+    logger.info("Admin created user: %s (admin=%s)", new_user.email, request.is_global_admin)
+    return AuthService.user_to_response(new_user)
+
+
 @router.get("/api-keys", response_model=list[ApiKeyResponse], status_code=status.HTTP_200_OK)
 async def list_api_keys(current_user: User = Depends(get_current_user)) -> list[ApiKeyResponse]:
     """List API keys for the authenticated user."""
@@ -406,9 +385,7 @@ async def update_api_key(
     if key.user_id != current_user.id and not current_user.is_global_admin:
         raise HTTPException(status_code=403, detail="Not authorized to update this key")
     updated = await AuthService.update_api_key(
-        key_uuid,
-        name=update_data.name,
-        expires_in_days=update_data.expires_in_days
+        key_uuid, name=update_data.name, expires_in_days=update_data.expires_in_days
     )
     if not updated:
         raise HTTPException(status_code=404, detail="API key not found")
@@ -423,23 +400,27 @@ async def update_api_key(
 
 
 @router.get("/api-keys/all", response_model=list[ApiKeyResponse], status_code=status.HTTP_200_OK)
-async def list_all_api_keys(current_user: User = Depends(require_global_admin)) -> list[ApiKeyResponse]:
+async def list_all_api_keys(
+    current_user: User = Depends(require_global_admin),
+) -> list[ApiKeyResponse]:
     """List all API keys for all users. Global admin only."""
     keys = await AuthService.list_all_api_keys()
     results = []
     for k in keys:
         user_email = None
-        if k.user and hasattr(k.user, 'email'):
+        if k.user and hasattr(k.user, "email"):
             email = k.user.email
             if isinstance(email, str):
                 user_email = email
             # else ignore (e.g., MagicMock)
-        results.append(ApiKeyResponse(
-            id=str(k.id),
-            name=k.name,
-            created_at=k.created_at,
-            last_used_at=k.last_used_at,
-            expires_at=k.expires_at,
-            user_email=user_email,
-        ))
+        results.append(
+            ApiKeyResponse(
+                id=str(k.id),
+                name=k.name,
+                created_at=k.created_at,
+                last_used_at=k.last_used_at,
+                expires_at=k.expires_at,
+                user_email=user_email,
+            )
+        )
     return results

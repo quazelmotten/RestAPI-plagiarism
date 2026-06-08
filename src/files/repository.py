@@ -93,6 +93,7 @@ class FileRepository:
         similarity_max: float | None = None,
         submitted_after: datetime | None = None,
         submitted_before: datetime | None = None,
+        assignment_ids: list[str] | None = None,
     ) -> PaginatedResponse:
         """Get paginated list of files with optional filters, all in SQL."""
         max_sim_subq = self._build_max_similarity_subquery()
@@ -132,6 +133,13 @@ class FileRepository:
                 q = q.where(Assignment.id == assignment_id)
             if subject_id:
                 q = q.where(Subject.id == subject_id)
+            if assignment_ids is not None:
+                if not assignment_ids:
+                    q = q.where(false())
+                else:
+                    q = q.where(
+                        Assignment.id.in_([uuid.UUID(a) for a in assignment_ids])
+                    )
             if submitted_after:
                 q = q.where(File.created_at >= submitted_after)
             if submitted_before:
@@ -386,6 +394,7 @@ class FileRepository:
         assignment_id: str | None = None,
         similarity_min: float | None = None,
         similarity_max: float | None = None,
+        assignment_ids: list[str] | None = None,
     ) -> list[str]:
         filters = [File.deleted_at.is_(None)]
         if filename:
@@ -398,6 +407,15 @@ class FileRepository:
             filters.append(File.task_id == uuid.UUID(task_id))
         if assignment_id:
             filters.append(PlagiarismTask.assignment_id == uuid.UUID(assignment_id))
+        if assignment_ids is not None:
+            if not assignment_ids:
+                filters.append(false())
+            else:
+                filters.append(
+                    PlagiarismTask.assignment_id.in_(
+                        [uuid.UUID(a) for a in assignment_ids]
+                    )
+                )
 
         query = (
             select(File.id).join(PlagiarismTask, File.task_id == PlagiarismTask.id).where(*filters)
@@ -481,6 +499,7 @@ class FileRepository:
         assignment_id: str | None = None,
         task_id: str | None = None,
         event_type: str | None = None,
+        assignment_ids: list[str] | None = None,
     ) -> PaginatedResponse:
         filters = []
         if assignment_id:
@@ -489,6 +508,15 @@ class FileRepository:
             filters.append(FileEvent.task_id == uuid.UUID(task_id))
         if event_type:
             filters.append(FileEvent.event_type == event_type)
+        if assignment_ids is not None:
+            if not assignment_ids:
+                filters.append(false())
+            else:
+                filters.append(
+                    FileEvent.assignment_id.in_(
+                        [uuid.UUID(a) for a in assignment_ids]
+                    )
+                )
 
         count_q = select(func.count()).select_from(FileEvent).where(*filters)
         count_result = await self.db.execute(count_q)

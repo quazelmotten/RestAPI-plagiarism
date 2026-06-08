@@ -25,9 +25,11 @@ import {
   Text,
   Spinner,
   HStack,
+  VStack,
+  FormHelperText,
 } from '@chakra-ui/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getUsers, deleteUser, updateUserGlobalRole, adminChangePassword } from '../services/api';
+import { getUsers, deleteUser, updateUserGlobalRole, adminChangePassword, createUser } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
@@ -44,8 +46,13 @@ const Users: React.FC = () => {
   const toast = useToast();
   const queryClient = useQueryClient();
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen: isCreateOpen, onOpen: onCreateOpen, onClose: onCreateClose } = useDisclosure();
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserUsername, setNewUserUsername] = useState('');
+  const [newUserIsAdmin, setNewUserIsAdmin] = useState(false);
   const { t } = useTranslation();
 
   if (!currentUser?.is_global_admin) {
@@ -123,6 +130,40 @@ const Users: React.FC = () => {
     },
   });
 
+  const createUserMutation = useMutation({
+    mutationFn: () =>
+      createUser({
+        email: newUserEmail,
+        password: newUserPassword,
+        username: newUserUsername || undefined,
+        is_global_admin: newUserIsAdmin,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast({
+        title: t('userCreated'),
+        status: 'success',
+        duration: 3000,
+      });
+      resetCreateForm();
+      onCreateClose();
+    },
+    onError: () => {
+      toast({
+        title: t('failedToCreateUser'),
+        status: 'error',
+        duration: 3000,
+      });
+    },
+  });
+
+  const resetCreateForm = () => {
+    setNewUserEmail('');
+    setNewUserPassword('');
+    setNewUserUsername('');
+    setNewUserIsAdmin(false);
+  };
+
   const handleDeleteUser = (userId: string) => {
     if (window.confirm(t('areYouSureDeleteUser'))) {
       deleteUserMutation.mutate(userId);
@@ -139,10 +180,21 @@ const Users: React.FC = () => {
     }
   };
 
+  const handleCreateUser = () => {
+    if (newUserEmail && newUserPassword) {
+      createUserMutation.mutate();
+    }
+  };
+
   const openPasswordModal = (user: User) => {
     setSelectedUser(user);
     setNewPassword('');
     onOpen();
+  };
+
+  const openCreateModal = () => {
+    resetCreateForm();
+    onCreateOpen();
   };
 
   if (isLoading) {
@@ -157,9 +209,14 @@ const Users: React.FC = () => {
 
   return (
     <Box>
-      <Text fontSize="2xl" fontWeight="bold" mb={4}>
-        {t('userManagement')}
-      </Text>
+      <HStack justify="space-between" mb={4}>
+        <Text fontSize="2xl" fontWeight="bold">
+          {t('userManagement')}
+        </Text>
+        <Button colorScheme="brand" size="sm" onClick={openCreateModal}>
+          {t('createUser')}
+        </Button>
+      </HStack>
 
       <Table variant="simple">
         <Thead>
@@ -246,6 +303,65 @@ const Users: React.FC = () => {
               isLoading={changePasswordMutation.isPending}
             >
               {t('changePassword')}
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={isCreateOpen} onClose={onCreateClose}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>{t('createUser')}</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing={4}>
+              <FormControl isRequired>
+                <FormLabel>{t('email')}</FormLabel>
+                <Input
+                  type="email"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  placeholder={t('placeholders.userEmail')}
+                />
+              </FormControl>
+              <FormControl isRequired>
+                <FormLabel>{t('password')}</FormLabel>
+                <Input
+                  type="password"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  placeholder={t('placeholders.newPassword')}
+                />
+              </FormControl>
+              <FormControl>
+                <FormLabel>{t('username')}</FormLabel>
+                <Input
+                  type="text"
+                  value={newUserUsername}
+                  onChange={(e) => setNewUserUsername(e.target.value)}
+                  placeholder={t('optional')}
+                />
+                <FormHelperText>{t('optional')}</FormHelperText>
+              </FormControl>
+              <FormControl display="flex" alignItems="center">
+                <FormLabel mb="0">{t('admin')}</FormLabel>
+                <Switch
+                  isChecked={newUserIsAdmin}
+                  onChange={(e) => setNewUserIsAdmin(e.target.checked)}
+                />
+              </FormControl>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={onCreateClose}>
+              {t('cancel')}
+            </Button>
+            <Button
+              colorScheme="brand"
+              onClick={handleCreateUser}
+              isLoading={createUserMutation.isPending}
+            >
+              {t('create')}
             </Button>
           </ModalFooter>
         </ModalContent>

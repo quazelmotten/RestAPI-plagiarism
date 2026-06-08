@@ -81,6 +81,7 @@ class FileService:
         similarity_max: float | None = None,
         submitted_after: str | None = None,
         submitted_before: str | None = None,
+        current_user: User | None = None,
     ) -> PaginatedResponse:
         after_dt = None
         if submitted_after:
@@ -103,6 +104,12 @@ class FileService:
 
         before_dt_end = before_dt.replace(hour=23, minute=59, second=59) if before_dt else None
 
+        accessible_assignment_ids: list[str] | None = None
+        if current_user is not None and not current_user.is_global_admin:
+            accessible_assignment_ids = await SubjectAccessService.get_accessible_assignment_ids(
+                self.db, str(current_user.id)
+            )
+
         return await self.repo.get_files(
             limit=limit,
             offset=offset,
@@ -116,6 +123,7 @@ class FileService:
             similarity_max=similarity_max,
             submitted_after=after_dt,
             submitted_before=before_dt_end,
+            assignment_ids=accessible_assignment_ids,
         )
 
     async def get_all_file_info(self) -> PaginatedResponse:
@@ -289,13 +297,21 @@ class FileService:
         assignment_id: str | None = None,
         task_id: str | None = None,
         event_type: str | None = None,
+        current_user: User | None = None,
     ) -> PaginatedResponse:
+        accessible_assignment_ids: list[str] | None = None
+        if current_user is not None and not current_user.is_global_admin:
+            accessible_assignment_ids = await SubjectAccessService.get_accessible_assignment_ids(
+                self.db, str(current_user.id)
+            )
+
         return await self.repo.get_events(
             limit=limit,
             offset=offset,
             assignment_id=assignment_id,
             task_id=task_id,
             event_type=event_type,
+            assignment_ids=accessible_assignment_ids,
         )
 
     async def get_file_ids(
@@ -307,7 +323,14 @@ class FileService:
         assignment_id: str | None = None,
         similarity_min: float | None = None,
         similarity_max: float | None = None,
+        current_user: User | None = None,
     ) -> list[str]:
+        accessible_assignment_ids: list[str] | None = None
+        if current_user is not None and not current_user.is_global_admin:
+            accessible_assignment_ids = await SubjectAccessService.get_accessible_assignment_ids(
+                self.db, str(current_user.id)
+            )
+
         return await self.repo.get_all_file_ids(
             filename=filename,
             language=language,
@@ -316,6 +339,7 @@ class FileService:
             assignment_id=assignment_id,
             similarity_min=similarity_min,
             similarity_max=similarity_max,
+            assignment_ids=accessible_assignment_ids,
         )
 
     async def bulk_move_by_assignment(
