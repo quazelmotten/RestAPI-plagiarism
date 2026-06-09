@@ -176,6 +176,7 @@ class AsyncWorker:
     def _on_channel_closed(self, channel, reason):
         log.warning(f"Channel closed: {reason}")
         self._channel = None
+        self._consuming = False
         if self._closing:
             return
         self._should_reconnect = True

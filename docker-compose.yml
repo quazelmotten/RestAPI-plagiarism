@@ -173,6 +173,8 @@ services:
       RMQ_QUEUE_DEAD_LETTER_EXCHANGE: ${RMQ_QUEUE_DEAD_LETTER_EXCHANGE:-plagiarism_dlx}
       RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER: ${RMQ_QUEUE_ROUTING_KEY_DEAD_LETTER:-plagiarism.dead}
       RMQ_QUEUE_DEAD_LETTER_NAME: ${RMQ_QUEUE_DEAD_LETTER_NAME:-plagiarism_dead}
+      RMQ_FILE_EVENTS_EXCHANGE: ${RMQ_FILE_EVENTS_EXCHANGE:-file_events}
+      RMQ_FILE_EVENTS_QUEUE: ${RMQ_FILE_EVENTS_QUEUE:-file_events_queue}
 
       # Redis
       REDIS_HOST: ${REDIS_HOST:-redis}
@@ -196,6 +198,8 @@ services:
       rabbitmq:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      api:
         condition: service_healthy
     volumes:
       - uploads-data:/app/uploads
