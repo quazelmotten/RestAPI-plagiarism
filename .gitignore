@@ -49,7 +49,6 @@ logs/
 *.sqlite3
 
 # Uploads and data (if not meant to be committed)
-uploads/
 data/
 *.tar.gz
 
